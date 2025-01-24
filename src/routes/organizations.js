@@ -6,6 +6,9 @@ const projectController = require('../controllers/projectController');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
+const promptRoutes = require('./prompts');
+
+
 // Organization validation
 const organizationValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
@@ -18,6 +21,9 @@ const projectValidation = [
   body('description').optional().trim(),
   body('llm_configurations').optional().isArray()
 ];
+
+router.use('/:orgId/projects/:projectId/prompts', promptRoutes);
+
 
 // Organization routes
 router.post('/', 
