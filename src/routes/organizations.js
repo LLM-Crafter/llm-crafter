@@ -7,6 +7,8 @@ const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const promptRoutes = require('./prompts');
+const apiKeyRoutes = require('./apiKeys');
+router.use('/:orgId/projects/:projectId/api-keys', apiKeyRoutes);
 
 
 // Organization validation

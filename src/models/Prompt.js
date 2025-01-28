@@ -9,16 +9,11 @@ const promptSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    match: /^[a-z0-9_]+$/  // Only lowercase letters, numbers, and underscores
   },
-  description: {
-    type: String,
-    trim: true
-  },
-  content: {
-    type: String,
-    required: true
-  },
+  description: String,
+  content: String,
   project: {
     type: String,
     ref: 'Project',
@@ -28,16 +23,25 @@ const promptSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
-  default_llm: {
-    provider: String,
+  api_key: {
+    type: String,
+    ref: 'APIKey'
+  },
+  llm_settings: {
     model: String,
     parameters: {
-      type: Map,
-      of: mongoose.Schema.Types.Mixed
+      temperature: Number,
+      max_tokens: Number,
+      top_p: Number,
+      frequency_penalty: Number,
+      presence_penalty: Number
     }
   }
 }, {
   timestamps: true
 });
+
+// Ensure unique prompt names within a project
+promptSchema.index({ project: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.model('Prompt', promptSchema);

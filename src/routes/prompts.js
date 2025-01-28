@@ -6,24 +6,35 @@ const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 // Validation middleware
-const promptValidation = [
-  body('name').trim().notEmpty().withMessage('Name is required'),
-  body('content').trim().notEmpty().withMessage('Content is required'),
-  body('description').optional().trim(),
-  body('default_llm').optional().isObject()
-];
+const createPromptValidation = [
+    body('name')
+      .trim()
+      .notEmpty()
+      .matches(/^[a-z0-9_]+$/)
+      .withMessage('Name can only contain lowercase letters, numbers, and underscores')
+  ];
+  
+  const updatePromptValidation = [
+    body('api_key').optional().isString(),
+    body('description').optional().isString(),
+    body('content').optional().isString(),
+    body('llm_settings.model').optional().isString(),
+    body('llm_settings.parameters').optional().isObject(),
+    body('llm_settings.parameters.temperature').optional().isFloat({ min: 0, max: 1 }),
+    body('llm_settings.parameters.max_tokens').optional().isInt({ min: 1 })
+  ];
 
 // Routes
 router.post('/',
   auth,
-  promptValidation,
+  createPromptValidation,
   validate,
   promptController.createPrompt
 );
 
 router.put('/:promptId',
   auth,
-  promptValidation,
+  updatePromptValidation,
   validate,
   promptController.updatePrompt
 );

@@ -44,7 +44,20 @@ const getProject = async (req, res) => {
     const project = await Project.findOne({
       _id: req.params.projectId,
       organization: req.params.orgId
-    });
+    }).populate([
+        {
+          path: 'apiKeys',
+          select: '-key',
+          populate: {
+            path: 'provider',
+            select: 'name models'
+          }
+        },
+        {
+          path: 'prompts',
+          select: 'name description createdAt updatedAt'
+        }
+      ]);
 
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
@@ -52,7 +65,7 @@ const getProject = async (req, res) => {
 
     res.json(project);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch project' });
+    res.status(500).json({ error: error.message });
   }
 };
 
