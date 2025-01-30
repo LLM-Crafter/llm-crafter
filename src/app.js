@@ -10,6 +10,7 @@ const app = express();
 const authRoutes = require('./routes/auth');
 const organizationRoutes = require('./routes/organizations');
 const providerRoutes = require('./routes/providers');
+const proxyRoutes = require('./routes/proxy');
 
 
 // Middleware
@@ -22,7 +23,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/organizations', organizationRoutes);
 app.use('/api/v1/providers', providerRoutes);
-
+app.use('/api/v1/proxy', proxyRoutes);
 
 
 

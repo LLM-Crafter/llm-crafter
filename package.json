@@ -25,6 +25,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0",
+    "mustache": "^4.2.0",
+    "openai": "^4.81.0",
     "uuid": "^11.0.5"
   },
   "devDependencies": {

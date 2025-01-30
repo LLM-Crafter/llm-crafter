@@ -1,5 +1,6 @@
 const Prompt = require('../models/Prompt');
 const Project = require('../models/Project');
+const ApiKey = require('../models/ApiKey');
 
 const createPrompt = async (req, res) => {
     try {
@@ -44,7 +45,7 @@ const createPrompt = async (req, res) => {
   
       // If updating API key, verify it exists and belongs to the project
       if (req.body.api_key) {
-        const apiKey = await APIKey.findOne({
+        const apiKey = await ApiKey.findOne({
           _id: req.body.api_key,
           project: req.params.projectId
         }).populate('provider');
@@ -74,6 +75,7 @@ const createPrompt = async (req, res) => {
           ...req.body.llm_settings
         };
       }
+      console.log(prompt.llm_settings)
   
       await prompt.save();
   

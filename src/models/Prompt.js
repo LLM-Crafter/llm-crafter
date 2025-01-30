@@ -25,7 +25,7 @@ const promptSchema = new mongoose.Schema({
   },
   api_key: {
     type: String,
-    ref: 'APIKey'
+    ref: 'ApiKey'
   },
   llm_settings: {
     model: String,
