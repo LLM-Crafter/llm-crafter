@@ -4,6 +4,8 @@ const router = express.Router({ mergeParams: true });
 const apiKeyController = require('../controllers/apiKeyController');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const orgAuth = require('../middleware/organizationAuth');
+
 
 const apiKeyValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
@@ -13,6 +15,7 @@ const apiKeyValidation = [
 
 router.post('/',
   auth,
+  orgAuth.hasRole('member'),
   apiKeyValidation,
   validate,
   apiKeyController.createApiKey
@@ -20,6 +23,7 @@ router.post('/',
 
 router.delete('/:apiKeyId',
     auth,
+    orgAuth.hasRole('admin'),
     apiKeyController.deleteApiKey
   );
 

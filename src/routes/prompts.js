@@ -4,6 +4,8 @@ const router = express.Router({ mergeParams: true }); // Important for nested ro
 const promptController = require('../controllers/promptController');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const orgAuth = require('../middleware/organizationAuth');
+
 
 // Validation middleware
 const createPromptValidation = [
@@ -27,6 +29,7 @@ const createPromptValidation = [
 // Routes
 router.post('/',
   auth,
+  orgAuth.hasRole('member'),
   createPromptValidation,
   validate,
   promptController.createPrompt
@@ -34,6 +37,7 @@ router.post('/',
 
 router.put('/:promptId',
   auth,
+  orgAuth.hasRole('member'),
   updatePromptValidation,
   validate,
   promptController.updatePrompt
@@ -41,11 +45,13 @@ router.put('/:promptId',
 
 router.delete('/:promptId',
   auth,
+  orgAuth.hasRole('admin'),
   promptController.deletePrompt
 );
 
 router.get('/:promptId',
   auth,
+  orgAuth.hasRole('viewer'),
   promptController.getPrompt
 );
 

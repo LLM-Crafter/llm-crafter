@@ -5,6 +5,8 @@ const organizationController = require('../controllers/organizationController');
 const projectController = require('../controllers/projectController');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const orgAuth = require('../middleware/organizationAuth');
+
 
 const promptRoutes = require('./prompts');
 const apiKeyRoutes = require('./apiKeys');
@@ -41,13 +43,15 @@ router.get('/',
 );
 
 router.get('/:orgId', 
-  auth, 
+  auth,
+  orgAuth.isMember,
   organizationController.getOrganization
 );
 
 // Project routes (nested under organizations)
 router.post('/:orgId/projects',
   auth,
+  orgAuth.isMember,
   projectValidation,
   validate,
   projectController.createProject
@@ -55,12 +59,41 @@ router.post('/:orgId/projects',
 
 router.get('/:orgId/projects',
   auth,
+  orgAuth.isMember,
   projectController.getProjects
 );
 
 router.get('/:orgId/projects/:projectId',
   auth,
+  orgAuth.isMember,
   projectController.getProject
 );
+
+router.post('/:orgId/members',
+    auth,
+    orgAuth.isAdmin,
+    [
+      body('email').isEmail().normalizeEmail(),
+      body('role').isIn(['admin', 'member', 'viewer'])
+    ],
+    validate,
+    organizationController.inviteUserToOrg
+  );
+  
+  router.put('/:orgId/members/:userId',
+    auth,
+    orgAuth.isAdmin,
+    [
+      body('role').isIn(['admin', 'member', 'viewer'])
+    ],
+    validate,
+    organizationController.updateMemberRole
+  );
+  
+  router.delete('/:orgId/members/:userId',
+    auth,
+    orgAuth.isAdmin,
+    organizationController.removeMember
+  );
 
 module.exports = router;

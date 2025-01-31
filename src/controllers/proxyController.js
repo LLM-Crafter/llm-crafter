@@ -32,9 +32,10 @@ const executePrompt = async (req, res) => {
       return res.status(400).json({ error: 'No API key configured for this prompt' });
     }
 
-    // Verify provider is OpenAI
-    if (prompt.api_key.provider.name !== 'openai') {
-      return res.status(400).json({ error: 'Only OpenAI provider is supported currently' });
+    // Verify provider is supported
+    const supportedProviders = ['openai', 'deepseek', 'openrouter'];
+    if (!supportedProviders.includes(prompt.api_key.provider.name)) {
+      return res.status(400).json({ error: 'Unsupported provider' });
     }
 
     // Replace variables in prompt template
@@ -61,13 +62,18 @@ const executePrompt = async (req, res) => {
         cached: true
       };
     } else {
-      // Execute the prompt
-      const openai = new OpenAIService(prompt.api_key.key);
-      result = await openai.generateCompletion(
-        prompt.llm_settings.model,
-        processedPrompt,
-        prompt.llm_settings.parameters
-      );
+        // Execute the prompt
+        if (prompt.api_key.provider.name == 'openai' || prompt.api_key.provider.name == 'deepseek' || prompt.api_key.provider.name == 'openrouter') {
+        const openai = new OpenAIService(
+            prompt.api_key.key, 
+            prompt.api_key.provider.name
+        );
+        result = await openai.generateCompletion(
+            prompt.llm_settings.model,
+            processedPrompt,
+            prompt.llm_settings.parameters
+        );
+      }
 
       // Cache the result
       await cacheService.cacheResult(

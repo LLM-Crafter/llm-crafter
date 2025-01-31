@@ -4,6 +4,8 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const orgAuth = require('../middleware/organizationAuth');
+
 
 // Validation middleware
 const registerValidation = [
