@@ -15,6 +15,14 @@ const PRICING  = {
             input: 0.015,  
             output: 0.06  
         },
+        'o1-mini': {
+          input: 0.0011,  
+          output: 0.0044
+      },
+      'o3-mini': {
+        input: 0.0011,  
+        output: 0.0044  
+    },
     },
     'deepseek': {
         'deepseek-chat': {
@@ -70,13 +78,26 @@ class OpenAIService {
       
       return inputCost + outputCost;
     }
+
+    mapParameters(parameters) {
+      const mappedParams = { ...parameters };
+  
+        if ('max_tokens' in mappedParams) {
+          mappedParams.max_completion_tokens = mappedParams.max_tokens;
+          delete mappedParams.max_tokens;
+        }
+  
+      return mappedParams;
+    }
   
     async generateCompletion(model, prompt, parameters) {
+      const mappedParams = this.mapParameters(parameters);
+
       try {
         const completion = await this.client.chat.completions.create({
           model: model,
           messages: [{ role: 'user', content: prompt }],
-          ...parameters
+          ...mappedParams
         });
 
         if (!completion.choices || completion.choices.length === 0) {
