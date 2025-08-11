@@ -4,8 +4,8 @@
   "description": "A collaborative platform for managing and executing LLM prompts",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "node src/app.js",
+    "start": "nodemon src/app.js",
+    "dev": "nodemon src/app.js",
     "test": "jest",
     "lint": "eslint src/"
   },

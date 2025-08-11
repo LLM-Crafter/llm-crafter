@@ -1,22 +1,19 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
 const generateToken = (userId) => {
-  return jwt.sign(
-    { userId },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN }
-  );
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN,
+  });
 };
 
 const register = async (req, res) => {
-    console.log(req.body)
   try {
     const { email, password, name } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ error: "Email already registered" });
     }
 
     const user = new User({ email, password, name });
@@ -29,11 +26,12 @@ const register = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
-        name: user.name
-      }
+        name: user.name,
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Registration failed' });
+    console.log(error);
+    res.status(500).json({ error: "Registration failed" });
   }
 };
 
@@ -43,7 +41,7 @@ const login = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user || !(await user.comparePassword(password))) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const token = generateToken(user._id);
@@ -53,11 +51,11 @@ const login = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
-        name: user.name
-      }
+        name: user.name,
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: "Login failed" });
   }
 };
 
@@ -67,10 +65,10 @@ const getProfile = async (req, res) => {
     res.json({
       id: user._id,
       email: user.email,
-      name: user.name
+      name: user.name,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Could not fetch profile' });
+    res.status(500).json({ error: "Could not fetch profile" });
   }
 };
 
@@ -87,10 +85,10 @@ const updateProfile = async (req, res) => {
     res.json({
       id: user._id,
       email: user.email,
-      name: user.name
+      name: user.name,
     });
   } catch (error) {
-    res.status(500).json({ error: 'Could not update profile' });
+    res.status(500).json({ error: "Could not update profile" });
   }
 };
 
@@ -98,5 +96,5 @@ module.exports = {
   register,
   login,
   getProfile,
-  updateProfile
+  updateProfile,
 };

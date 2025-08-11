@@ -1,30 +1,31 @@
-const express = require('express');
-const { body } = require('express-validator');
+const express = require("express");
+const { body } = require("express-validator");
 const router = express.Router({ mergeParams: true });
-const apiKeyController = require('../controllers/apiKeyController');
-const auth = require('../middleware/auth');
-const validate = require('../middleware/validate');
-const orgAuth = require('../middleware/organizationAuth');
-
+const apiKeyController = require("../controllers/apiKeyController");
+const auth = require("../middleware/auth");
+const validate = require("../middleware/validate");
+const orgAuth = require("../middleware/organizationAuth");
 
 const apiKeyValidation = [
-  body('name').trim().notEmpty().withMessage('Name is required'),
-  body('key').trim().notEmpty().withMessage('API key is required'),
-  body('provider').notEmpty().withMessage('Provider is required')
+  body("name").trim().notEmpty().withMessage("Name is required"),
+  body("key").trim().notEmpty().withMessage("API key is required"),
+  body("provider").notEmpty().withMessage("Provider is required"),
 ];
 
-router.post('/',
+router.post(
+  "/",
   auth,
-  orgAuth.hasRole('member'),
+  orgAuth.hasRole("member"),
   apiKeyValidation,
   validate,
   apiKeyController.createApiKey
 );
 
-router.delete('/:apiKeyId',
-    auth,
-    orgAuth.hasRole('admin'),
-    apiKeyController.deleteApiKey
-  );
+router.delete(
+  "/:apiKeyId",
+  auth,
+  orgAuth.hasRole("admin"),
+  apiKeyController.deleteApiKey
+);
 
 module.exports = router;
