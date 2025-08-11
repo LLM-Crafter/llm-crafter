@@ -156,13 +156,24 @@ class OpenAIService {
     return mappedParams;
   }
 
-  async generateCompletion(model, prompt, parameters) {
+  async generateCompletion(model, prompt, parameters, systemPrompt = null) {
     const mappedParams = this.mapParameters(parameters);
+
+    // Build messages array
+    const messages = [];
+
+    // Add system message if provided
+    if (systemPrompt && systemPrompt.trim()) {
+      messages.push({ role: "system", content: systemPrompt.trim() });
+    }
+
+    // Add user message
+    messages.push({ role: "user", content: prompt });
 
     try {
       const completion = await this.client.chat.completions.create({
         model: model,
-        messages: [{ role: "user", content: prompt }],
+        messages: messages,
         ...mappedParams,
       });
 

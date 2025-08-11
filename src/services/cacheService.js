@@ -1,22 +1,20 @@
-const crypto = require('crypto');
-const PromptCache = require('../models/PromptCache');
+const crypto = require("crypto");
+const PromptCache = require("../models/PromptCache");
 
 class CacheService {
-  generateHash(prompt, content, variables, llmSettings) {
+  generateHash(prompt, content, variables, llmSettings, systemPrompt = null) {
     // Create a string containing all relevant parameters
     const dataToHash = JSON.stringify({
       prompt_id: prompt._id,
       content: content,
+      system_prompt: systemPrompt,
       variables: variables,
       model: llmSettings.model,
-      parameters: llmSettings.parameters
+      parameters: llmSettings.parameters,
     });
 
     // Create SHA-256 hash
-    return crypto
-      .createHash('sha256')
-      .update(dataToHash)
-      .digest('hex');
+    return crypto.createHash("sha256").update(dataToHash).digest("hex");
   }
 
   async getCachedResult(hash) {
@@ -25,9 +23,9 @@ class CacheService {
       // Update hits and last accessed
       await PromptCache.updateOne(
         { _id: cached._id },
-        { 
+        {
           $inc: { hits: 1 },
-          $set: { last_accessed: new Date() }
+          $set: { last_accessed: new Date() },
         }
       );
       return cached;
@@ -41,7 +39,7 @@ class CacheService {
       prompt: promptId,
       result: result,
       usage,
-      metadata
+      metadata,
     });
     await cached.save();
     return cached;

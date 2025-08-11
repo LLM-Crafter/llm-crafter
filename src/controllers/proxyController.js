@@ -7,8 +7,9 @@ const Mustache = require("mustache");
 
 const testPrompt = async (req, res) => {
   try {
-    // Assume all data is in body: { content, llm_settings, api_key_id, variables }
-    const { content, llm_settings, api_key_id, variables } = req.body;
+    // Assume all data is in body: { content, system_prompt, llm_settings, api_key_id, variables }
+    const { content, system_prompt, llm_settings, api_key_id, variables } =
+      req.body;
 
     if (!content) {
       return res.status(400).json({ error: "Prompt content is required" });
@@ -43,6 +44,9 @@ const testPrompt = async (req, res) => {
 
     // Mustache render
     const processedPrompt = Mustache.render(content, variables || {});
+    const processedSystemPrompt = system_prompt
+      ? Mustache.render(system_prompt, variables || {})
+      : null;
 
     // No caching -- always live
     let result;
@@ -55,7 +59,8 @@ const testPrompt = async (req, res) => {
       result = await openai.generateCompletion(
         llm_settings.model,
         processedPrompt,
-        llm_settings.parameters // can be undefined
+        llm_settings.parameters, // can be undefined
+        processedSystemPrompt
       );
     }
 
@@ -115,12 +120,18 @@ const executePrompt = async (req, res) => {
       req.body.variables || {}
     );
 
+    // Replace variables in system prompt template if it exists
+    const processedSystemPrompt = prompt.system_prompt
+      ? Mustache.render(prompt.system_prompt, req.body.variables || {})
+      : null;
+
     // Generate cache hash
     const hash = cacheService.generateHash(
       prompt,
       processedPrompt,
       req.body.variables,
-      prompt.llm_settings
+      prompt.llm_settings,
+      processedSystemPrompt
     );
 
     // Check cache
@@ -149,7 +160,8 @@ const executePrompt = async (req, res) => {
         result = await openai.generateCompletion(
           prompt.llm_settings.model,
           processedPrompt,
-          prompt.llm_settings.parameters
+          prompt.llm_settings.parameters,
+          processedSystemPrompt
         );
       }
 
