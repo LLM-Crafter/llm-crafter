@@ -422,17 +422,34 @@ Your response:`;
     const lines = content.split("\n");
     const result = {};
 
-    // First pass: extract simple single-line fields
+    // First pass: extract simple single-line fields (except RESPONSE which can be multi-line)
     for (const line of lines) {
       if (line.startsWith("ACTION:")) {
         result.action = line.replace("ACTION:", "").trim();
       } else if (line.startsWith("TOOL:")) {
         result.tool_name = line.replace("TOOL:", "").trim();
-      } else if (line.startsWith("RESPONSE:")) {
-        result.response = line.replace("RESPONSE:", "").trim();
       } else if (line.startsWith("REASONING:")) {
         result.reasoning = line.replace("REASONING:", "").trim();
       }
+    }
+
+    // Handle multi-line RESPONSE
+    const responseIndex = content.indexOf("RESPONSE:");
+    if (responseIndex !== -1) {
+      const afterResponse = content.substring(
+        responseIndex + "RESPONSE:".length
+      );
+
+      // Find the end of the response (either next field or end of content)
+      const nextFieldMatch = afterResponse.match(
+        /\n(ACTION|TOOL|PARAMETERS|REASONING):/
+      );
+      const responseEnd = nextFieldMatch
+        ? nextFieldMatch.index
+        : afterResponse.length;
+
+      result.response = afterResponse.substring(0, responseEnd).trim();
+      console.log("Parsed multi-line response:", result.response);
     }
 
     // Second pass: extract potentially multi-line PARAMETERS
