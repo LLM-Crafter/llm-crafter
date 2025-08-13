@@ -13,7 +13,8 @@ class AgentService {
     agentId,
     conversationId,
     userMessage,
-    userIdentifier
+    userIdentifier,
+    dynamicContext = {}
   ) {
     const agent = await Agent.findById(agentId).populate("api_key");
     if (!agent) {
@@ -50,7 +51,11 @@ class AgentService {
     });
 
     // Execute agent reasoning
-    const response = await this.executeAgentReasoning(agent, conversation);
+    const response = await this.executeAgentReasoning(
+      agent,
+      conversation,
+      dynamicContext
+    );
 
     // Add assistant response to conversation
     await conversation.addMessage({
@@ -74,7 +79,12 @@ class AgentService {
   /**
    * Execute a task agent with input data
    */
-  async executeTaskAgent(agentId, input, userIdentifier = null) {
+  async executeTaskAgent(
+    agentId,
+    input,
+    userIdentifier = null,
+    dynamicContext = {}
+  ) {
     const agent = await Agent.findById(agentId).populate("api_key");
     if (!agent) {
       throw new Error("Agent not found");
@@ -98,7 +108,12 @@ class AgentService {
 
     try {
       // Execute agent reasoning
-      const result = await this.executeTaskReasoning(agent, input, execution);
+      const result = await this.executeTaskReasoning(
+        agent,
+        input,
+        execution,
+        dynamicContext
+      );
 
       await execution.complete(result.output);
       execution.usage = result.token_usage;
@@ -121,7 +136,7 @@ class AgentService {
   /**
    * Core agent reasoning engine
    */
-  async executeAgentReasoning(agent, conversation) {
+  async executeAgentReasoning(agent, conversation, dynamicContext = {}) {
     const openai = new OpenAIService(
       agent.api_key.key,
       agent.api_key.provider.name
@@ -162,11 +177,15 @@ class AgentService {
       );
 
       // Get LLM response
+      const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
+        agent.system_prompt,
+        dynamicContext
+      );
       const llmResponse = await openai.generateCompletion(
         agent.llm_settings.model,
         prompt,
         agent.llm_settings.parameters,
-        agent.system_prompt
+        enhancedSystemPrompt
       );
 
       // Update token usage
@@ -248,7 +267,7 @@ class AgentService {
   /**
    * Task-specific reasoning (simpler, single execution)
    */
-  async executeTaskReasoning(agent, input, execution) {
+  async executeTaskReasoning(agent, input, execution, dynamicContext = {}) {
     const openai = new OpenAIService(
       agent.api_key.key,
       agent.api_key.provider.name
@@ -263,11 +282,15 @@ class AgentService {
     const prompt = this.buildTaskPrompt(agent, input);
 
     // Execute reasoning
+    const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
+      agent.system_prompt,
+      dynamicContext
+    );
     const llmResponse = await openai.generateCompletion(
       agent.llm_settings.model,
       prompt,
       agent.llm_settings.parameters,
-      agent.system_prompt
+      enhancedSystemPrompt
     );
 
     // Parse response for tool usage or direct output
@@ -582,6 +605,24 @@ Your response:`;
     }
 
     return agent;
+  }
+
+  /**
+   * Build enhanced system prompt with dynamic context
+   */
+  buildEnhancedSystemPrompt(baseSystemPrompt, dynamicContext = {}) {
+    let enhancedPrompt = baseSystemPrompt;
+
+    // Add context information if provided
+    if (Object.keys(dynamicContext).length > 0) {
+      const contextString = Object.entries(dynamicContext)
+        .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+        .join("\n");
+
+      enhancedPrompt += `\n\nAdditional Context:\n${contextString}`;
+    }
+
+    return enhancedPrompt;
   }
 }
 

@@ -95,8 +95,6 @@ class ToolService {
         ...agentToolConfig,
       };
 
-      console.log(`Merged config for '${toolName}':`, mergedConfig);
-
       // Execute tool
       const result = await handler(parameters, mergedConfig);
       const executionTime = Date.now() - startTime;
@@ -688,8 +686,6 @@ class ToolService {
         endpointConfig.focus ||
         summaryConfig.focus ||
         "key information relevant to user queries";
-
-      console.log(summaryConfig);
 
       const summary = await this.summarizeApiResult(
         apiResult,

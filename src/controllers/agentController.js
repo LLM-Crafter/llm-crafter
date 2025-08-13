@@ -266,7 +266,7 @@ const deleteAgent = async (req, res) => {
 
 const executeChatbotAgent = async (req, res) => {
   try {
-    const { message, conversation_id, user_identifier } = req.body;
+    const { message, conversation_id, user_identifier, context } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: "Message is required" });
@@ -280,7 +280,8 @@ const executeChatbotAgent = async (req, res) => {
       req.params.agentId,
       conversation_id,
       message,
-      user_identifier
+      user_identifier,
+      context
     );
 
     res.json(result);
@@ -294,7 +295,7 @@ const executeChatbotAgent = async (req, res) => {
 
 const executeTaskAgent = async (req, res) => {
   try {
-    const { input, user_identifier } = req.body;
+    const { input, user_identifier, context } = req.body;
 
     if (!input) {
       return res.status(400).json({ error: "Input is required" });
@@ -303,7 +304,8 @@ const executeTaskAgent = async (req, res) => {
     const result = await agentService.executeTaskAgent(
       req.params.agentId,
       input,
-      user_identifier
+      user_identifier,
+      context
     );
 
     res.json(result);
