@@ -61,7 +61,7 @@ const createAgent = async (req, res) => {
       return {
         name: tool.name,
         description: tool.description,
-        parameters: tool.parameters_schema,
+        parameters: tool.parameters_schema, // For new agents, use schema defaults
         enabled: true,
       };
     });
@@ -193,11 +193,20 @@ const updateAgent = async (req, res) => {
 
       const agentTools = req.body.tools.map((toolName) => {
         const tool = availableTools.find((t) => t.name === toolName);
+
+        // Check if this tool already exists in the agent and preserve its parameters
+        const existingTool = agent.tools.find(
+          (existingTool) => existingTool.name === toolName
+        );
+
         return {
           name: tool.name,
           description: tool.description,
-          parameters: tool.parameters_schema,
-          enabled: true,
+          // Preserve existing parameters if tool was already configured, otherwise use schema default
+          parameters: existingTool
+            ? existingTool.parameters
+            : tool.parameters_schema,
+          enabled: existingTool ? existingTool.enabled : true,
         };
       });
 
@@ -486,11 +495,11 @@ const configureApiEndpoints = async (req, res) => {
         summarization.max_tokens &&
         (typeof summarization.max_tokens !== "number" ||
           summarization.max_tokens < 10 ||
-          summarization.max_tokens > 1000)
+          summarization.max_tokens > 72000)
       ) {
         return res.status(400).json({
           error:
-            "Summarization 'max_tokens' must be a number between 10 and 1000",
+            "Summarization 'max_tokens' must be a number between 10 and 72000",
         });
       }
 
