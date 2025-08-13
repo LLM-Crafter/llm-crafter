@@ -4,6 +4,7 @@ const AgentExecution = require("../models/AgentExecution");
 const OpenAIService = require("./openaiService");
 const toolService = require("./toolService");
 const APIKey = require("../models/ApiKey");
+const summarizationService = require("./summarizationService");
 
 class AgentService {
   /**
@@ -66,6 +67,9 @@ class AgentService {
       token_usage: response.token_usage,
       timestamp: new Date(),
     });
+
+    // Check if conversation needs summarization
+    await this.handleConversationSummarization(conversation, agent);
 
     return {
       conversation_id: conversation._id,
@@ -337,14 +341,18 @@ class AgentService {
   }
 
   /**
-   * Build context for agent reasoning
+   * Build context for agent reasoning with optimized conversation history
    */
   buildAgentContext(agent, conversation) {
-    const messages = conversation.getContextForAgent();
+    // Use the optimized context method that includes summarization
+    const messages = conversation.getContextForAgent(4000); // Limit to ~4K tokens
+
     return {
       conversation_history: messages,
       available_tools: agent.tools,
       agent_config: agent.config,
+      has_summary: !!conversation.conversation_summary,
+      summary_version: conversation.metadata.summary_version || 0,
     };
   }
 
@@ -605,6 +613,75 @@ Your response:`;
     }
 
     return agent;
+  }
+
+  /**
+   * Handle conversation summarization when needed
+   */
+  async handleConversationSummarization(conversation, agent) {
+    try {
+      // Check if summarization is needed
+      if (!summarizationService.shouldSummarize(conversation)) {
+        return;
+      }
+
+      console.log(
+        `Starting summarization for conversation ${conversation._id}`
+      );
+
+      // Get messages to summarize
+      const messagesToSummarize =
+        summarizationService.getMessagesToSummarize(conversation);
+
+      if (messagesToSummarize.length === 0) {
+        console.log("No messages to summarize");
+        return;
+      }
+
+      // Get existing summary for incremental updates
+      const existingSummary = conversation.conversation_summary;
+
+      // Perform summarization
+      const result = await summarizationService.summarizeConversation(
+        messagesToSummarize,
+        agent,
+        existingSummary
+      );
+
+      // Update conversation with new summary
+      await conversation.updateSummary(result.summary);
+
+      console.log(
+        `Conversation summarized successfully. Token savings estimated: ${summarizationService.estimateTokenSavings(
+          messagesToSummarize
+        )} tokens`
+      );
+
+      // Log summarization metrics
+      this.logSummarizationMetrics(
+        conversation,
+        messagesToSummarize.length,
+        result
+      );
+    } catch (error) {
+      console.error("Summarization failed:", error);
+      // Don't throw error - conversation should continue even if summarization fails
+    }
+  }
+
+  /**
+   * Log summarization metrics for monitoring
+   */
+  logSummarizationMetrics(conversation, messageCount, result) {
+    console.log("Summarization Metrics:", {
+      conversation_id: conversation._id,
+      messages_summarized: messageCount,
+      total_messages: conversation.messages.length,
+      summary_version: conversation.metadata.summary_version,
+      tokens_used: result.token_usage.total_tokens,
+      cost: result.token_usage.cost,
+      model_used: result.model_used,
+    });
   }
 
   /**

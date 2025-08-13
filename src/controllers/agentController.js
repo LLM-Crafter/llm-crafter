@@ -5,6 +5,7 @@ const Project = require("../models/Project");
 const ApiKey = require("../models/ApiKey");
 const agentService = require("../services/agentService");
 const toolService = require("../services/toolService");
+const summarizationService = require("../services/summarizationService");
 
 const createAgent = async (req, res) => {
   try {
@@ -618,6 +619,102 @@ const getApiEndpoints = async (req, res) => {
   }
 };
 
+// ===== CONVERSATION SUMMARIZATION =====
+
+const summarizeConversation = async (req, res) => {
+  try {
+    const conversation = await Conversation.findOne({
+      _id: req.params.conversationId,
+      agent: req.params.agentId,
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    const agent = await Agent.findById(req.params.agentId).populate("api_key");
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    // Check if summarization is needed
+    if (!summarizationService.shouldSummarize(conversation)) {
+      return res.json({
+        message: "Conversation does not need summarization",
+        summary_status: {
+          has_summary: !!conversation.conversation_summary,
+          messages_count: conversation.messages.length,
+          last_summary_index: conversation.metadata.last_summary_index,
+          requires_summarization: conversation.metadata.requires_summarization,
+        },
+      });
+    }
+
+    // Force summarization
+    await agentService.handleConversationSummarization(conversation, agent);
+
+    // Reload conversation to get updated summary
+    const updatedConversation = await Conversation.findById(conversation._id);
+
+    res.json({
+      message: "Conversation summarized successfully",
+      summary: updatedConversation.conversation_summary,
+      summary_status: {
+        has_summary: true,
+        messages_count: updatedConversation.messages.length,
+        last_summary_index: updatedConversation.metadata.last_summary_index,
+        summary_version: updatedConversation.metadata.summary_version,
+        requires_summarization: false,
+      },
+    });
+  } catch (error) {
+    console.error("Manual summarization error:", error);
+    res.status(500).json({ error: "Failed to summarize conversation" });
+  }
+};
+
+const getConversationSummary = async (req, res) => {
+  try {
+    const conversation = await Conversation.findOne({
+      _id: req.params.conversationId,
+      agent: req.params.agentId,
+    }).select(
+      "conversation_summary metadata.last_summary_index metadata.summary_version metadata.requires_summarization messages"
+    );
+
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    const messagesSinceLastSummary =
+      conversation.messages.length -
+      (conversation.metadata.last_summary_index + 1);
+    const estimatedTokenSavings = conversation.conversation_summary
+      ? summarizationService.estimateTokenSavings(
+          conversation.messages.slice(
+            0,
+            conversation.metadata.last_summary_index + 1
+          )
+        )
+      : 0;
+
+    res.json({
+      summary: conversation.conversation_summary,
+      summary_status: {
+        has_summary: !!conversation.conversation_summary,
+        messages_count: conversation.messages.length,
+        messages_since_last_summary: messagesSinceLastSummary,
+        last_summary_index: conversation.metadata.last_summary_index,
+        summary_version: conversation.metadata.summary_version || 0,
+        requires_summarization: conversation.metadata.requires_summarization,
+        estimated_token_savings: estimatedTokenSavings,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch conversation summary" });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -632,4 +729,6 @@ module.exports = {
   getAgentExecution,
   configureApiEndpoints,
   getApiEndpoints,
+  summarizeConversation,
+  getConversationSummary,
 };

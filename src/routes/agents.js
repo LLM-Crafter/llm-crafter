@@ -196,4 +196,20 @@ router.get(
   agentController.getApiEndpoints
 );
 
+// ===== CONVERSATION SUMMARIZATION ROUTES =====
+
+router.post(
+  "/:agentId/conversations/:conversationId/summarize",
+  auth,
+  orgAuth.hasRole("member"),
+  agentController.summarizeConversation
+);
+
+router.get(
+  "/:agentId/conversations/:conversationId/summary",
+  auth,
+  orgAuth.hasRole("viewer"),
+  agentController.getConversationSummary
+);
+
 module.exports = router;
