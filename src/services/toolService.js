@@ -3,6 +3,7 @@ const OpenAIService = require("./openaiService");
 const https = require("https");
 const http = require("http");
 const { URL } = require("url");
+const ApiKey = require("../models/ApiKey");
 
 class ToolService {
   constructor() {
@@ -100,6 +101,21 @@ class ToolService {
       const result = await handler(parameters, mergedConfig);
       const executionTime = Date.now() - startTime;
 
+      // Summarize API results if enabled and result is large
+      let finalResult = result;
+      if (
+        toolName === "api_caller" &&
+        result &&
+        mergedConfig.summarization?.enabled
+      ) {
+        finalResult = await this.maybeSummarizeApiResult(
+          result,
+          parameters,
+          mergedConfig.summarization,
+          mergedConfig._agent_api_key
+        );
+      }
+
       // Record usage stats (only if tool exists in DB)
       if (tool) {
         try {
@@ -114,7 +130,7 @@ class ToolService {
 
       return {
         success: true,
-        result: result,
+        result: finalResult,
         execution_time_ms: executionTime,
         tool_name: toolName,
       };
@@ -635,6 +651,168 @@ class ToolService {
     }
 
     return result;
+  }
+
+  /**
+   * Maybe summarize API result if it's large enough
+   */
+  async maybeSummarizeApiResult(
+    apiResult,
+    parameters,
+    summaryConfig,
+    agentApiKey = null
+  ) {
+    try {
+      // Check if we should summarize this result
+      const resultSize = JSON.stringify(apiResult).length;
+      const minSizeToSummarize = summaryConfig.min_size || 1000;
+
+      if (resultSize < minSizeToSummarize) {
+        console.log(
+          `API result size ${resultSize} below threshold ${minSizeToSummarize}, not summarizing`
+        );
+        return apiResult;
+      }
+
+      console.log(
+        `API result size ${resultSize} exceeds threshold, summarizing...`
+      );
+
+      // Get endpoint-specific configuration
+      const endpointName = parameters.endpoint_name;
+      const endpointConfig = summaryConfig.endpoint_rules?.[endpointName] || {};
+
+      const maxTokens =
+        endpointConfig.max_tokens || summaryConfig.max_tokens || 150;
+      const focus =
+        endpointConfig.focus ||
+        summaryConfig.focus ||
+        "key information relevant to user queries";
+
+      console.log(summaryConfig);
+
+      const summary = await this.summarizeApiResult(
+        apiResult,
+        endpointName,
+        maxTokens,
+        focus,
+        agentApiKey,
+        summaryConfig.model
+      );
+
+      return {
+        _summarized: true,
+        _original_size: resultSize,
+        _endpoint: endpointName,
+        _summary_tokens: maxTokens,
+        summary: summary,
+        // Preserve important metadata
+        status_code: apiResult.status_code,
+        success: apiResult.success,
+        url: apiResult.url,
+        method: apiResult.method,
+      };
+    } catch (error) {
+      console.error("Failed to summarize API result:", error.message);
+      // Return original result if summarization fails
+      return apiResult;
+    }
+  }
+
+  /**
+   * Summarize API result using the agent's LLM API key
+   */
+  async summarizeApiResult(
+    apiResult,
+    endpointName,
+    maxTokens,
+    focus,
+    agentApiKey = null,
+    model = "gpt-4.1-nano"
+  ) {
+    // Build summarization prompt
+    const prompt = `You are an AI assistant that summarizes API responses for other AI agents.
+
+Summarize this API response from endpoint "${endpointName}" in ${maxTokens} tokens or less.
+Focus on: ${focus}
+
+Keep the summary concise but include all information that would be useful for answering user questions.
+If the API returned an error, clearly state what went wrong.
+
+API Response:
+${JSON.stringify(apiResult, null, 2)}
+
+Summary:`;
+
+    try {
+      // Use agent's API key if available, otherwise fallback
+      if (agentApiKey && agentApiKey.key) {
+        const OpenAIService = require("./openaiService");
+        if (!agentApiKey.provider) agentApiKey.provider = "openai"; // Default to OpenAI if no provider specified
+        const openai = new OpenAIService(agentApiKey.key, agentApiKey.provider);
+
+        const response = await openai.generateCompletion(model, prompt, {
+          max_tokens: maxTokens,
+          temperature: 0.3, // Low temperature for consistent summaries
+        });
+
+        console.log(
+          `Summarized ${JSON.stringify(apiResult).length} chars to ${response.content.length} chars using agent's API key`
+        );
+        return response.content.trim();
+      } else {
+        console.log("No agent API key available, using fallback summarization");
+        return this.createFallbackSummary(apiResult, endpointName, maxTokens);
+      }
+    } catch (error) {
+      console.error("Summarization service failed:", error.message);
+      // Fallback: create a simple summary
+      return this.createFallbackSummary(apiResult, endpointName, maxTokens);
+    }
+  }
+
+  /**
+   * Create a simple fallback summary if LLM summarization fails
+   */
+  createFallbackSummary(apiResult, endpointName, maxTokens) {
+    const parts = [];
+
+    // Basic status info
+    if (apiResult.status_code) {
+      parts.push(
+        `Status: ${apiResult.status_code} ${apiResult.status_text || ""}`
+      );
+    }
+
+    // Success/failure
+    if (apiResult.success === false) {
+      parts.push("Request failed");
+      if (apiResult.data?.message) {
+        parts.push(`Error: ${apiResult.data.message}`);
+      }
+    } else {
+      parts.push("Request successful");
+    }
+
+    // Try to extract key data
+    if (apiResult.data && typeof apiResult.data === "object") {
+      const dataStr = JSON.stringify(apiResult.data);
+      if (dataStr.length > 200) {
+        parts.push(`Data: ${dataStr.substring(0, 200)}...`);
+      } else {
+        parts.push(`Data: ${dataStr}`);
+      }
+    }
+
+    const summary = parts.join(". ");
+
+    // Truncate if too long
+    if (summary.length > maxTokens * 4) {
+      // Rough token estimation
+      return summary.substring(0, maxTokens * 4) + "...";
+    }
+
+    return summary;
   }
 }
 

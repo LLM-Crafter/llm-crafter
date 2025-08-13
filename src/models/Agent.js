@@ -171,18 +171,25 @@ agentSchema.virtual("executions", {
 // Method to configure API endpoints for api_caller tool
 agentSchema.methods.configureApiEndpoints = function (
   endpointsConfig,
-  authConfig
+  authConfig,
+  summarizationConfig
 ) {
   const apiCallerTool = this.tools.find((tool) => tool.name === "api_caller");
   if (!apiCallerTool) {
     throw new Error("API caller tool not found in agent tools");
   }
 
+  // Merge new configuration with existing parameters
   apiCallerTool.parameters = {
     ...apiCallerTool.parameters,
     endpoints: endpointsConfig,
     authentication: authConfig,
   };
+
+  // Add summarization config if provided
+  if (summarizationConfig && Object.keys(summarizationConfig).length > 0) {
+    apiCallerTool.parameters.summarization = summarizationConfig;
+  }
 
   return this.save();
 };
@@ -197,6 +204,7 @@ agentSchema.methods.getApiEndpoints = function () {
   return {
     endpoints: apiCallerTool.parameters?.endpoints || {},
     authentication: apiCallerTool.parameters?.authentication || {},
+    summarization: apiCallerTool.parameters?.summarization || {},
   };
 };
 

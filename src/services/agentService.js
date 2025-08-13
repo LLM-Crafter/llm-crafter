@@ -550,8 +550,18 @@ Your response:`;
       return {};
     }
 
-    // Return the tool's parameters as config
-    return tool.parameters;
+    // Start with the tool's parameters as config
+    const config = { ...tool.parameters };
+
+    // Add agent's API key information for summarization if enabled
+    if (config.summarization?.enabled && agent.api_key) {
+      config._agent_api_key = {
+        key: agent.api_key.key,
+        provider: agent.api_key.provider.name,
+      };
+    }
+
+    return config;
   }
 
   /**

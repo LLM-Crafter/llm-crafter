@@ -439,7 +439,7 @@ const configureApiEndpoints = async (req, res) => {
         .json({ error: "Agent does not have api_caller tool configured" });
     }
 
-    const { endpoints, authentication } = req.body;
+    const { endpoints, authentication, summarization } = req.body;
 
     // Validate endpoints configuration
     if (endpoints) {
@@ -469,13 +469,96 @@ const configureApiEndpoints = async (req, res) => {
       }
     }
 
-    await agent.configureApiEndpoints(endpoints || {}, authentication || {});
+    // Validate summarization configuration
+    if (summarization) {
+      if (
+        typeof summarization.enabled !== "undefined" &&
+        typeof summarization.enabled !== "boolean"
+      ) {
+        return res.status(400).json({
+          error: "Summarization 'enabled' field must be a boolean",
+        });
+      }
 
-    res.json({
-      message: "API endpoints configured successfully",
+      if (
+        summarization.max_tokens &&
+        (typeof summarization.max_tokens !== "number" ||
+          summarization.max_tokens < 10 ||
+          summarization.max_tokens > 1000)
+      ) {
+        return res.status(400).json({
+          error:
+            "Summarization 'max_tokens' must be a number between 10 and 1000",
+        });
+      }
+
+      if (
+        summarization.min_size &&
+        (typeof summarization.min_size !== "number" ||
+          summarization.min_size < 100)
+      ) {
+        return res.status(400).json({
+          error: "Summarization 'min_size' must be a number >= 100",
+        });
+      }
+
+      if (summarization.model && typeof summarization.model !== "string") {
+        return res.status(400).json({
+          error: "Summarization 'model' must be a string",
+        });
+      }
+
+      if (
+        summarization.endpoint_rules &&
+        typeof summarization.endpoint_rules !== "object"
+      ) {
+        return res.status(400).json({
+          error: "Summarization 'endpoint_rules' must be an object",
+        });
+      }
+
+      // Validate endpoint-specific rules
+      if (summarization.endpoint_rules) {
+        for (const [endpointName, rules] of Object.entries(
+          summarization.endpoint_rules
+        )) {
+          if (
+            rules.max_tokens &&
+            (typeof rules.max_tokens !== "number" ||
+              rules.max_tokens < 10 ||
+              rules.max_tokens > 1000)
+          ) {
+            return res.status(400).json({
+              error: `Endpoint rule '${endpointName}' max_tokens must be a number between 10 and 1000`,
+            });
+          }
+          if (rules.focus && typeof rules.focus !== "string") {
+            return res.status(400).json({
+              error: `Endpoint rule '${endpointName}' focus must be a string`,
+            });
+          }
+        }
+      }
+    }
+
+    await agent.configureApiEndpoints(
+      endpoints || {},
+      authentication || {},
+      summarization || {}
+    );
+
+    const responseData = {
+      message: "API configuration updated successfully",
       endpoints: endpoints || {},
       authentication: authentication ? { type: authentication.type } : {},
-    });
+    };
+
+    // Include summarization in response if provided
+    if (summarization) {
+      responseData.summarization = summarization;
+    }
+
+    res.json(responseData);
   } catch (error) {
     console.error("Configure API endpoints error:", error);
     res.status(500).json({ error: "Failed to configure API endpoints" });
@@ -516,6 +599,7 @@ const getApiEndpoints = async (req, res) => {
     res.json({
       endpoints: apiConfig.endpoints,
       authentication: sanitizedAuth,
+      summarization: apiConfig.summarization || {},
     });
   } catch (error) {
     console.error("Get API endpoints error:", error);

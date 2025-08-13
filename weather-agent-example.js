@@ -52,6 +52,27 @@ const weatherApiConfig = {
     api_key: "your-openweather-api-key",
     api_key_header: "appid", // OpenWeather uses 'appid' as query param
   },
+  summarization: {
+    enabled: true,
+    model: "gpt-3.5-turbo", // Cheap model for summaries
+    max_tokens: 120,
+    min_size: 800, // Only summarize if response > 800 chars
+    focus: "weather conditions, temperature, humidity, wind, forecast",
+    endpoint_rules: {
+      get_weather: {
+        max_tokens: 100,
+        focus: "current temperature, weather condition, wind, humidity",
+      },
+      get_forecast: {
+        max_tokens: 150,
+        focus: "forecast overview, temperature trends, notable weather changes",
+      },
+      get_weather_by_coords: {
+        max_tokens: 100,
+        focus: "location name, current weather conditions, temperature",
+      },
+    },
+  },
 };
 
 // 3. How the agent would respond to different user queries:
