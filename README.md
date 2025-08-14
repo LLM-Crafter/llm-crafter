@@ -169,11 +169,13 @@ LLM Crafter uses a hierarchical structure:
 ### Agent Types
 
 #### Chatbot Agents
+
 - Stateful conversations with memory
 - Automatic conversation summarization
 - Multi-turn interactions
 
 #### Task Agents
+
 - Stateless task execution
 - Single-purpose operations
 - High-volume processing
@@ -181,6 +183,7 @@ LLM Crafter uses a hierarchical structure:
 ### Tools
 
 Built-in tools include:
+
 - **Web Search**: Search the internet for information
 - **Calculator**: Mathematical calculations
 - **API Caller**: HTTP requests to external APIs

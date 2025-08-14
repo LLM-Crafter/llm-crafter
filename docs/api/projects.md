@@ -3,14 +3,17 @@
 The Projects API provides endpoints for managing projects within organizations. Projects serve as containers for agents, tools, and related resources.
 
 ## Base URL
+
 ```
 https://your-domain.com/api/organizations/{organization_id}/projects
 ```
 
 ## Authentication
+
 All endpoints require authentication and appropriate organization membership.
 
 **Headers:**
+
 ```
 Authorization: Bearer {jwt_token}
 # OR
@@ -28,6 +31,7 @@ GET /api/organizations/{organization_id}/projects
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number for pagination (default: 1)
 - `limit` (optional): Number of items per page (default: 20, max: 100)
 - `search` (optional): Search term for project names/descriptions
@@ -35,6 +39,7 @@ GET /api/organizations/{organization_id}/projects
 - `order` (optional): Sort order (`asc`, `desc`)
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -87,6 +92,7 @@ POST /api/organizations/{organization_id}/projects
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "content-analyzer",
@@ -108,12 +114,14 @@ POST /api/organizations/{organization_id}/projects
 ```
 
 **Validation Rules:**
+
 - `name`: Required, lowercase, alphanumeric with hyphens/underscores
 - `display_name`: Optional, human-readable name
 - `description`: Optional string
 - `llm_configurations`: Optional array of LLM configurations
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -153,6 +161,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -206,6 +215,7 @@ PUT /api/organizations/{organization_id}/projects/{project_id}
 ```
 
 **Request Body:**
+
 ```json
 {
   "display_name": "Updated Customer Support Bot",
@@ -223,6 +233,7 @@ PUT /api/organizations/{organization_id}/projects/{project_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -258,6 +269,7 @@ DELETE /api/organizations/{organization_id}/projects/{project_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -278,6 +290,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/llm-configs
 ```
 
 **Request Body:**
+
 ```json
 {
   "provider": "anthropic",
@@ -293,6 +306,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/llm-configs
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -323,6 +337,7 @@ PUT /api/organizations/{organization_id}/projects/{project_id}/llm-configs/{conf
 ```
 
 **Request Body:**
+
 ```json
 {
   "parameters": {
@@ -352,11 +367,13 @@ GET /api/organizations/{organization_id}/projects/{project_id}/stats
 ```
 
 **Query Parameters:**
+
 - `period` (optional): `day`, `week`, `month`, `year` (default: `month`)
 - `start_date` (optional): ISO date string
 - `end_date` (optional): ISO date string
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -404,6 +421,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/executions
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 20, max: 100)
 - `agent_id` (optional): Filter by specific agent
@@ -412,6 +430,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/executions
 - `end_date` (optional): Filter executions before this date
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -444,6 +463,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/executions
 ### Common Error Responses
 
 **404 Not Found:**
+
 ```json
 {
   "error": "Project not found",
@@ -452,6 +472,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/executions
 ```
 
 **403 Forbidden:**
+
 ```json
 {
   "error": "Access denied to project",
@@ -460,6 +481,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/executions
 ```
 
 **409 Conflict:**
+
 ```json
 {
   "error": "Project name already exists",
@@ -468,6 +490,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/executions
 ```
 
 **422 Unprocessable Entity:**
+
 ```json
 {
   "error": "Validation failed",
@@ -484,38 +507,45 @@ GET /api/organizations/{organization_id}/projects/{project_id}/executions
 ## Usage Examples
 
 ### JavaScript/Node.js
+
 ```javascript
 // Create project
 const projectData = {
-  name: 'content-analyzer',
-  display_name: 'Content Analyzer',
-  description: 'Analyze and categorize content',
-  llm_configurations: [{
-    provider: 'openai',
-    model: 'gpt-4',
-    api_key_id: 'key_123456',
-    default: true
-  }]
+  name: "content-analyzer",
+  display_name: "Content Analyzer",
+  description: "Analyze and categorize content",
+  llm_configurations: [
+    {
+      provider: "openai",
+      model: "gpt-4",
+      api_key_id: "key_123456",
+      default: true,
+    },
+  ],
 };
 
-const createResponse = await fetch('/api/organizations/org_123/projects', {
-  method: 'POST',
+const createResponse = await fetch("/api/organizations/org_123/projects", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
-  body: JSON.stringify(projectData)
+  body: JSON.stringify(projectData),
 });
 
 // Get project statistics
-const statsResponse = await fetch('/api/organizations/org_123/projects/proj_456/stats?period=week', {
-  headers: {
-    'Authorization': `Bearer ${token}`
+const statsResponse = await fetch(
+  "/api/organizations/org_123/projects/proj_456/stats?period=week",
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   }
-});
+);
 ```
 
 ### cURL
+
 ```bash
 # List projects
 curl -X GET "https://api.example.com/api/organizations/org_123/projects" \
@@ -537,6 +567,7 @@ curl -X GET "https://api.example.com/api/organizations/org_123/projects/proj_456
 ```
 
 ### Python
+
 ```python
 import requests
 

@@ -15,12 +15,14 @@ The API Caller Tool abstracts the complexity of API interactions, providing:
 ## Features
 
 ### Multi-Protocol Support
+
 - **REST APIs**: Full support for RESTful web services
 - **GraphQL**: Query and mutation support
 - **SOAP**: Legacy SOAP service integration
 - **Webhooks**: Outbound webhook calls
 
 ### Authentication Methods
+
 - **API Keys**: Header, query parameter, or custom placement
 - **Bearer Tokens**: JWT and other bearer token formats
 - **OAuth 2.0**: Full OAuth 2.0 flow support
@@ -28,6 +30,7 @@ The API Caller Tool abstracts the complexity of API interactions, providing:
 - **Custom Headers**: Flexible authentication header support
 
 ### Request Formats
+
 - **JSON**: Automatic JSON serialization/deserialization
 - **XML**: XML request and response handling
 - **Form Data**: URL-encoded and multipart form data
@@ -80,10 +83,12 @@ The API Caller Tool abstracts the complexity of API interactions, providing:
 ## Parameters
 
 ### Required Parameters
+
 - **url** (string): The API endpoint URL
 - **method** (string): HTTP method (GET, POST, PUT, DELETE, PATCH, etc.)
 
 ### Optional Parameters
+
 - **headers** (object): Request headers
 - **body** (string/object): Request body
 - **query_params** (object): URL query parameters
@@ -94,6 +99,7 @@ The API Caller Tool abstracts the complexity of API interactions, providing:
 - **validate_ssl** (boolean): Validate SSL certificates (default: true)
 
 ### Authentication Parameters
+
 - **auth_type** (string): Authentication method (`bearer`, `api_key`, `basic`, `oauth2`)
 - **auth_config** (object): Authentication configuration specific to the auth type
 
@@ -119,6 +125,7 @@ The API Caller Tool returns a standardized response:
 ```
 
 ### Response Fields
+
 - **success** (boolean): Whether the request was successful
 - **status_code** (number): HTTP response status code
 - **headers** (object): Response headers
@@ -130,6 +137,7 @@ The API Caller Tool returns a standardized response:
 ## Error Handling
 
 ### HTTP Errors
+
 ```json
 {
   "success": false,
@@ -146,6 +154,7 @@ The API Caller Tool returns a standardized response:
 ```
 
 ### Network Errors
+
 ```json
 {
   "success": false,
@@ -161,6 +170,7 @@ The API Caller Tool returns a standardized response:
 ```
 
 ### Authentication Errors
+
 ```json
 {
   "success": false,
@@ -178,6 +188,7 @@ The API Caller Tool returns a standardized response:
 ## Use Cases
 
 ### Data Retrieval
+
 ```json
 {
   "name": "api_caller",
@@ -193,6 +204,7 @@ The API Caller Tool returns a standardized response:
 ```
 
 ### Data Submission
+
 ```json
 {
   "name": "api_caller",
@@ -212,6 +224,7 @@ The API Caller Tool returns a standardized response:
 ```
 
 ### File Upload
+
 ```json
 {
   "name": "api_caller",
@@ -232,18 +245,21 @@ The API Caller Tool returns a standardized response:
 ## Security Features
 
 ### Request Validation
+
 - **URL Validation**: Ensures URLs are properly formatted and safe
 - **Header Sanitization**: Removes potentially dangerous headers
 - **Body Size Limits**: Prevents oversized requests
 - **Timeout Enforcement**: Prevents hanging requests
 
 ### Access Controls
+
 - **Domain Whitelisting**: Restrict calls to approved domains
 - **Rate Limiting**: Prevent abuse with request throttling
 - **User Permissions**: Respect user and organization permissions
 - **Audit Logging**: Log all API calls for security monitoring
 
 ### Data Protection
+
 - **Credential Masking**: Hide sensitive data in logs
 - **Response Filtering**: Remove sensitive information from responses
 - **Encryption**: Encrypt sensitive data in transit and at rest
@@ -251,18 +267,21 @@ The API Caller Tool returns a standardized response:
 ## Performance Optimization
 
 ### Connection Management
+
 - **Connection Pooling**: Reuse connections for better performance
 - **Keep-Alive**: Maintain persistent connections
 - **DNS Caching**: Cache DNS lookups
 - **Compression**: Support gzip/deflate compression
 
 ### Caching
+
 - **Response Caching**: Cache GET responses when appropriate
 - **Cache Headers**: Respect cache control headers
 - **ETag Support**: Use ETags for conditional requests
 - **TTL Management**: Automatic cache expiration
 
 ### Monitoring
+
 - **Performance Metrics**: Track response times and success rates
 - **Error Tracking**: Monitor and alert on error patterns
 - **Usage Analytics**: Track API usage patterns
@@ -271,18 +290,21 @@ The API Caller Tool returns a standardized response:
 ## Best Practices
 
 ### Request Design
+
 1. **Use Appropriate Methods**: GET for retrieval, POST for creation
 2. **Include Error Handling**: Always check the success field
 3. **Set Reasonable Timeouts**: Balance responsiveness with reliability
 4. **Implement Retries**: Use exponential backoff for retries
 
 ### Security
+
 1. **Validate Inputs**: Sanitize all user inputs
 2. **Use HTTPS**: Always use secure connections
 3. **Rotate Credentials**: Regularly update API keys and tokens
 4. **Monitor Usage**: Track API calls for unusual patterns
 
 ### Performance
+
 1. **Cache When Possible**: Use caching for repeated requests
 2. **Batch Requests**: Combine multiple operations when supported
 3. **Use Pagination**: Handle large datasets with pagination

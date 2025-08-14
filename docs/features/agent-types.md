@@ -5,6 +5,7 @@ LLM Crafter supports different types of agents, each designed for specific use c
 ## Available Agent Types
 
 ### Chatbot Agent
+
 **Type:** `chatbot`
 
 The chatbot agent is designed for conversational interactions. It maintains context across multiple exchanges and is ideal for:
@@ -15,12 +16,14 @@ The chatbot agent is designed for conversational interactions. It maintains cont
 - Educational tutoring systems
 
 **Characteristics:**
+
 - Maintains conversation history
 - Optimized for back-and-forth dialogue
 - Can handle follow-up questions and context references
 - Supports multi-turn conversations
 
 ### Task Agent
+
 **Type:** `task`
 
 Task agents are designed to complete specific, well-defined tasks. They focus on executing single operations efficiently:
@@ -31,12 +34,14 @@ Task agents are designed to complete specific, well-defined tasks. They focus on
 - Document classification
 
 **Characteristics:**
+
 - Single-purpose execution
 - Clear input/output patterns
 - Optimized for specific task completion
 - Can be chained together for complex workflows
 
 ### Workflow Agent
+
 **Type:** `workflow`
 
 Workflow agents orchestrate complex multi-step processes by coordinating multiple tools and sub-tasks:
@@ -47,12 +52,14 @@ Workflow agents orchestrate complex multi-step processes by coordinating multipl
 - Integration between multiple systems
 
 **Characteristics:**
+
 - Manages multi-step processes
 - Can invoke multiple tools in sequence
 - Handles conditional logic and branching
 - State management across workflow steps
 
 ### API Agent
+
 **Type:** `api`
 
 API agents are specifically designed to interact with external APIs and services:
@@ -63,6 +70,7 @@ API agents are specifically designed to interact with external APIs and services
 - External system automation
 
 **Characteristics:**
+
 - Optimized for API interactions
 - Built-in error handling for network operations
 - Support for various authentication methods
@@ -77,7 +85,7 @@ When creating an agent, specify the type in the agent configuration:
   "name": "customer-support-bot",
   "type": "chatbot",
   "description": "Customer support chatbot for handling inquiries",
-  "system_prompt": "You are a helpful customer support agent...",
+  "system_prompt": "You are a helpful customer support agent..."
   // ... other configuration
 }
 ```
@@ -87,21 +95,25 @@ When creating an agent, specify the type in the agent configuration:
 Each agent type comes with default optimizations:
 
 ### Chatbot Optimizations
+
 - Longer conversation memory
 - Higher context retention
 - Personality-focused prompting
 
 ### Task Optimizations
+
 - Structured output formatting
 - Task completion validation
 - Performance-focused settings
 
 ### Workflow Optimizations
+
 - State persistence between steps
 - Error recovery mechanisms
 - Progress tracking
 
 ### API Optimizations
+
 - Network timeout handling
 - Rate limiting awareness
 - Response caching strategies

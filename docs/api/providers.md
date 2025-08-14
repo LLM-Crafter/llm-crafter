@@ -3,14 +3,17 @@
 The Providers API manages LLM providers and their configurations. Providers define how to connect to different LLM services like OpenAI, Anthropic, or custom endpoints.
 
 ## Base URL
+
 ```
 https://your-domain.com/api/providers
 ```
 
 ## Authentication
+
 All endpoints require authentication and appropriate permissions.
 
 **Headers:**
+
 ```
 Authorization: Bearer {jwt_token}
 # OR
@@ -28,6 +31,7 @@ GET /api/providers/supported
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -98,9 +102,11 @@ GET /api/organizations/{organization_id}/providers
 ```
 
 **Query Parameters:**
+
 - `enabled` (optional): Filter by enabled status (`true`, `false`)
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -139,6 +145,7 @@ POST /api/organizations/{organization_id}/providers
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "openai",
@@ -152,6 +159,7 @@ POST /api/organizations/{organization_id}/providers
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -183,6 +191,7 @@ GET /api/organizations/{organization_id}/providers/{provider_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -230,6 +239,7 @@ PUT /api/organizations/{organization_id}/providers/{provider_id}
 ```
 
 **Request Body:**
+
 ```json
 {
   "configuration": {
@@ -242,6 +252,7 @@ PUT /api/organizations/{organization_id}/providers/{provider_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -269,6 +280,7 @@ DELETE /api/organizations/{organization_id}/providers/{provider_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -285,6 +297,7 @@ POST /api/organizations/{organization_id}/providers/{provider_id}/test
 ```
 
 **Request Body:**
+
 ```json
 {
   "model": "gpt-3.5-turbo",
@@ -293,6 +306,7 @@ POST /api/organizations/{organization_id}/providers/{provider_id}/test
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -314,6 +328,7 @@ POST /api/organizations/{organization_id}/providers/{provider_id}/test
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -339,6 +354,7 @@ GET /api/organizations/{organization_id}/providers/{provider_id}/models
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -380,6 +396,7 @@ GET /api/organizations/{organization_id}/providers/{provider_id}/models/{model_n
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -432,11 +449,13 @@ GET /api/organizations/{organization_id}/providers/{provider_id}/usage
 ```
 
 **Query Parameters:**
+
 - `period` (optional): `day`, `week`, `month`, `year` (default: `month`)
 - `start_date` (optional): ISO date string
 - `end_date` (optional): ISO date string
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -485,6 +504,7 @@ GET /api/organizations/{organization_id}/providers/{provider_id}/usage
 ### Common Error Responses
 
 **404 Not Found:**
+
 ```json
 {
   "error": "Provider not found",
@@ -493,6 +513,7 @@ GET /api/organizations/{organization_id}/providers/{provider_id}/usage
 ```
 
 **400 Bad Request:**
+
 ```json
 {
   "error": "Invalid provider configuration",
@@ -505,6 +526,7 @@ GET /api/organizations/{organization_id}/providers/{provider_id}/usage
 ```
 
 **422 Unprocessable Entity:**
+
 ```json
 {
   "error": "Provider test failed",
@@ -519,42 +541,47 @@ GET /api/organizations/{organization_id}/providers/{provider_id}/usage
 ## Usage Examples
 
 ### JavaScript/Node.js
+
 ```javascript
 // Configure OpenAI provider
 const providerData = {
-  name: 'openai',
+  name: "openai",
   configuration: {
-    api_key: 'sk-1234567890abcdef...',
-    organization: 'org-12345'
+    api_key: "sk-1234567890abcdef...",
+    organization: "org-12345",
   },
   enabled: true,
-  default: true
+  default: true,
 };
 
-const configResponse = await fetch('/api/organizations/org_123/providers', {
-  method: 'POST',
+const configResponse = await fetch("/api/organizations/org_123/providers", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
-  body: JSON.stringify(providerData)
+  body: JSON.stringify(providerData),
 });
 
 // Test provider
-const testResponse = await fetch('/api/organizations/org_123/providers/provider_456/test', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    model: 'gpt-3.5-turbo',
-    test_prompt: 'Hello, this is a test.'
-  })
-});
+const testResponse = await fetch(
+  "/api/organizations/org_123/providers/provider_456/test",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-3.5-turbo",
+      test_prompt: "Hello, this is a test.",
+    }),
+  }
+);
 ```
 
 ### cURL
+
 ```bash
 # Configure provider
 curl -X POST "https://api.example.com/api/organizations/org_123/providers" \
@@ -576,6 +603,7 @@ curl -X POST "https://api.example.com/api/organizations/org_123/providers/provid
 ```
 
 ### Python
+
 ```python
 import requests
 

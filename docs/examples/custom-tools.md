@@ -54,9 +54,9 @@ Webhook tools make HTTP requests to external endpoints.
   "return_schema": {
     "type": "object",
     "properties": {
-      "success": {"type": "boolean"},
-      "message_id": {"type": "string"},
-      "timestamp": {"type": "string"}
+      "success": { "type": "boolean" },
+      "message_id": { "type": "string" },
+      "timestamp": { "type": "string" }
     }
   },
   "implementation": {
@@ -107,16 +107,16 @@ Webhook tools make HTTP requests to external endpoints.
   "return_schema": {
     "type": "object",
     "properties": {
-      "found": {"type": "boolean"},
+      "found": { "type": "boolean" },
       "customer": {
         "type": "object",
         "properties": {
-          "id": {"type": "string"},
-          "name": {"type": "string"},
-          "email": {"type": "string"},
-          "phone": {"type": "string"},
-          "created_date": {"type": "string"},
-          "tier": {"type": "string"}
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "created_date": { "type": "string" },
+          "tier": { "type": "string" }
         }
       },
       "orders": {
@@ -124,10 +124,10 @@ Webhook tools make HTTP requests to external endpoints.
         "items": {
           "type": "object",
           "properties": {
-            "order_id": {"type": "string"},
-            "date": {"type": "string"},
-            "total": {"type": "number"},
-            "status": {"type": "string"}
+            "order_id": { "type": "string" },
+            "date": { "type": "string" },
+            "total": { "type": "number" },
+            "status": { "type": "string" }
           }
         }
       }
@@ -172,7 +172,13 @@ Tools that interact with databases for data retrieval and manipulation.
       },
       "period": {
         "type": "string",
-        "enum": ["today", "yesterday", "last_7_days", "last_30_days", "last_quarter"],
+        "enum": [
+          "today",
+          "yesterday",
+          "last_7_days",
+          "last_30_days",
+          "last_quarter"
+        ],
         "description": "Time period for the query"
       },
       "segment": {
@@ -191,24 +197,24 @@ Tools that interact with databases for data retrieval and manipulation.
   "return_schema": {
     "type": "object",
     "properties": {
-      "metric": {"type": "string"},
-      "period": {"type": "string"},
-      "total": {"type": "number"},
+      "metric": { "type": "string" },
+      "period": { "type": "string" },
+      "total": { "type": "number" },
       "data_points": {
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "date": {"type": "string"},
-            "value": {"type": "number"}
+            "date": { "type": "string" },
+            "value": { "type": "number" }
           }
         }
       },
       "comparison": {
         "type": "object",
         "properties": {
-          "previous_period": {"type": "number"},
-          "change_percent": {"type": "number"}
+          "previous_period": { "type": "number" },
+          "change_percent": { "type": "number" }
         }
       }
     }
@@ -276,22 +282,22 @@ Tools for handling file uploads, processing, and transformations.
   "return_schema": {
     "type": "object",
     "properties": {
-      "success": {"type": "boolean"},
+      "success": { "type": "boolean" },
       "document_info": {
         "type": "object",
         "properties": {
-          "pages": {"type": "number"},
-          "size_bytes": {"type": "number"},
-          "language": {"type": "string"}
+          "pages": { "type": "number" },
+          "size_bytes": { "type": "number" },
+          "language": { "type": "string" }
         }
       },
       "extracted_content": {
         "type": "object",
         "properties": {
-          "text": {"type": "string"},
-          "tables": {"type": "array"},
-          "metadata": {"type": "object"},
-          "summary": {"type": "string"}
+          "text": { "type": "string" },
+          "tables": { "type": "array" },
+          "metadata": { "type": "object" },
+          "summary": { "type": "string" }
         }
       }
     }
@@ -326,10 +332,10 @@ class ToolManager {
   constructor(apiKey, organizationId) {
     this.apiKey = apiKey;
     this.organizationId = organizationId;
-    this.baseUrl = 'https://api.llmcrafter.com';
+    this.baseUrl = "https://api.llmcrafter.com";
     this.headers = {
-      'X-API-Key': apiKey,
-      'Content-Type': 'application/json'
+      "X-API-Key": apiKey,
+      "Content-Type": "application/json",
     };
   }
 
@@ -337,9 +343,9 @@ class ToolManager {
     const response = await fetch(
       `${this.baseUrl}/api/organizations/${this.organizationId}/tools`,
       {
-        method: 'POST',
+        method: "POST",
         headers: this.headers,
-        body: JSON.stringify(toolConfig)
+        body: JSON.stringify(toolConfig),
       }
     );
     return response.json();
@@ -349,9 +355,9 @@ class ToolManager {
     const response = await fetch(
       `${this.baseUrl}/api/organizations/${this.organizationId}/tools/${toolId}/test`,
       {
-        method: 'POST',
+        method: "POST",
         headers: this.headers,
-        body: JSON.stringify({ parameters })
+        body: JSON.stringify({ parameters }),
       }
     );
     return response.json();
@@ -359,73 +365,73 @@ class ToolManager {
 
   async createEmailTool() {
     const emailTool = {
-      name: 'email_sender',
-      display_name: 'Email Sender',
-      description: 'Send emails via SMTP',
-      category: 'communication',
+      name: "email_sender",
+      display_name: "Email Sender",
+      description: "Send emails via SMTP",
+      category: "communication",
       parameters_schema: {
-        type: 'object',
+        type: "object",
         properties: {
           to: {
-            type: 'string',
-            description: 'Recipient email address'
+            type: "string",
+            description: "Recipient email address",
           },
           subject: {
-            type: 'string',
-            description: 'Email subject'
+            type: "string",
+            description: "Email subject",
           },
           body: {
-            type: 'string',
-            description: 'Email body content'
+            type: "string",
+            description: "Email body content",
           },
           priority: {
-            type: 'string',
-            enum: ['low', 'normal', 'high'],
-            default: 'normal',
-            description: 'Email priority'
-          }
+            type: "string",
+            enum: ["low", "normal", "high"],
+            default: "normal",
+            description: "Email priority",
+          },
         },
-        required: ['to', 'subject', 'body']
+        required: ["to", "subject", "body"],
       },
       return_schema: {
-        type: 'object',
+        type: "object",
         properties: {
-          success: { type: 'boolean' },
-          message_id: { type: 'string' },
-          status: { type: 'string' }
-        }
+          success: { type: "boolean" },
+          message_id: { type: "string" },
+          status: { type: "string" },
+        },
       },
       implementation: {
-        type: 'webhook',
-        url: 'https://api.youremailservice.com/send',
-        method: 'POST',
+        type: "webhook",
+        url: "https://api.youremailservice.com/send",
+        method: "POST",
         authentication: {
-          type: 'api_key',
-          header: 'X-API-Key',
-          key_env: 'EMAIL_API_KEY'
+          type: "api_key",
+          header: "X-API-Key",
+          key_env: "EMAIL_API_KEY",
         },
         body_template: {
-          to: '{{to}}',
-          subject: '{{subject}}',
-          html: '{{body}}',
-          priority: '{{priority}}'
-        }
+          to: "{{to}}",
+          subject: "{{subject}}",
+          html: "{{body}}",
+          priority: "{{priority}}",
+        },
       },
-      enabled: true
+      enabled: true,
     };
 
     const result = await this.createTool(emailTool);
-    console.log('Email tool created:', result.data.tool.id);
+    console.log("Email tool created:", result.data.tool.id);
 
     // Test the tool
     const testResult = await this.testTool(result.data.tool.id, {
-      to: 'test@example.com',
-      subject: 'Test Email',
-      body: 'This is a test email from LLM Crafter.',
-      priority: 'normal'
+      to: "test@example.com",
+      subject: "Test Email",
+      body: "This is a test email from LLM Crafter.",
+      priority: "normal",
     });
 
-    console.log('Test result:', testResult);
+    console.log("Test result:", testResult);
     return result.data.tool;
   }
 }
@@ -433,7 +439,7 @@ class ToolManager {
 // Usage
 const toolManager = new ToolManager(
   process.env.LLM_CRAFTER_API_KEY,
-  'org_123456'
+  "org_123456"
 );
 
 const emailTool = await toolManager.createEmailTool();
@@ -454,7 +460,7 @@ class ToolManager:
             'X-API-Key': api_key,
             'Content-Type': 'application/json'
         }
-    
+
     def create_tool(self, tool_config):
         response = requests.post(
             f'{self.base_url}/api/organizations/{self.organization_id}/tools',
@@ -462,7 +468,7 @@ class ToolManager:
             json=tool_config
         )
         return response.json()
-    
+
     def create_weather_tool(self):
         weather_tool = {
             'name': 'weather_lookup',
@@ -538,7 +544,7 @@ class ToolManager:
             },
             'enabled': True
         }
-        
+
         result = self.create_tool(weather_tool)
         print(f"Weather tool created: {result['data']['tool']['id']}")
         return result['data']['tool']
@@ -565,12 +571,12 @@ Tools can include conditional logic based on parameters:
   "parameters_schema": {
     "type": "object",
     "properties": {
-      "message": {"type": "string"},
+      "message": { "type": "string" },
       "urgency": {
         "type": "string",
         "enum": ["low", "medium", "high", "critical"]
       },
-      "recipient": {"type": "string"}
+      "recipient": { "type": "string" }
     }
   },
   "implementation": {
@@ -638,56 +644,55 @@ class ToolTester {
   constructor(apiKey, organizationId) {
     this.apiKey = apiKey;
     this.organizationId = organizationId;
-    this.baseUrl = 'https://api.llmcrafter.com';
+    this.baseUrl = "https://api.llmcrafter.com";
   }
 
   async testTool(toolId, testCases) {
     const results = [];
-    
+
     for (const testCase of testCases) {
       console.log(`Testing: ${testCase.name}`);
-      
+
       try {
         const response = await fetch(
           `${this.baseUrl}/api/organizations/${this.organizationId}/tools/${toolId}/test`,
           {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'X-API-Key': this.apiKey,
-              'Content-Type': 'application/json'
+              "X-API-Key": this.apiKey,
+              "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              parameters: testCase.parameters
-            })
+              parameters: testCase.parameters,
+            }),
           }
         );
-        
+
         const result = await response.json();
-        
+
         results.push({
           name: testCase.name,
           success: result.success,
           result: result.data,
           expectedFields: testCase.expectedFields,
-          passed: this.validateResult(result.data, testCase.expectedFields)
+          passed: this.validateResult(result.data, testCase.expectedFields),
         });
-        
       } catch (error) {
         results.push({
           name: testCase.name,
           success: false,
           error: error.message,
-          passed: false
+          passed: false,
         });
       }
     }
-    
+
     return results;
   }
 
   validateResult(result, expectedFields) {
     if (!expectedFields) return true;
-    
+
     for (const field of expectedFields) {
       if (!this.hasNestedProperty(result, field)) {
         return false;
@@ -697,40 +702,42 @@ class ToolTester {
   }
 
   hasNestedProperty(obj, path) {
-    return path.split('.').reduce((current, key) => 
-      current && current[key] !== undefined, obj
-    ) !== undefined;
+    return (
+      path
+        .split(".")
+        .reduce(
+          (current, key) => current && current[key] !== undefined,
+          obj
+        ) !== undefined
+    );
   }
 }
 
 // Usage
-const tester = new ToolTester(
-  process.env.LLM_CRAFTER_API_KEY,
-  'org_123456'
-);
+const tester = new ToolTester(process.env.LLM_CRAFTER_API_KEY, "org_123456");
 
 const testCases = [
   {
-    name: 'Valid weather lookup',
+    name: "Valid weather lookup",
     parameters: {
-      location: 'New York',
-      units: 'celsius',
-      include_forecast: true
+      location: "New York",
+      units: "celsius",
+      include_forecast: true,
     },
-    expectedFields: ['location', 'current.temperature', 'current.description']
+    expectedFields: ["location", "current.temperature", "current.description"],
   },
   {
-    name: 'Invalid location',
+    name: "Invalid location",
     parameters: {
-      location: 'InvalidCity123',
-      units: 'celsius'
+      location: "InvalidCity123",
+      units: "celsius",
     },
-    expectedFields: ['error']
-  }
+    expectedFields: ["error"],
+  },
 ];
 
-const results = await tester.testTool('tool_123456', testCases);
-console.log('Test Results:', results);
+const results = await tester.testTool("tool_123456", testCases);
+console.log("Test Results:", results);
 ```
 
 ## Best Practices

@@ -3,14 +3,17 @@
 The Organizations API provides endpoints for managing organizations, which serve as the top-level containers for projects and teams in LLM Crafter.
 
 ## Base URL
+
 ```
 https://your-domain.com/api/organizations
 ```
 
 ## Authentication
+
 All endpoints require authentication via JWT token or API key.
 
 **Headers:**
+
 ```
 Authorization: Bearer {jwt_token}
 # OR
@@ -28,6 +31,7 @@ GET /api/organizations
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -68,6 +72,7 @@ POST /api/organizations
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "My New Organization",
@@ -76,10 +81,12 @@ POST /api/organizations
 ```
 
 **Validation Rules:**
+
 - `name`: Required, minimum 1 character after trimming
 - `description`: Optional string
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -115,6 +122,7 @@ GET /api/organizations/{organization_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -171,6 +179,7 @@ PUT /api/organizations/{organization_id}
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "Updated Organization Name",
@@ -179,6 +188,7 @@ PUT /api/organizations/{organization_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -202,6 +212,7 @@ DELETE /api/organizations/{organization_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -222,6 +233,7 @@ GET /api/organizations/{organization_id}/members
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -249,10 +261,7 @@ GET /api/organizations/{organization_id}/members
         },
         "role": "admin",
         "joined_at": "2024-01-16T09:15:00Z",
-        "permissions": [
-          "projects:manage",
-          "agents:manage"
-        ]
+        "permissions": ["projects:manage", "agents:manage"]
       }
     ],
     "total": 2
@@ -269,6 +278,7 @@ POST /api/organizations/{organization_id}/members
 ```
 
 **Request Body:**
+
 ```json
 {
   "email": "newmember@example.com",
@@ -278,12 +288,14 @@ POST /api/organizations/{organization_id}/members
 ```
 
 **Available Roles:**
+
 - `owner`: Full organization control
 - `admin`: Manage projects and members
 - `member`: Access assigned projects
 - `viewer`: Read-only access
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -311,6 +323,7 @@ PUT /api/organizations/{organization_id}/members/{user_id}
 ```
 
 **Request Body:**
+
 ```json
 {
   "role": "admin"
@@ -318,6 +331,7 @@ PUT /api/organizations/{organization_id}/members/{user_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -344,6 +358,7 @@ DELETE /api/organizations/{organization_id}/members/{user_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -362,11 +377,13 @@ GET /api/organizations/{organization_id}/stats
 ```
 
 **Query Parameters:**
+
 - `period` (optional): `day`, `week`, `month`, `year` (default: `month`)
 - `start_date` (optional): ISO date string
 - `end_date` (optional): ISO date string
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -400,6 +417,7 @@ GET /api/organizations/{organization_id}/stats
 ### Common Error Responses
 
 **404 Not Found:**
+
 ```json
 {
   "error": "Organization not found",
@@ -408,6 +426,7 @@ GET /api/organizations/{organization_id}/stats
 ```
 
 **403 Forbidden:**
+
 ```json
 {
   "error": "Insufficient permissions",
@@ -417,6 +436,7 @@ GET /api/organizations/{organization_id}/stats
 ```
 
 **409 Conflict:**
+
 ```json
 {
   "error": "Organization name already exists",
@@ -425,6 +445,7 @@ GET /api/organizations/{organization_id}/stats
 ```
 
 **422 Unprocessable Entity:**
+
 ```json
 {
   "error": "Validation failed",
@@ -441,18 +462,19 @@ GET /api/organizations/{organization_id}/stats
 ## Usage Examples
 
 ### JavaScript/Node.js
+
 ```javascript
 // Create organization
-const createOrgResponse = await fetch('/api/organizations', {
-  method: 'POST',
+const createOrgResponse = await fetch("/api/organizations", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    name: 'My Organization',
-    description: 'Organization for my projects'
-  })
+    name: "My Organization",
+    description: "Organization for my projects",
+  }),
 });
 
 const { data } = await createOrgResponse.json();
@@ -461,12 +483,13 @@ const organizationId = data.organization.id;
 // Get organization details
 const orgResponse = await fetch(`/api/organizations/${organizationId}`, {
   headers: {
-    'Authorization': `Bearer ${token}`
-  }
+    Authorization: `Bearer ${token}`,
+  },
 });
 ```
 
 ### cURL
+
 ```bash
 # List organizations
 curl -X GET "https://api.example.com/api/organizations" \
@@ -486,6 +509,7 @@ curl -X POST "https://api.example.com/api/organizations/org_123/members" \
 ```
 
 ### Python
+
 ```python
 import requests
 

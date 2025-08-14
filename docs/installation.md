@@ -16,6 +16,7 @@ For development and testing purposes:
 #### 1. Install Node.js
 
 **macOS:**
+
 ```bash
 # Using Homebrew
 brew install node
@@ -24,6 +25,7 @@ brew install node
 ```
 
 **Ubuntu/Debian:**
+
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
@@ -35,6 +37,7 @@ Download and install from [nodejs.org](https://nodejs.org)
 #### 2. Install MongoDB
 
 **macOS:**
+
 ```bash
 brew tap mongodb/brew
 brew install mongodb-community
@@ -42,6 +45,7 @@ brew services start mongodb-community
 ```
 
 **Ubuntu/Debian:**
+
 ```bash
 wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
 echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
@@ -64,6 +68,7 @@ npm install
 #### 4. Configure Environment
 
 Create `.env` file:
+
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
@@ -82,7 +87,7 @@ For containerized deployment:
 #### 1. Create docker-compose.yml
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   llm-crafter:
@@ -251,21 +256,25 @@ SESSION_TIMEOUT=86400000
 #### MongoDB Connection String Examples
 
 **Local MongoDB:**
+
 ```bash
 MONGODB_URI=mongodb://localhost:27017/llm-crafter
 ```
 
 **MongoDB with Authentication:**
+
 ```bash
 MONGODB_URI=mongodb://username:password@localhost:27017/llm-crafter
 ```
 
 **MongoDB Atlas (Cloud):**
+
 ```bash
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/llm-crafter
 ```
 
 **MongoDB Replica Set:**
+
 ```bash
 MONGODB_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/llm-crafter?replicaSet=rs0
 ```
@@ -286,10 +295,10 @@ server {
 server {
     listen 443 ssl http2;
     server_name yourdomain.com;
-    
+
     ssl_certificate /path/to/certificate.crt;
     ssl_certificate_key /path/to/private.key;
-    
+
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
@@ -323,11 +332,13 @@ sudo crontab -e
 After installation, verify everything is working:
 
 ### 1. Health Check
+
 ```bash
 curl http://localhost:3000/health
 ```
 
 Expected response:
+
 ```json
 {
   "status": "ok",
@@ -336,13 +347,16 @@ Expected response:
 ```
 
 ### 2. Database Connection
+
 Check the server logs for:
+
 ```
 MongoDB connected successfully
 Server running in production mode on port 3000
 ```
 
 ### 3. Create Test User
+
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/register \
   -H "Content-Type: application/json" \
@@ -358,12 +372,14 @@ curl -X POST http://localhost:3000/api/v1/auth/register \
 ### Common Installation Issues
 
 **Permission Errors on Linux/macOS:**
+
 ```bash
 # Fix npm permissions
 sudo chown -R $(whoami) ~/.npm
 ```
 
 **MongoDB Connection Failed:**
+
 ```bash
 # Check MongoDB status
 sudo systemctl status mongod
@@ -373,6 +389,7 @@ sudo tail -f /var/log/mongodb/mongod.log
 ```
 
 **Port Already in Use:**
+
 ```bash
 # Find process using port 3000
 lsof -ti:3000
@@ -382,6 +399,7 @@ kill -9 PID
 ```
 
 **Node.js Version Issues:**
+
 ```bash
 # Check Node.js version
 node --version

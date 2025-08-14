@@ -175,6 +175,7 @@ type(scope): description
 ```
 
 **Types:**
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -184,6 +185,7 @@ type(scope): description
 - `chore`: Maintenance tasks
 
 **Examples:**
+
 ```bash
 feat(agents): add support for custom agent templates
 fix(auth): resolve JWT token expiration issue
@@ -194,6 +196,7 @@ test(tools): add unit tests for tool validation
 ### Pull Request Process
 
 1. **Update your fork:**
+
    ```bash
    git checkout main
    git pull upstream main
@@ -201,28 +204,33 @@ test(tools): add unit tests for tool validation
    ```
 
 2. **Create a feature branch:**
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
 
 3. **Make your changes:**
+
    - Write clean, documented code
    - Add tests for new functionality
    - Update documentation as needed
 
 4. **Test your changes:**
+
    ```bash
    npm test
    npm run lint
    ```
 
 5. **Commit your changes:**
+
    ```bash
    git add .
    git commit -m "feat(scope): descriptive message"
    ```
 
 6. **Push to your fork:**
+
    ```bash
    git push origin feature/your-feature-name
    ```
@@ -237,20 +245,24 @@ test(tools): add unit tests for tool validation
 
 ```markdown
 ## Description
+
 Brief description of the changes.
 
 ## Type of Change
+
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
 - [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
 - [ ] Documentation update
 
 ## Testing
+
 - [ ] Unit tests pass
 - [ ] Integration tests pass
 - [ ] Manual testing completed
 
 ## Checklist
+
 - [ ] My code follows the style guidelines
 - [ ] I have performed a self-review of my own code
 - [ ] I have commented my code, particularly in hard-to-understand areas
@@ -265,12 +277,14 @@ Brief description of the changes.
 When reporting bugs, please include:
 
 1. **Environment Information:**
+
    - Node.js version
    - npm version
    - Operating system
    - MongoDB version
 
 2. **Steps to Reproduce:**
+
    - Clear, numbered steps
    - Expected behavior
    - Actual behavior
@@ -284,30 +298,37 @@ When reporting bugs, please include:
 
 ```markdown
 ## Bug Description
+
 A clear and concise description of what the bug is.
 
 ## Environment
+
 - Node.js version:
 - npm version:
 - OS:
 - MongoDB version:
 
 ## Steps to Reproduce
+
 1. Go to '...'
 2. Click on '....'
 3. Scroll down to '....'
 4. See error
 
 ## Expected Behavior
+
 A clear description of what you expected to happen.
 
 ## Actual Behavior
+
 A clear description of what actually happened.
 
 ## Screenshots
+
 If applicable, add screenshots to help explain your problem.
 
 ## Additional Context
+
 Add any other context about the problem here.
 ```
 
@@ -317,18 +338,23 @@ We welcome feature requests! Please use the following template:
 
 ```markdown
 ## Feature Description
+
 A clear and concise description of the feature you'd like to see.
 
 ## Problem Statement
+
 What problem does this feature solve?
 
 ## Proposed Solution
+
 Describe the solution you'd like.
 
 ## Alternatives Considered
+
 Describe any alternative solutions you've considered.
 
 ## Additional Context
+
 Add any other context or screenshots about the feature request.
 ```
 
@@ -353,20 +379,20 @@ We use Jest for testing. Test files should be placed in the same directory as th
 
 ```javascript
 // Example test file: src/services/agentService.test.js
-const { createAgent, validateAgent } = require('./agentService');
+const { createAgent, validateAgent } = require("./agentService");
 
-describe('AgentService', () => {
-  describe('createAgent', () => {
-    it('should create a new agent with valid data', async () => {
+describe("AgentService", () => {
+  describe("createAgent", () => {
+    it("should create a new agent with valid data", async () => {
       const agentData = {
-        name: 'Test Agent',
-        type: 'chatbot',
-        system_prompt: 'You are a helpful assistant'
+        name: "Test Agent",
+        type: "chatbot",
+        system_prompt: "You are a helpful assistant",
       };
-      
+
       const agent = await createAgent(agentData);
       expect(agent).toBeDefined();
-      expect(agent.name).toBe('Test Agent');
+      expect(agent.name).toBe("Test Agent");
     });
   });
 });

@@ -8,7 +8,7 @@ The application connects to MongoDB using the connection string specified in the
 
 ```javascript
 // src/config/database.js
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const connectDB = async () => {
   try {
@@ -35,7 +35,7 @@ User
         ├── API Keys
         ├── Prompts
         └── Tools (custom)
-        
+
 Conversations
 ├── Agent (reference)
 └── Messages
@@ -59,6 +59,7 @@ Users are the primary actors in the system. Each user can own or be a member of 
 ```
 
 **Key Features:**
+
 - Uses UUID as primary key
 - Email validation and uniqueness
 - Password hashing with bcrypt
@@ -84,6 +85,7 @@ Organizations provide workspace isolation and team collaboration.
 ```
 
 **Key Features:**
+
 - Hierarchical role-based access
 - Owner and member management
 - Soft deletion support
@@ -104,6 +106,7 @@ Projects organize agents, tools, and resources within an organization.
 ```
 
 **Virtual Fields:**
+
 - `apiKeys`: References to associated API keys
 - `prompts`: References to associated prompts
 
@@ -145,6 +148,7 @@ Agents are the core AI entities that execute tasks and conversations.
 ```
 
 **Key Features:**
+
 - Multiple agent types for different use cases
 - Configurable LLM parameters
 - Tool integration and management
@@ -191,6 +195,7 @@ Tools extend agent capabilities with external functions and APIs.
 ```
 
 **Key Features:**
+
 - JSON Schema validation for parameters
 - Multiple implementation types
 - Usage statistics tracking
@@ -300,37 +305,37 @@ Prompts store reusable prompt templates and execution history.
 
 ```javascript
 // Users
-db.users.createIndex({ email: 1 }, { unique: true })
+db.users.createIndex({ email: 1 }, { unique: true });
 
 // Organizations
-db.organizations.createIndex({ owner: 1 })
-db.organizations.createIndex({ "members.user": 1 })
+db.organizations.createIndex({ owner: 1 });
+db.organizations.createIndex({ "members.user": 1 });
 
 // Projects
-db.projects.createIndex({ organization: 1 })
+db.projects.createIndex({ organization: 1 });
 
 // Agents
-db.agents.createIndex({ organization: 1, project: 1 })
-db.agents.createIndex({ type: 1 })
-db.agents.createIndex({ status: 1 })
+db.agents.createIndex({ organization: 1, project: 1 });
+db.agents.createIndex({ type: 1 });
+db.agents.createIndex({ status: 1 });
 
 // Tools
-db.tools.createIndex({ name: 1 }, { unique: true })
-db.tools.createIndex({ category: 1 })
-db.tools.createIndex({ is_system_tool: 1 })
+db.tools.createIndex({ name: 1 }, { unique: true });
+db.tools.createIndex({ category: 1 });
+db.tools.createIndex({ is_system_tool: 1 });
 
 // API Keys
-db.apikeys.createIndex({ project: 1 })
-db.apikeys.createIndex({ provider: 1 })
+db.apikeys.createIndex({ project: 1 });
+db.apikeys.createIndex({ provider: 1 });
 
 // Conversations
-db.conversations.createIndex({ agent: 1 })
-db.conversations.createIndex({ user: 1 })
-db.conversations.createIndex({ status: 1 })
+db.conversations.createIndex({ agent: 1 });
+db.conversations.createIndex({ user: 1 });
+db.conversations.createIndex({ status: 1 });
 
 // Prompts
-db.prompts.createIndex({ project: 1 })
-db.prompts.createIndex({ tags: 1 })
+db.prompts.createIndex({ project: 1 });
+db.prompts.createIndex({ tags: 1 });
 ```
 
 ## Data Validation

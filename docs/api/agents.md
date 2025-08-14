@@ -3,14 +3,17 @@
 The Agents API provides endpoints for managing AI agents within projects. Agents are the core entities that execute prompts using configured LLM providers.
 
 ## Base URL
+
 ```
 https://your-domain.com/api/organizations/{organization_id}/projects/{project_id}/agents
 ```
 
 ## Authentication
+
 All endpoints require authentication and appropriate project access.
 
 **Headers:**
+
 ```
 Authorization: Bearer {jwt_token}
 # OR
@@ -28,6 +31,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number for pagination (default: 1)
 - `limit` (optional): Number of items per page (default: 20, max: 100)
 - `type` (optional): Filter by agent type (`chatbot`, `task`, `workflow`, `api`)
@@ -35,6 +39,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents
 - `enabled` (optional): Filter by enabled status (`true`, `false`)
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -87,6 +92,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/agents
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "content-analyzer-agent",
@@ -119,6 +125,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/agents
 ```
 
 **Validation Rules:**
+
 - `name`: Required, alphanumeric with hyphens/underscores
 - `type`: Required, one of: `chatbot`, `task`, `workflow`, `api`
 - `system_prompt`: Required, non-empty string
@@ -127,6 +134,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/agents
 - `tools`: Optional array of tool configurations
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -172,6 +180,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -227,6 +236,7 @@ PUT /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **Request Body:**
+
 ```json
 {
   "description": "Enhanced customer support chatbot with improved responses",
@@ -253,6 +263,7 @@ PUT /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -284,6 +295,7 @@ DELETE /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -302,6 +314,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id
 ```
 
 **Request Body:**
+
 ```json
 {
   "prompt": "How do I reset my password?",
@@ -316,6 +329,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -354,6 +368,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 20, max: 100)
 - `status` (optional): Filter by status (`success`, `error`, `pending`)
@@ -361,6 +376,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 - `end_date` (optional): Filter executions before this date
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -395,6 +411,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "customer-support-chatbot-v2",
@@ -403,6 +420,7 @@ POST /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -430,11 +448,13 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **Query Parameters:**
+
 - `period` (optional): `day`, `week`, `month`, `year` (default: `month`)
 - `start_date` (optional): ISO date string
 - `end_date` (optional): ISO date string
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -476,6 +496,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ### Common Error Responses
 
 **404 Not Found:**
+
 ```json
 {
   "error": "Agent not found",
@@ -484,6 +505,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **403 Forbidden:**
+
 ```json
 {
   "error": "Access denied to agent",
@@ -492,6 +514,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **409 Conflict:**
+
 ```json
 {
   "error": "Agent name already exists",
@@ -500,6 +523,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **422 Unprocessable Entity:**
+
 ```json
 {
   "error": "Validation failed",
@@ -514,6 +538,7 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```
 
 **500 Internal Server Error (Execution Error):**
+
 ```json
 {
   "error": "Agent execution failed",
@@ -529,47 +554,55 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ## Usage Examples
 
 ### JavaScript/Node.js
+
 ```javascript
 // Create agent
 const agentData = {
-  name: 'content-analyzer',
-  description: 'Analyzes content automatically',
-  type: 'task',
-  system_prompt: 'You are an expert content analyst...',
-  api_key: 'key_123456',
+  name: "content-analyzer",
+  description: "Analyzes content automatically",
+  type: "task",
+  system_prompt: "You are an expert content analyst...",
+  api_key: "key_123456",
   llm_settings: {
-    model: 'gpt-4',
+    model: "gpt-4",
     parameters: {
       temperature: 0.3,
-      max_tokens: 2000
-    }
-  }
+      max_tokens: 2000,
+    },
+  },
 };
 
-const createResponse = await fetch('/api/organizations/org_123/projects/proj_456/agents', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify(agentData)
-});
+const createResponse = await fetch(
+  "/api/organizations/org_123/projects/proj_456/agents",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(agentData),
+  }
+);
 
 // Execute agent
-const executeResponse = await fetch('/api/organizations/org_123/projects/proj_456/agents/agent_789/execute', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    prompt: 'Analyze this content for sentiment and topics',
-    context: { source: 'api' }
-  })
-});
+const executeResponse = await fetch(
+  "/api/organizations/org_123/projects/proj_456/agents/agent_789/execute",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt: "Analyze this content for sentiment and topics",
+      context: { source: "api" },
+    }),
+  }
+);
 ```
 
 ### cURL
+
 ```bash
 # Create agent
 curl -X POST "https://api.example.com/api/organizations/org_123/projects/proj_456/agents" \
@@ -594,6 +627,7 @@ curl -X POST "https://api.example.com/api/organizations/org_123/projects/proj_45
 ```
 
 ### Python
+
 ```python
 import requests
 

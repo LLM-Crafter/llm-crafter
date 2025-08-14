@@ -5,6 +5,7 @@ This example demonstrates how to create a weather assistant agent that can provi
 ## Overview
 
 The weather agent integrates with the OpenWeatherMap API to provide:
+
 - Current weather conditions
 - 5-day weather forecasts
 - Weather by coordinates
@@ -122,6 +123,7 @@ curl -X POST http://localhost:3000/api/v1/organizations/{orgId}/projects/{projec
 ```
 
 **Expected Response:**
+
 ```json
 {
   "response": "The current weather in London is 15°C with clear skies. It's quite pleasant with light winds at 5 km/h from the southwest. The humidity is at 65%, making it feel comfortable. Perfect weather for a walk outside!",
@@ -186,6 +188,7 @@ Here's a complete conversation example:
 "Hello! I'd be happy to help you with the weather for your Paris trip. Let me check the current conditions and tomorrow's forecast for Paris."
 
 **Tools Used:**
+
 - `api_caller` with `get_weather` endpoint for current conditions
 - `api_caller` with `get_forecast` endpoint for tomorrow's forecast
 
@@ -198,12 +201,14 @@ Here's a complete conversation example:
 "Let me check the 5-day forecast for Paris to give you a complete picture of the weather for your trip."
 
 **Tool Usage:**
+
 - `api_caller` with `get_forecast` endpoint
 
 **Agent Follow-up:**
 "Looking at the 5-day forecast for Paris:
+
 - **Tomorrow**: Scattered showers, 22°C/14°C
-- **Wednesday**: Mostly sunny, 24°C/16°C  
+- **Wednesday**: Mostly sunny, 24°C/16°C
 - **Thursday**: Partly cloudy, 21°C/13°C
 - **Friday**: Light rain, 19°C/12°C
 - **Saturday**: Sunny, 25°C/15°C
@@ -290,6 +295,7 @@ curl -X GET http://localhost:3000/api/v1/organizations/{orgId}/projects/{project
 ```
 
 Track metrics like:
+
 - Number of weather queries per day
 - Most requested locations
 - Forecast vs. current weather requests
@@ -305,6 +311,7 @@ curl -X GET http://localhost:3000/api/v1/organizations/{orgId}/projects/{project
 ```
 
 Optimize by:
+
 - Caching frequent location queries
 - Batching requests for multiple locations
 - Using appropriate forecast ranges
@@ -314,14 +321,17 @@ Optimize by:
 The weather agent gracefully handles various error scenarios:
 
 ### API Unavailable
+
 **User:** "What's the weather in London?"
 **Agent:** "I'm sorry, I'm having trouble connecting to the weather service right now. Please try again in a few moments, or let me know if there's anything else I can help you with."
 
 ### Invalid Location
+
 **User:** "What's the weather in Atlantis?"
 **Agent:** "I couldn't find weather information for 'Atlantis'. Could you please check the spelling or provide a more specific location? I can look up weather for cities, regions, or even coordinates."
 
 ### Rate Limiting
+
 The agent automatically handles API rate limits and provides appropriate feedback to users.
 
 ## Cost Optimization
@@ -329,6 +339,7 @@ The agent automatically handles API rate limits and provides appropriate feedbac
 ### Summarization Benefits
 
 With summarization enabled, long weather conversations benefit from:
+
 - **70% reduction** in token usage for repeat queries
 - **Faster responses** due to smaller context
 - **Cost savings** on API calls
@@ -336,6 +347,7 @@ With summarization enabled, long weather conversations benefit from:
 ### Efficient Queries
 
 The agent optimizes API usage by:
+
 - Combining related queries when possible
 - Using appropriate forecast ranges
 - Caching recent results (when implemented)

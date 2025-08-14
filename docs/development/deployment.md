@@ -16,12 +16,14 @@ This guide covers different deployment strategies for LLM Crafter, from developm
 ### System Requirements
 
 **Minimum Requirements:**
+
 - **CPU**: 2 cores
 - **RAM**: 4GB
 - **Storage**: 20GB SSD
 - **Network**: Stable internet connection
 
 **Recommended for Production:**
+
 - **CPU**: 4+ cores
 - **RAM**: 8GB+
 - **Storage**: 50GB+ SSD
@@ -97,9 +99,9 @@ Configure CORS for your domain:
 ```javascript
 // In production, set specific origins
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
 };
 ```
 
@@ -158,26 +160,28 @@ Create `ecosystem.config.js`:
 
 ```javascript
 module.exports = {
-  apps: [{
-    name: 'llm-crafter',
-    script: 'src/app.js',
-    instances: 'max',
-    exec_mode: 'cluster',
-    env: {
-      NODE_ENV: 'development',
-      PORT: 3000
+  apps: [
+    {
+      name: "llm-crafter",
+      script: "src/app.js",
+      instances: "max",
+      exec_mode: "cluster",
+      env: {
+        NODE_ENV: "development",
+        PORT: 3000,
+      },
+      env_production: {
+        NODE_ENV: "production",
+        PORT: 3000,
+      },
+      error_file: "./logs/err.log",
+      out_file: "./logs/out.log",
+      log_file: "./logs/combined.log",
+      time: true,
+      max_memory_restart: "1G",
+      node_args: "--max-old-space-size=1024",
     },
-    env_production: {
-      NODE_ENV: 'production',
-      PORT: 3000
-    },
-    error_file: './logs/err.log',
-    out_file: './logs/out.log',
-    log_file: './logs/combined.log',
-    time: true,
-    max_memory_restart: '1G',
-    node_args: '--max-old-space-size=1024'
-  }]
+  ],
 };
 ```
 
@@ -310,7 +314,7 @@ CMD ["node", "src/app.js"]
 #### 2. Create Docker Compose
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   app:
@@ -417,29 +421,29 @@ Create `app.yaml`:
 ```yaml
 name: llm-crafter
 services:
-- name: api
-  source_dir: /
-  github:
-    repo: your-username/llm-crafter
-    branch: main
-  run_command: npm start
-  environment_slug: node-js
-  instance_count: 1
-  instance_size_slug: basic-xxs
-  env:
-  - key: NODE_ENV
-    value: production
-  - key: JWT_SECRET
-    value: your-jwt-secret
-    type: SECRET
-  - key: MONGODB_URI
-    value: your-mongodb-uri
-    type: SECRET
+  - name: api
+    source_dir: /
+    github:
+      repo: your-username/llm-crafter
+      branch: main
+    run_command: npm start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        value: your-jwt-secret
+        type: SECRET
+      - key: MONGODB_URI
+        value: your-mongodb-uri
+        type: SECRET
 
 databases:
-- name: llm-crafter-db
-  engine: MONGODB
-  version: "5"
+  - name: llm-crafter-db
+    engine: MONGODB
+    version: "5"
 ```
 
 ## Production Checklist
@@ -491,42 +495,42 @@ Add a health check endpoint to your application:
 
 ```javascript
 // src/routes/health.js
-const express = require('express');
-const mongoose = require('mongoose');
+const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 
-router.get('/health', async (req, res) => {
+router.get("/health", async (req, res) => {
   try {
     // Check database connection
     const dbState = mongoose.connection.readyState;
-    const dbStatus = dbState === 1 ? 'connected' : 'disconnected';
-    
+    const dbStatus = dbState === 1 ? "connected" : "disconnected";
+
     // Check memory usage
     const memUsage = process.memoryUsage();
-    
+
     // Check uptime
     const uptime = process.uptime();
-    
+
     const healthStatus = {
-      status: 'healthy',
+      status: "healthy",
       timestamp: new Date().toISOString(),
       uptime: uptime,
       database: {
         status: dbStatus,
-        connection: dbState
+        connection: dbState,
       },
       memory: {
-        rss: Math.round(memUsage.rss / 1024 / 1024) + ' MB',
-        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + ' MB',
-        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + ' MB'
-      }
+        rss: Math.round(memUsage.rss / 1024 / 1024) + " MB",
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + " MB",
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + " MB",
+      },
     };
-    
+
     res.status(200).json(healthStatus);
   } catch (error) {
     res.status(503).json({
-      status: 'unhealthy',
-      error: error.message
+      status: "unhealthy",
+      error: error.message,
     });
   }
 });
@@ -540,26 +544,28 @@ Configure structured logging:
 
 ```javascript
 // src/config/logger.js
-const winston = require('winston');
+const winston = require("winston");
 
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env.LOG_LEVEL || "info",
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.errors({ stack: true }),
     winston.format.json()
   ),
-  defaultMeta: { service: 'llm-crafter' },
+  defaultMeta: { service: "llm-crafter" },
   transports: [
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
-  ]
+    new winston.transports.File({ filename: "logs/error.log", level: "error" }),
+    new winston.transports.File({ filename: "logs/combined.log" }),
+  ],
 });
 
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple()
-  }));
+if (process.env.NODE_ENV !== "production") {
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.simple(),
+    })
+  );
 }
 
 module.exports = logger;
@@ -654,47 +660,47 @@ openssl s_client -connect your-domain.com:443 -servername your-domain.com
 ```javascript
 // Add to your MongoDB queries
 // Use indexes for frequent queries
-db.agents.createIndex({ "organization": 1, "project": 1 })
-db.conversations.createIndex({ "agent": 1, "createdAt": -1 })
+db.agents.createIndex({ organization: 1, project: 1 });
+db.conversations.createIndex({ agent: 1, createdAt: -1 });
 
 // Use projection to limit returned fields
-db.agents.find({}, { name: 1, type: 1, status: 1 })
+db.agents.find({}, { name: 1, type: 1, status: 1 });
 
 // Use aggregation for complex queries
 db.conversations.aggregate([
   { $match: { agent: agentId } },
   { $sort: { createdAt: -1 } },
-  { $limit: 50 }
-])
+  { $limit: 50 },
+]);
 ```
 
 #### Application Optimization
 
 ```javascript
 // Connection pooling
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 mongoose.connect(process.env.MONGODB_URI, {
   maxPoolSize: 10,
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
-  family: 4
+  family: 4,
 });
 
 // Caching frequently accessed data
-const NodeCache = require('node-cache');
+const NodeCache = require("node-cache");
 const cache = new NodeCache({ stdTTL: 600 });
 
 // Cache agent configurations
 const getCachedAgent = async (agentId) => {
   const cacheKey = `agent:${agentId}`;
   let agent = cache.get(cacheKey);
-  
+
   if (!agent) {
     agent = await Agent.findById(agentId);
     cache.set(cacheKey, agent);
   }
-  
+
   return agent;
 };
 ```

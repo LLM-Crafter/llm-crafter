@@ -19,6 +19,7 @@ API keys and providers form the foundation of LLM access in LLM Crafter. The sys
 The primary supported provider with comprehensive model support.
 
 **Supported Models:**
+
 - `gpt-4o`: Latest GPT-4 optimized model
 - `gpt-4o-mini`: Cost-effective GPT-4 variant
 - `gpt-4-turbo`: High-performance GPT-4
@@ -27,6 +28,7 @@ The primary supported provider with comprehensive model support.
 - `o1-mini`: Compact reasoning model
 
 **Provider Configuration:**
+
 ```json
 {
   "name": "openai",
@@ -53,11 +55,13 @@ The primary supported provider with comprehensive model support.
 Support for Claude models from Anthropic.
 
 **Supported Models:**
+
 - `claude-3-5-sonnet-20241022`: Latest Claude 3.5 Sonnet
 - `claude-3-haiku-20240307`: Fast and efficient
 - `claude-3-opus-20240229`: Most capable model
 
 **Provider Configuration:**
+
 ```json
 {
   "name": "anthropic",
@@ -84,6 +88,7 @@ Support for Claude models from Anthropic.
 Add support for custom LLM providers.
 
 **Example Custom Provider:**
+
 ```json
 {
   "name": "custom_llm",
@@ -123,7 +128,7 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/api-keys
   "provider": "openai",
   "description": "Production API key for customer-facing agents",
   "settings": {
-    "cost_limit_monthly": 500.00,
+    "cost_limit_monthly": 500.0,
     "rate_limit": 1000,
     "allowed_models": ["gpt-4o-mini", "gpt-4o"]
   }
@@ -131,10 +136,11 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/api-keys
 ```
 
 **Response:**
+
 ```json
 {
   "_id": "key_abc123",
-  "name": "OpenAI Production Key", 
+  "name": "OpenAI Production Key",
   "provider": {
     "_id": "openai",
     "name": "OpenAI",
@@ -144,13 +150,13 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/api-keys
   "description": "Production API key for customer-facing agents",
   "status": "active",
   "settings": {
-    "cost_limit_monthly": 500.00,
+    "cost_limit_monthly": 500.0,
     "rate_limit": 1000,
     "allowed_models": ["gpt-4o-mini", "gpt-4o"]
   },
   "usage_stats": {
     "requests_current_month": 0,
-    "cost_current_month": 0.00,
+    "cost_current_month": 0.0,
     "last_used": null
   },
   "created_at": "2024-01-16T10:30:00Z"
@@ -168,7 +174,7 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/api-keys
   "project": "project_id",
   "status": "active",
   "settings": {
-    "cost_limit_monthly": 100.00,
+    "cost_limit_monthly": 100.0,
     "rate_limit": 100,
     "allowed_models": ["gpt-4o-mini"],
     "allowed_ips": ["192.168.1.0/24"],
@@ -193,35 +199,44 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/api-keys
 ### Key Security Features
 
 #### Encryption at Rest
+
 ```javascript
-const crypto = require('crypto');
+const crypto = require("crypto");
 
 class ApiKeyManager {
   encryptKey(key) {
-    const cipher = crypto.createCipher('aes-256-gcm', process.env.ENCRYPTION_KEY);
-    let encrypted = cipher.update(key, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
+    const cipher = crypto.createCipher(
+      "aes-256-gcm",
+      process.env.ENCRYPTION_KEY
+    );
+    let encrypted = cipher.update(key, "utf8", "hex");
+    encrypted += cipher.final("hex");
     const authTag = cipher.getAuthTag();
-    return `${encrypted}:${authTag.toString('hex')}`;
+    return `${encrypted}:${authTag.toString("hex")}`;
   }
-  
+
   decryptKey(encryptedKey) {
-    const [encrypted, authTag] = encryptedKey.split(':');
-    const decipher = crypto.createDecipher('aes-256-gcm', process.env.ENCRYPTION_KEY);
-    decipher.setAuthTag(Buffer.from(authTag, 'hex'));
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    const [encrypted, authTag] = encryptedKey.split(":");
+    const decipher = crypto.createDecipher(
+      "aes-256-gcm",
+      process.env.ENCRYPTION_KEY
+    );
+    decipher.setAuthTag(Buffer.from(authTag, "hex"));
+    let decrypted = decipher.update(encrypted, "hex", "utf8");
+    decrypted += decipher.final("utf8");
     return decrypted;
   }
 }
 ```
 
 #### Key Masking
+
 - Only show last 4 characters in API responses
 - Full keys never returned in GET requests
 - Audit logs for key access
 
 #### Access Control
+
 - Keys scoped to specific projects
 - Role-based access for key management
 - IP restrictions and rate limiting
@@ -235,12 +250,13 @@ GET /api/v1/providers
 ```
 
 **Response:**
+
 ```json
 {
   "providers": [
     {
       "_id": "openai",
-      "name": "openai", 
+      "name": "openai",
       "display_name": "OpenAI",
       "description": "OpenAI's language models including GPT-4 and GPT-3.5",
       "status": "active",
@@ -255,7 +271,7 @@ GET /api/v1/providers
     {
       "_id": "anthropic",
       "name": "anthropic",
-      "display_name": "Anthropic", 
+      "display_name": "Anthropic",
       "description": "Anthropic's Claude models for conversational AI",
       "status": "active",
       "supported_features": [
@@ -276,6 +292,7 @@ GET /api/v1/providers/{providerId}/models
 ```
 
 **Response:**
+
 ```json
 {
   "provider": {
@@ -313,6 +330,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/api-keys/{keyId}/stats
 ```
 
 **Response:**
+
 ```json
 {
   "key_id": "key_abc123",
@@ -337,12 +355,12 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/api-keys/{keyId}/stats
     }
   },
   "daily_usage": [
-    {"date": "2024-01-15", "requests": 87, "cost": 2.34},
-    {"date": "2024-01-16", "requests": 92, "cost": 2.45}
+    { "date": "2024-01-15", "requests": 87, "cost": 2.34 },
+    { "date": "2024-01-16", "requests": 92, "cost": 2.45 }
   ],
   "model_usage": {
-    "gpt-4o-mini": {"requests": 1200, "cost": 12.45},
-    "gpt-4o": {"requests": 343, "cost": 33.22}
+    "gpt-4o-mini": { "requests": 1200, "cost": 12.45 },
+    "gpt-4o": { "requests": 343, "cost": 33.22 }
   }
 }
 ```
@@ -354,6 +372,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/cost-analysis
 ```
 
 **Response:**
+
 ```json
 {
   "project_id": "proj_abc123",
@@ -372,7 +391,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/cost-analysis
       "by_agent": {
         "customer_support": 67.89,
         "data_analyst": 34.56,
-        "content_writer": 21.00
+        "content_writer": 21.0
       }
     },
     "trends": {
@@ -396,6 +415,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/api-keys
 ```
 
 **Query Parameters:**
+
 - `provider`: Filter by provider
 - `status`: Filter by status (active, inactive, expired)
 - `limit`: Number of keys per page
@@ -412,7 +432,7 @@ PUT /api/v1/organizations/{orgId}/projects/{projectId}/api-keys/{keyId}
   "name": "Updated Key Name",
   "description": "Updated description",
   "settings": {
-    "cost_limit_monthly": 750.00,
+    "cost_limit_monthly": 750.0,
     "rate_limit": 2000,
     "allowed_models": ["gpt-4o", "gpt-4o-mini"],
     "expires_at": "2024-12-31T23:59:59Z"
@@ -443,11 +463,12 @@ DELETE /api/v1/organizations/{orgId}/projects/{projectId}/api-keys/{keyId}
 ### Key Management
 
 #### Principle of Least Privilege
+
 ```json
 {
   "settings": {
-    "allowed_models": ["gpt-4o-mini"],  // Only necessary models
-    "cost_limit_monthly": 50.00,       // Reasonable limits
+    "allowed_models": ["gpt-4o-mini"], // Only necessary models
+    "cost_limit_monthly": 50.0, // Reasonable limits
     "allowed_ips": ["192.168.1.0/24"], // IP restrictions
     "expires_at": "2024-06-30T23:59:59Z" // Expiration dates
   }
@@ -455,21 +476,23 @@ DELETE /api/v1/organizations/{orgId}/projects/{projectId}/api-keys/{keyId}
 ```
 
 #### Regular Rotation
+
 - Rotate keys quarterly
 - Use different keys for different environments
 - Monitor for unusual usage patterns
 
 #### Environment Separation
+
 ```json
 {
   "development": {
     "key": "dev_key_123",
-    "cost_limit": 10.00,
+    "cost_limit": 10.0,
     "models": ["gpt-4o-mini"]
   },
   "production": {
-    "key": "prod_key_456", 
-    "cost_limit": 1000.00,
+    "key": "prod_key_456",
+    "cost_limit": 1000.0,
     "models": ["gpt-4o", "gpt-4o-mini"]
   }
 }
@@ -478,6 +501,7 @@ DELETE /api/v1/organizations/{orgId}/projects/{projectId}/api-keys/{keyId}
 ### Access Auditing
 
 #### Key Access Logs
+
 ```json
 {
   "audit_log": {
@@ -495,11 +519,12 @@ DELETE /api/v1/organizations/{orgId}/projects/{projectId}/api-keys/{keyId}
 ```
 
 #### Usage Alerts
+
 ```json
 {
   "alerts": {
     "cost_threshold": {
-      "threshold": 80,  // 80% of monthly limit
+      "threshold": 80, // 80% of monthly limit
       "current": 72,
       "status": "warning"
     },
@@ -542,36 +567,39 @@ Choose appropriate models for different use cases:
 ### Usage Optimization
 
 #### Conversation Summarization
+
 - Enable automatic summarization
 - Reduce token usage by 60-70%
 - Significant cost savings for long conversations
 
 #### Prompt Engineering
+
 - Optimize system prompts for clarity
 - Reduce unnecessary context
 - Use specific instructions to minimize back-and-forth
 
 #### Caching Strategies
+
 ```javascript
 class ResponseCache {
   constructor() {
     this.cache = new Map();
   }
-  
+
   getCacheKey(prompt, model, parameters) {
     return crypto
-      .createHash('sha256')
-      .update(JSON.stringify({prompt, model, parameters}))
-      .digest('hex');
+      .createHash("sha256")
+      .update(JSON.stringify({ prompt, model, parameters }))
+      .digest("hex");
   }
-  
+
   async getResponse(prompt, model, parameters) {
     const key = this.getCacheKey(prompt, model, parameters);
-    
+
     if (this.cache.has(key)) {
       return this.cache.get(key);
     }
-    
+
     const response = await this.llmApi.generate(prompt, model, parameters);
     this.cache.set(key, response);
     return response;
@@ -635,7 +663,7 @@ Monitor API performance across providers:
       "rate_limit_hits": 0
     },
     "anthropic": {
-      "avg_response_time": "1.3s", 
+      "avg_response_time": "1.3s",
       "success_rate": 99.1,
       "rate_limit_hits": 2
     }
@@ -648,6 +676,7 @@ Monitor API performance across providers:
 ### Common Issues
 
 #### Invalid API Key
+
 ```json
 {
   "error": "Invalid API key",
@@ -661,11 +690,13 @@ Monitor API performance across providers:
 ```
 
 **Solutions:**
+
 - Verify key is still valid with provider
 - Check if key has been rotated
 - Confirm key permissions and limits
 
 #### Rate Limit Exceeded
+
 ```json
 {
   "error": "Rate limit exceeded",
@@ -679,24 +710,27 @@ Monitor API performance across providers:
 ```
 
 **Solutions:**
+
 - Wait for rate limit reset
 - Implement exponential backoff
 - Consider upgrading provider plan
 
 #### Cost Limit Reached
+
 ```json
 {
   "error": "Monthly cost limit exceeded",
   "code": "COST_LIMIT_EXCEEDED",
   "details": {
-    "limit": 500.00,
-    "current": 500.00,
+    "limit": 500.0,
+    "current": 500.0,
     "period": "2024-01"
   }
 }
 ```
 
 **Solutions:**
+
 - Increase cost limit if appropriate
 - Optimize usage patterns
 - Review and archive unused agents
@@ -711,18 +745,18 @@ class KeyManager {
     this.environment = environment;
     this.keys = new Map();
   }
-  
+
   async getKey(provider, purpose) {
     const keyName = `${this.environment}_${provider}_${purpose}`;
-    
+
     if (!this.keys.has(keyName)) {
       const key = await this.fetchKey(keyName);
       this.keys.set(keyName, key);
     }
-    
+
     return this.keys.get(keyName);
   }
-  
+
   async rotateKeys() {
     for (const [keyName, keyData] of this.keys) {
       if (this.shouldRotate(keyData)) {
@@ -743,20 +777,20 @@ class UsageTracker {
       model,
       tokens: tokenUsage,
       cost,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
-    
+
     await this.updateDailyStats(keyId, tokenUsage, cost);
     await this.checkCostLimits(keyId);
   }
-  
+
   async checkCostLimits(keyId) {
     const key = await this.getKey(keyId);
     const monthlyUsage = await this.getMonthlyUsage(keyId);
-    
+
     if (monthlyUsage.cost >= key.settings.cost_limit_monthly) {
       await this.deactivateKey(keyId);
-      await this.sendAlert(keyId, 'COST_LIMIT_EXCEEDED');
+      await this.sendAlert(keyId, "COST_LIMIT_EXCEEDED");
     }
   }
 }

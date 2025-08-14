@@ -36,7 +36,7 @@ Conversations in LLM Crafter are designed to handle long-running interactions ef
       }
     },
     {
-      "_id": "msg_002", 
+      "_id": "msg_002",
       "role": "assistant",
       "content": "I'd be happy to help you with your account. What specific issue are you experiencing?",
       "timestamp": "2024-01-16T10:30:05Z",
@@ -69,6 +69,7 @@ Conversations in LLM Crafter are designed to handle long-running interactions ef
 ### Message Types
 
 #### User Messages
+
 ```json
 {
   "role": "user",
@@ -82,6 +83,7 @@ Conversations in LLM Crafter are designed to handle long-running interactions ef
 ```
 
 #### Assistant Messages
+
 ```json
 {
   "role": "assistant",
@@ -96,7 +98,7 @@ Conversations in LLM Crafter are designed to handle long-running interactions ef
   "tools_used": [
     {
       "tool_name": "api_caller",
-      "parameters": {"endpoint_name": "get_weather"},
+      "parameters": { "endpoint_name": "get_weather" },
       "result_summary": "Retrieved weather data for current location"
     }
   ],
@@ -106,6 +108,7 @@ Conversations in LLM Crafter are designed to handle long-running interactions ef
 ```
 
 #### System Messages
+
 ```json
 {
   "role": "system",
@@ -133,6 +136,7 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/chat
 ```
 
 **Response includes conversation ID:**
+
 ```json
 {
   "response": "Hello! I'm here to help. What can I assist you with today?",
@@ -179,11 +183,11 @@ User identifiers allow multiple users to interact with the same agent while main
 
 ```json
 {
-  "user_identifier": "user_12345",  // Required
+  "user_identifier": "user_12345", // Required
   "metadata": {
-    "user_name": "John Doe",        // Optional
+    "user_name": "John Doe", // Optional
     "user_email": "john@example.com", // Optional
-    "session_id": "session_abc"     // Optional
+    "session_id": "session_abc" // Optional
   }
 }
 ```
@@ -215,22 +219,22 @@ LLM Crafter builds conversation context intelligently:
 ```javascript
 function buildContext(conversation, maxTokens = 4000) {
   const context = [];
-  
+
   // Always include system prompt
   context.push(systemMessage);
-  
+
   // Include summary if available
   if (conversation.conversation_summary) {
     context.push({
       role: "system",
-      content: buildSummaryContext(conversation.conversation_summary)
+      content: buildSummaryContext(conversation.conversation_summary),
     });
   }
-  
+
   // Add recent messages within token limit
   const recentMessages = getRecentMessages(conversation, maxTokens);
   context.push(...recentMessages);
-  
+
   return context;
 }
 ```
@@ -291,12 +295,14 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversa
 ```
 
 **Query Parameters:**
+
 - `user_identifier`: Filter by user
 - `status`: Filter by status (active, archived, closed)
 - `limit`: Number of conversations per page
 - `page`: Page number
 
 **Response:**
+
 ```json
 {
   "conversations": [
@@ -325,6 +331,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversa
 ```
 
 **Response:**
+
 ```json
 {
   "conversation": {
@@ -384,6 +391,7 @@ graph TD
 ### Token Efficiency
 
 **Before Summarization:**
+
 ```json
 {
   "conversation_length": 25,
@@ -394,6 +402,7 @@ graph TD
 ```
 
 **After Summarization:**
+
 ```json
 {
   "conversation_length": 25,
@@ -449,7 +458,7 @@ Pre-configure conversation starters:
       "initial_message": "Hello! I'm here to help with your account and orders. How can I assist you today?",
       "suggested_actions": [
         "Check order status",
-        "Update account information", 
+        "Update account information",
         "Report an issue"
       ]
     }
@@ -493,6 +502,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/analytic
 ```
 
 **Response:**
+
 ```json
 {
   "metrics": {
@@ -538,6 +548,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/analytic
 ### Conversation Design
 
 #### Clear System Prompts
+
 ```json
 {
   "system_prompt": "You are Alex, a customer service representative for TechCorp. You help customers with orders, accounts, and technical issues. Always be friendly, professional, and thorough. If you can't solve an issue, offer to escalate to a human agent."
@@ -545,11 +556,12 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/analytic
 ```
 
 #### User Identification Strategy
+
 ```javascript
 // For authenticated users
 const userIdentifier = `customer_${userId}`;
 
-// For anonymous users  
+// For anonymous users
 const userIdentifier = `anonymous_${sessionId}`;
 
 // For different channels
@@ -559,11 +571,13 @@ const userIdentifier = `${channel}_${userId}`; // e.g., "web_12345", "mobile_123
 ### Performance Optimization
 
 #### Context Management
+
 - Keep system prompts concise but specific
 - Use dynamic context for real-time data
 - Configure appropriate summarization thresholds
 
 #### Token Management
+
 - Monitor conversation lengths
 - Use cost-effective models for summarization
 - Implement conversation archiving policies
@@ -571,11 +585,13 @@ const userIdentifier = `${channel}_${userId}`; // e.g., "web_12345", "mobile_123
 ### Security Considerations
 
 #### Data Privacy
+
 - Anonymize sensitive information
 - Implement data retention policies
 - Secure user identification schemes
 
 #### Access Control
+
 - Validate user permissions
 - Implement rate limiting per user
 - Monitor for abuse patterns
@@ -585,6 +601,7 @@ const userIdentifier = `${channel}_${userId}`; // e.g., "web_12345", "mobile_123
 ### Common Issues
 
 #### Conversations Not Found
+
 ```json
 {
   "error": "Conversation not found",
@@ -599,6 +616,7 @@ const userIdentifier = `${channel}_${userId}`; // e.g., "web_12345", "mobile_123
 **Solution**: Verify conversation ID and user permissions.
 
 #### Context Too Large
+
 ```json
 {
   "error": "Context exceeds maximum token limit",
@@ -613,6 +631,7 @@ const userIdentifier = `${channel}_${userId}`; // e.g., "web_12345", "mobile_123
 **Solution**: Trigger manual summarization or adjust context limits.
 
 #### Summarization Failures
+
 ```json
 {
   "warning": "Summarization failed, using fallback",
@@ -634,6 +653,7 @@ LOG_LEVEL=debug npm start
 ```
 
 This provides detailed information about:
+
 - Context building process
 - Token calculations
 - Summarization triggers
@@ -650,22 +670,24 @@ class ConversationManager {
     this.agentId = agentId;
     this.conversationId = null;
   }
-  
+
   async sendMessage(message, userId) {
     const response = await this.client.post(`/agents/${this.agentId}/chat`, {
       message,
       user_identifier: userId,
-      conversation_id: this.conversationId
+      conversation_id: this.conversationId,
     });
-    
+
     this.conversationId = response.conversation_id;
     return response;
   }
-  
+
   async getHistory() {
     if (!this.conversationId) return [];
-    
-    const response = await this.client.get(`/agents/${this.agentId}/conversations/${this.conversationId}`);
+
+    const response = await this.client.get(
+      `/agents/${this.agentId}/conversations/${this.conversationId}`
+    );
     return response.conversation.messages;
   }
 }
@@ -681,20 +703,23 @@ class ChatWidget {
     this.userId = userId;
     this.setupUI();
   }
-  
+
   async sendMessage(text) {
-    this.addMessage('user', text);
-    
+    this.addMessage("user", text);
+
     try {
       const response = await this.conversation.sendMessage(text, this.userId);
-      this.addMessage('assistant', response.response);
+      this.addMessage("assistant", response.response);
     } catch (error) {
-      this.addMessage('system', 'Sorry, something went wrong. Please try again.');
+      this.addMessage(
+        "system",
+        "Sorry, something went wrong. Please try again."
+      );
     }
   }
-  
+
   addMessage(role, content) {
-    const messageEl = document.createElement('div');
+    const messageEl = document.createElement("div");
     messageEl.className = `message message-${role}`;
     messageEl.textContent = content;
     this.element.appendChild(messageEl);

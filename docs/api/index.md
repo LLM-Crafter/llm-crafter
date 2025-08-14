@@ -31,6 +31,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -64,17 +65,17 @@ Content-Type: application/json
 
 ### HTTP Status Codes
 
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request |
-| 401 | Unauthorized |
-| 403 | Forbidden |
-| 404 | Not Found |
-| 409 | Conflict |
-| 429 | Too Many Requests |
-| 500 | Internal Server Error |
+| Code | Description           |
+| ---- | --------------------- |
+| 200  | Success               |
+| 201  | Created               |
+| 400  | Bad Request           |
+| 401  | Unauthorized          |
+| 403  | Forbidden             |
+| 404  | Not Found             |
+| 409  | Conflict              |
+| 429  | Too Many Requests     |
+| 500  | Internal Server Error |
 
 ## Pagination
 
@@ -85,12 +86,14 @@ GET /api/v1/organizations?page=1&limit=10&sort=name&order=asc
 ```
 
 **Parameters:**
+
 - `page`: Page number (default: 1)
 - `limit`: Items per page (default: 10, max: 100)
 - `sort`: Field to sort by
 - `order`: Sort order (`asc` or `desc`)
 
 **Response includes pagination metadata:**
+
 ```json
 {
   "data": [...],
@@ -108,11 +111,13 @@ GET /api/v1/organizations?page=1&limit=10&sort=name&order=asc
 ## Content Types
 
 ### Request Content Type
+
 ```
 Content-Type: application/json
 ```
 
 ### Response Content Type
+
 ```
 Content-Type: application/json
 ```
@@ -128,6 +133,7 @@ GET /health
 ```
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -146,6 +152,7 @@ GET /health/detailed
 ```
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -169,68 +176,68 @@ GET /health/detailed
 
 ### Authentication Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/register` | Register new user |
-| POST | `/auth/login` | User login |
-| POST | `/auth/logout` | User logout |
-| GET | `/auth/me` | Get current user |
+| Method | Endpoint         | Description       |
+| ------ | ---------------- | ----------------- |
+| POST   | `/auth/register` | Register new user |
+| POST   | `/auth/login`    | User login        |
+| POST   | `/auth/logout`   | User logout       |
+| GET    | `/auth/me`       | Get current user  |
 
 ### Organization Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/organizations` | List user's organizations |
-| POST | `/organizations` | Create organization |
-| GET | `/organizations/{orgId}` | Get organization details |
-| PUT | `/organizations/{orgId}` | Update organization |
-| DELETE | `/organizations/{orgId}` | Delete organization |
+| Method | Endpoint                 | Description               |
+| ------ | ------------------------ | ------------------------- |
+| GET    | `/organizations`         | List user's organizations |
+| POST   | `/organizations`         | Create organization       |
+| GET    | `/organizations/{orgId}` | Get organization details  |
+| PUT    | `/organizations/{orgId}` | Update organization       |
+| DELETE | `/organizations/{orgId}` | Delete organization       |
 
 ### Project Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/organizations/{orgId}/projects` | List projects |
-| POST | `/organizations/{orgId}/projects` | Create project |
-| GET | `/organizations/{orgId}/projects/{projectId}` | Get project |
-| PUT | `/organizations/{orgId}/projects/{projectId}` | Update project |
+| Method | Endpoint                                      | Description    |
+| ------ | --------------------------------------------- | -------------- |
+| GET    | `/organizations/{orgId}/projects`             | List projects  |
+| POST   | `/organizations/{orgId}/projects`             | Create project |
+| GET    | `/organizations/{orgId}/projects/{projectId}` | Get project    |
+| PUT    | `/organizations/{orgId}/projects/{projectId}` | Update project |
 | DELETE | `/organizations/{orgId}/projects/{projectId}` | Delete project |
 
 ### Agent Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/organizations/{orgId}/projects/{projectId}/agents` | List agents |
-| POST | `/organizations/{orgId}/projects/{projectId}/agents` | Create agent |
-| GET | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}` | Get agent |
-| PUT | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}` | Update agent |
+| Method | Endpoint                                                       | Description  |
+| ------ | -------------------------------------------------------------- | ------------ |
+| GET    | `/organizations/{orgId}/projects/{projectId}/agents`           | List agents  |
+| POST   | `/organizations/{orgId}/projects/{projectId}/agents`           | Create agent |
+| GET    | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}` | Get agent    |
+| PUT    | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}` | Update agent |
 | DELETE | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}` | Delete agent |
 
 ### Agent Execution Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/chat` | Chat with agent |
-| POST | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/execute` | Execute task agent |
-| GET | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversations` | List conversations |
-| GET | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/executions` | List executions |
+| Method | Endpoint                                                                     | Description        |
+| ------ | ---------------------------------------------------------------------------- | ------------------ |
+| POST   | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/chat`          | Chat with agent    |
+| POST   | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/execute`       | Execute task agent |
+| GET    | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversations` | List conversations |
+| GET    | `/organizations/{orgId}/projects/{projectId}/agents/{agentId}/executions`    | List executions    |
 
 ### Tool Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/tools` | List all tools |
-| GET | `/tools/categories` | Get tool categories |
-| GET | `/tools/{toolName}` | Get tool details |
-| POST | `/tools/{toolName}/execute` | Execute tool |
+| Method | Endpoint                    | Description         |
+| ------ | --------------------------- | ------------------- |
+| GET    | `/tools`                    | List all tools      |
+| GET    | `/tools/categories`         | Get tool categories |
+| GET    | `/tools/{toolName}`         | Get tool details    |
+| POST   | `/tools/{toolName}/execute` | Execute tool        |
 
 ### Provider Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/providers` | List LLM providers |
-| GET | `/providers/{providerId}` | Get provider details |
-| GET | `/providers/{providerId}/models` | List provider models |
+| Method | Endpoint                         | Description          |
+| ------ | -------------------------------- | -------------------- |
+| GET    | `/providers`                     | List LLM providers   |
+| GET    | `/providers/{providerId}`        | Get provider details |
+| GET    | `/providers/{providerId}/models` | List provider models |
 
 ## WebSocket API
 
@@ -239,22 +246,26 @@ For real-time features like streaming responses:
 ### Connection
 
 ```javascript
-const ws = new WebSocket('ws://localhost:3000/ws');
-ws.send(JSON.stringify({
-  type: 'authenticate',
-  token: 'your-jwt-token'
-}));
+const ws = new WebSocket("ws://localhost:3000/ws");
+ws.send(
+  JSON.stringify({
+    type: "authenticate",
+    token: "your-jwt-token",
+  })
+);
 ```
 
 ### Agent Streaming
 
 ```javascript
-ws.send(JSON.stringify({
-  type: 'agent_chat',
-  agent_id: 'agent_123',
-  message: 'Hello, how can you help me?',
-  user_identifier: 'user_456'
-}));
+ws.send(
+  JSON.stringify({
+    type: "agent_chat",
+    agent_id: "agent_123",
+    message: "Hello, how can you help me?",
+    user_identifier: "user_456",
+  })
+);
 ```
 
 ## SDKs and Libraries
@@ -266,24 +277,24 @@ npm install llm-crafter-sdk
 ```
 
 ```javascript
-import { LLMCrafter } from 'llm-crafter-sdk';
+import { LLMCrafter } from "llm-crafter-sdk";
 
 const client = new LLMCrafter({
-  baseUrl: 'http://localhost:3000/api/v1',
-  apiKey: 'your-jwt-token'
+  baseUrl: "http://localhost:3000/api/v1",
+  apiKey: "your-jwt-token",
 });
 
 // Create an agent
 const agent = await client.agents.create({
-  name: 'my-agent',
-  type: 'chatbot',
-  systemPrompt: 'You are a helpful assistant'
+  name: "my-agent",
+  type: "chatbot",
+  systemPrompt: "You are a helpful assistant",
 });
 
 // Chat with the agent
 const response = await client.agents.chat(agent.id, {
-  message: 'Hello!',
-  userIdentifier: 'user123'
+  message: "Hello!",
+  userIdentifier: "user123",
 });
 ```
 
@@ -457,13 +468,13 @@ try {
 } catch (error) {
   if (error.status === 400) {
     // Handle validation errors
-    console.error('Validation error:', error.details);
+    console.error("Validation error:", error.details);
   } else if (error.status === 429) {
     // Handle rate limiting
-    console.error('Rate limited, retry after:', error.retryAfter);
+    console.error("Rate limited, retry after:", error.retryAfter);
   } else {
     // Handle other errors
-    console.error('API error:', error.message);
+    console.error("API error:", error.message);
   }
 }
 ```
@@ -478,7 +489,7 @@ async function apiCallWithRetry(apiCall, maxRetries = 3) {
     } catch (error) {
       if (error.status === 429 && i < maxRetries - 1) {
         const delay = Math.pow(2, i) * 1000; // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw error;
@@ -500,6 +511,7 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/agents/batch
 ### Caching
 
 Implement client-side caching for:
+
 - Organization and project lists
 - Agent configurations
 - Tool definitions

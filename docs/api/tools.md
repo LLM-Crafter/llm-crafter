@@ -3,14 +3,17 @@
 The Tools API provides endpoints for managing tools that can be used by agents. Tools extend agent capabilities by providing access to external services, APIs, and functionality.
 
 ## Base URL
+
 ```
 https://your-domain.com/api/tools
 ```
 
 ## Authentication
+
 All endpoints require authentication and appropriate permissions.
 
 **Headers:**
+
 ```
 Authorization: Bearer {jwt_token}
 # OR
@@ -28,10 +31,12 @@ GET /api/tools/system
 ```
 
 **Query Parameters:**
+
 - `category` (optional): Filter by category (`web`, `computation`, `llm`, `utility`, etc.)
 - `search` (optional): Search term for tool names/descriptions
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -60,9 +65,9 @@ GET /api/tools/system
         "return_schema": {
           "type": "object",
           "properties": {
-            "query": {"type": "string"},
-            "results": {"type": "array"},
-            "total_results": {"type": "number"}
+            "query": { "type": "string" },
+            "results": { "type": "array" },
+            "total_results": { "type": "number" }
           }
         },
         "is_system_tool": true
@@ -82,6 +87,7 @@ GET /api/tools/system/{tool_name}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -112,20 +118,20 @@ GET /api/tools/system/{tool_name}
       "return_schema": {
         "type": "object",
         "properties": {
-          "query": {"type": "string"},
+          "query": { "type": "string" },
           "results": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "title": {"type": "string"},
-                "url": {"type": "string"},
-                "snippet": {"type": "string"}
+                "title": { "type": "string" },
+                "url": { "type": "string" },
+                "snippet": { "type": "string" }
               }
             }
           },
-          "total_results": {"type": "number"},
-          "search_time_ms": {"type": "number"}
+          "total_results": { "type": "number" },
+          "search_time_ms": { "type": "number" }
         }
       },
       "implementation": {
@@ -162,12 +168,14 @@ GET /api/organizations/{organization_id}/tools
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 20, max: 100)
 - `category` (optional): Filter by category
 - `enabled` (optional): Filter by enabled status
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -225,6 +233,7 @@ POST /api/organizations/{organization_id}/tools
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "github_api",
@@ -253,9 +262,9 @@ POST /api/organizations/{organization_id}/tools
   "return_schema": {
     "type": "object",
     "properties": {
-      "success": {"type": "boolean"},
-      "data": {"type": "object"},
-      "message": {"type": "string"}
+      "success": { "type": "boolean" },
+      "data": { "type": "object" },
+      "message": { "type": "string" }
     }
   },
   "implementation": {
@@ -275,6 +284,7 @@ POST /api/organizations/{organization_id}/tools
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -316,6 +326,7 @@ GET /api/organizations/{organization_id}/tools/{tool_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -338,8 +349,8 @@ GET /api/organizations/{organization_id}/tools/{tool_id}
       "return_schema": {
         "type": "object",
         "properties": {
-          "success": {"type": "boolean"},
-          "data": {"type": "object"}
+          "success": { "type": "boolean" },
+          "data": { "type": "object" }
         }
       },
       "implementation": {
@@ -376,6 +387,7 @@ PUT /api/organizations/{organization_id}/tools/{tool_id}
 ```
 
 **Request Body:**
+
 ```json
 {
   "description": "Enhanced Salesforce API integration with additional features",
@@ -384,7 +396,12 @@ PUT /api/organizations/{organization_id}/tools/{tool_id}
     "properties": {
       "action": {
         "type": "string",
-        "enum": ["get_contact", "create_lead", "update_opportunity", "get_account"]
+        "enum": [
+          "get_contact",
+          "create_lead",
+          "update_opportunity",
+          "get_account"
+        ]
       },
       "filters": {
         "type": "object",
@@ -397,6 +414,7 @@ PUT /api/organizations/{organization_id}/tools/{tool_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -409,7 +427,12 @@ PUT /api/organizations/{organization_id}/tools/{tool_id}
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["get_contact", "create_lead", "update_opportunity", "get_account"]
+            "enum": [
+              "get_contact",
+              "create_lead",
+              "update_opportunity",
+              "get_account"
+            ]
           }
         }
       },
@@ -428,6 +451,7 @@ DELETE /api/organizations/{organization_id}/tools/{tool_id}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -444,6 +468,7 @@ POST /api/organizations/{organization_id}/tools/{tool_id}/test
 ```
 
 **Request Body:**
+
 ```json
 {
   "parameters": {
@@ -456,6 +481,7 @@ POST /api/organizations/{organization_id}/tools/{tool_id}/test
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -487,6 +513,7 @@ POST /api/tools/execute
 ```
 
 **Request Body:**
+
 ```json
 {
   "tool_name": "web_search",
@@ -499,6 +526,7 @@ POST /api/tools/execute
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -540,6 +568,7 @@ GET /api/tools/categories
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -573,6 +602,7 @@ GET /api/tools/categories
 ### Common Error Responses
 
 **404 Not Found:**
+
 ```json
 {
   "error": "Tool not found",
@@ -581,6 +611,7 @@ GET /api/tools/categories
 ```
 
 **400 Bad Request:**
+
 ```json
 {
   "error": "Invalid tool parameters",
@@ -593,6 +624,7 @@ GET /api/tools/categories
 ```
 
 **422 Unprocessable Entity:**
+
 ```json
 {
   "error": "Tool validation failed",
@@ -607,6 +639,7 @@ GET /api/tools/categories
 ```
 
 **500 Internal Server Error:**
+
 ```json
 {
   "error": "Tool execution failed",
@@ -621,61 +654,63 @@ GET /api/tools/categories
 ## Usage Examples
 
 ### JavaScript/Node.js
+
 ```javascript
 // List system tools
-const systemToolsResponse = await fetch('/api/tools/system', {
+const systemToolsResponse = await fetch("/api/tools/system", {
   headers: {
-    'Authorization': `Bearer ${token}`
-  }
+    Authorization: `Bearer ${token}`,
+  },
 });
 
 // Create custom tool
 const toolData = {
-  name: 'github_api',
-  display_name: 'GitHub API',
-  description: 'Interface with GitHub repositories',
-  category: 'integration',
+  name: "github_api",
+  display_name: "GitHub API",
+  description: "Interface with GitHub repositories",
+  category: "integration",
   parameters_schema: {
-    type: 'object',
+    type: "object",
     properties: {
-      action: { type: 'string' },
-      repository: { type: 'string' }
+      action: { type: "string" },
+      repository: { type: "string" },
     },
-    required: ['action', 'repository']
+    required: ["action", "repository"],
   },
   implementation: {
-    type: 'webhook',
-    url: 'https://api.mycompany.com/github-proxy'
-  }
+    type: "webhook",
+    url: "https://api.mycompany.com/github-proxy",
+  },
 };
 
-const createResponse = await fetch('/api/organizations/org_123/tools', {
-  method: 'POST',
+const createResponse = await fetch("/api/organizations/org_123/tools", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
-  body: JSON.stringify(toolData)
+  body: JSON.stringify(toolData),
 });
 
 // Execute tool
-const executeResponse = await fetch('/api/tools/execute', {
-  method: 'POST',
+const executeResponse = await fetch("/api/tools/execute", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    tool_name: 'web_search',
+    tool_name: "web_search",
     parameters: {
-      query: 'artificial intelligence trends',
-      max_results: 5
-    }
-  })
+      query: "artificial intelligence trends",
+      max_results: 5,
+    },
+  }),
 });
 ```
 
 ### cURL
+
 ```bash
 # List system tools
 curl -X GET "https://api.example.com/api/tools/system" \
@@ -703,6 +738,7 @@ curl -X POST "https://api.example.com/api/tools/execute" \
 ```
 
 ### Python
+
 ```python
 import requests
 

@@ -47,7 +47,7 @@ Summaries are created in a structured format that preserves the most important i
 {
   "key_topics": [
     "e-commerce website setup",
-    "bookstore specialization", 
+    "bookstore specialization",
     "Shopify platform selection",
     "rare books and collectibles"
   ],
@@ -81,12 +81,12 @@ Summaries are created in a structured format that preserves the most important i
 
 LLM Crafter automatically selects cost-effective models for summarization:
 
-| Agent Model | Summarization Model | Savings |
-|-------------|-------------------|---------|
-| gpt-4o | gpt-4o-mini | 95% cost reduction |
-| gpt-5 | gpt-5-mini | 95% cost reduction |
-| o3 | o3-mini | 90% cost reduction |
-| o1 | o1-mini | 90% cost reduction |
+| Agent Model | Summarization Model | Savings            |
+| ----------- | ------------------- | ------------------ |
+| gpt-4o      | gpt-4o-mini         | 95% cost reduction |
+| gpt-5       | gpt-5-mini          | 95% cost reduction |
+| o3          | o3-mini             | 90% cost reduction |
+| o1          | o1-mini             | 90% cost reduction |
 
 ### Custom Model Configuration
 
@@ -119,6 +119,7 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/convers
 ```
 
 **Response:**
+
 ```json
 {
   "message": "Conversation summarized successfully",
@@ -149,6 +150,7 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversa
 ```
 
 **Response:**
+
 ```json
 {
   "summary": {
@@ -236,6 +238,7 @@ For agents using the API caller tool, configure summarization per endpoint:
 ### Token Savings Example
 
 Before summarization (typical 20-message conversation):
+
 ```json
 {
   "original_tokens": 3500,
@@ -244,6 +247,7 @@ Before summarization (typical 20-message conversation):
 ```
 
 After summarization:
+
 ```json
 {
   "summary_tokens": 200,
@@ -267,7 +271,7 @@ After summarization:
     "token_processing_time": "1.8s"
   },
   "with_summarization": {
-    "average_response_time": "1.5s", 
+    "average_response_time": "1.5s",
     "token_processing_time": "0.8s",
     "improvement": "40% faster"
   }
@@ -312,6 +316,7 @@ Track summarization performance across your organization:
 Configure summarization to focus on what matters for your use case:
 
 #### Customer Support
+
 ```json
 {
   "focus": "customer issue description, troubleshooting steps taken, resolution status, and customer satisfaction"
@@ -319,6 +324,7 @@ Configure summarization to focus on what matters for your use case:
 ```
 
 #### Sales Conversations
+
 ```json
 {
   "focus": "customer needs, budget, decision timeline, objections raised, and next steps"
@@ -326,6 +332,7 @@ Configure summarization to focus on what matters for your use case:
 ```
 
 #### Technical Consultations
+
 ```json
 {
   "focus": "technical requirements, proposed solutions, limitations, and implementation decisions"
@@ -335,6 +342,7 @@ Configure summarization to focus on what matters for your use case:
 ### Token Optimization
 
 #### Aggressive Summarization (High Volume)
+
 ```json
 {
   "triggers": {
@@ -346,6 +354,7 @@ Configure summarization to focus on what matters for your use case:
 ```
 
 #### Conservative Summarization (Quality Focus)
+
 ```json
 {
   "triggers": {
@@ -359,11 +368,13 @@ Configure summarization to focus on what matters for your use case:
 ### Quality Assurance
 
 #### Monitor Summary Quality
+
 - Review summaries periodically
 - Check for information loss
 - Adjust focus parameters as needed
 
 #### A/B Testing
+
 - Test different summarization settings
 - Compare customer satisfaction metrics
 - Measure response quality impact
@@ -442,6 +453,7 @@ node test-conversation-summarization.js
 ```
 
 This script simulates a long conversation and demonstrates:
+
 - Token savings calculation
 - Summary structure
 - Performance improvements
@@ -465,16 +477,19 @@ curl -X GET "http://localhost:3000/api/v1/organizations/{orgId}/projects/{projec
 ### Common Issues
 
 #### Summarization Not Triggering
+
 - Check message count threshold
 - Verify token threshold settings
 - Ensure agent has valid API key
 
 #### Poor Summary Quality
+
 - Adjust focus parameters
 - Increase max_tokens for summaries
 - Review and refine system prompts
 
 #### High Costs
+
 - Verify summarization model selection
 - Check if summarization is actually reducing tokens
 - Monitor actual vs. estimated savings
@@ -488,6 +503,7 @@ LOG_LEVEL=debug npm start
 ```
 
 This provides detailed information about:
+
 - Summarization triggers
 - Token calculations
 - Model selection

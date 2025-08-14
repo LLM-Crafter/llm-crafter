@@ -3,6 +3,7 @@
 The Authentication API provides endpoints for user registration, login, token management, and API key operations.
 
 ## Base URL
+
 ```
 https://your-domain.com/api/auth
 ```
@@ -18,6 +19,7 @@ POST /api/auth/register
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "John Doe",
@@ -27,11 +29,13 @@ POST /api/auth/register
 ```
 
 **Validation Rules:**
+
 - `name`: Required, minimum 2 characters
 - `email`: Required, valid email format, unique
 - `password`: Required, minimum 8 characters
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -48,6 +52,7 @@ POST /api/auth/register
 ```
 
 **Error Responses:**
+
 ```json
 // 400 Bad Request - Validation Error
 {
@@ -75,6 +80,7 @@ POST /api/auth/login
 ```
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com",
@@ -83,6 +89,7 @@ POST /api/auth/login
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -99,6 +106,7 @@ POST /api/auth/login
 ```
 
 **Error Responses:**
+
 ```json
 // 401 Unauthorized - Invalid Credentials
 {
@@ -121,11 +129,13 @@ POST /api/auth/refresh
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {current_token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -145,11 +155,13 @@ POST /api/auth/logout
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -166,11 +178,13 @@ GET /api/auth/me
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -201,11 +215,13 @@ PUT /api/auth/me
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "John Smith",
@@ -214,6 +230,7 @@ Authorization: Bearer {token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -237,11 +254,13 @@ PUT /api/auth/password
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Request Body:**
+
 ```json
 {
   "current_password": "oldPassword123",
@@ -251,6 +270,7 @@ Authorization: Bearer {token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -269,11 +289,13 @@ GET /api/auth/api-keys
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -301,11 +323,13 @@ POST /api/auth/api-keys
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "Production Integration",
@@ -315,6 +339,7 @@ Authorization: Bearer {token}
 ```
 
 **Response (201 Created):**
+
 ```json
 {
   "success": true,
@@ -340,11 +365,13 @@ PUT /api/auth/api-keys/{key_id}/rotate
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -368,11 +395,13 @@ DELETE /api/auth/api-keys/{key_id}
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -391,6 +420,7 @@ POST /api/auth/forgot-password
 ```
 
 **Request Body:**
+
 ```json
 {
   "email": "john@example.com"
@@ -398,6 +428,7 @@ POST /api/auth/forgot-password
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -414,6 +445,7 @@ POST /api/auth/reset-password
 ```
 
 **Request Body:**
+
 ```json
 {
   "token": "reset_token_from_email",
@@ -423,6 +455,7 @@ POST /api/auth/reset-password
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -435,6 +468,7 @@ POST /api/auth/reset-password
 ### Common Error Responses
 
 **401 Unauthorized:**
+
 ```json
 {
   "error": "Authentication required",
@@ -443,6 +477,7 @@ POST /api/auth/reset-password
 ```
 
 **403 Forbidden:**
+
 ```json
 {
   "error": "Access denied",
@@ -451,6 +486,7 @@ POST /api/auth/reset-password
 ```
 
 **422 Unprocessable Entity:**
+
 ```json
 {
   "error": "Validation failed",
@@ -465,6 +501,7 @@ POST /api/auth/reset-password
 ```
 
 **429 Too Many Requests:**
+
 ```json
 {
   "error": "Rate limit exceeded",
@@ -476,31 +513,33 @@ POST /api/auth/reset-password
 ## Authentication Examples
 
 ### JavaScript/Node.js
+
 ```javascript
 // Login
-const loginResponse = await fetch('/api/auth/login', {
-  method: 'POST',
+const loginResponse = await fetch("/api/auth/login", {
+  method: "POST",
   headers: {
-    'Content-Type': 'application/json'
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    email: 'john@example.com',
-    password: 'password123'
-  })
+    email: "john@example.com",
+    password: "password123",
+  }),
 });
 
 const { data } = await loginResponse.json();
 const token = data.token;
 
 // Make authenticated request
-const userResponse = await fetch('/api/auth/me', {
+const userResponse = await fetch("/api/auth/me", {
   headers: {
-    'Authorization': `Bearer ${token}`
-  }
+    Authorization: `Bearer ${token}`,
+  },
 });
 ```
 
 ### cURL
+
 ```bash
 # Login
 curl -X POST "https://api.example.com/api/auth/login" \
@@ -513,6 +552,7 @@ curl -X GET "https://api.example.com/api/auth/me" \
 ```
 
 ### Python
+
 ```python
 import requests
 

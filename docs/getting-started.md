@@ -4,7 +4,7 @@ This guide will walk you through setting up LLM Crafter and creating your first 
 
 ## Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - MongoDB 4.4+
 - An OpenAI API key (or other supported LLM provider)
 
@@ -172,6 +172,7 @@ curl http://localhost:3000/health
 ```
 
 You should receive:
+
 ```json
 {
   "status": "ok",
@@ -193,23 +194,29 @@ Now that you have LLM Crafter running, explore these topics:
 ### Common Issues
 
 **MongoDB Connection Error**
+
 ```
 Error: connect ECONNREFUSED 127.0.0.1:27017
 ```
+
 - Ensure MongoDB is running
 - Check the connection string in your `.env` file
 
 **JWT Token Invalid**
+
 ```
 {"error": "Invalid token"}
 ```
+
 - Make sure you're including the `Authorization: Bearer TOKEN` header
 - Check that the token hasn't expired (tokens are valid for 24 hours)
 
 **API Key Not Found**
+
 ```
 {"error": "API key not found in this project"}
 ```
+
 - Verify the API key ID exists in your project
 - Ensure you're using the correct organization and project IDs
 

@@ -5,22 +5,26 @@ LLM Crafter provides a comprehensive set of built-in system tools that agents ca
 ## Available System Tools
 
 ### Web Search
+
 **Name:** `web_search`  
 **Category:** Web
 
 Search the web for information using a search engine.
 
 **Parameters:**
+
 - `query` (string, required): The search query
 - `max_results` (number, optional): Maximum number of results to return (default: 5)
 
 **Returns:**
+
 - `query`: The original search query
 - `results`: Array of search results with title, URL, and snippet
 - `total_results`: Total number of results found
 - `search_time_ms`: Time taken for the search
 
 **Example Usage:**
+
 ```json
 {
   "name": "web_search",
@@ -32,20 +36,24 @@ Search the web for information using a search engine.
 ```
 
 ### Calculator
+
 **Name:** `calculator`  
 **Category:** Computation
 
 Perform mathematical calculations and evaluate expressions.
 
 **Parameters:**
+
 - `expression` (string, required): Mathematical expression to evaluate
 
 **Returns:**
+
 - `expression`: The original expression
 - `result`: The calculated result
 - `type`: The type of calculation performed
 
 **Supported Operations:**
+
 - Basic arithmetic: `+`, `-`, `*`, `/`, `%`
 - Powers and roots: `^`, `sqrt()`, `cbrt()`
 - Trigonometric: `sin()`, `cos()`, `tan()`, `asin()`, `acos()`, `atan()`
@@ -53,6 +61,7 @@ Perform mathematical calculations and evaluate expressions.
 - Constants: `pi`, `e`
 
 **Example Usage:**
+
 ```json
 {
   "name": "calculator",
@@ -63,12 +72,14 @@ Perform mathematical calculations and evaluate expressions.
 ```
 
 ### LLM Prompt
+
 **Name:** `llm_prompt`  
 **Category:** LLM
 
 Execute a prompt using an LLM provider, integrating with the existing proxy system.
 
 **Parameters:**
+
 - `prompt` (string, required): The prompt to send to the LLM
 - `system_prompt` (string, optional): Optional system prompt
 - `model` (string, optional): Specific model to use
@@ -76,12 +87,14 @@ Execute a prompt using an LLM provider, integrating with the existing proxy syst
 - `max_tokens` (number, optional): Maximum tokens in response
 
 **Returns:**
+
 - `prompt`: The original prompt
 - `response`: The LLM's response
 - `model_used`: The model that processed the request
 - `token_usage`: Token consumption details
 
 **Example Usage:**
+
 ```json
 {
   "name": "llm_prompt",
@@ -94,30 +107,35 @@ Execute a prompt using an LLM provider, integrating with the existing proxy syst
 ```
 
 ### Date and Time
+
 **Name:** `datetime`  
 **Category:** Utility
 
 Get current date and time information or perform date calculations.
 
 **Parameters:**
+
 - `operation` (string, required): Operation type (`current`, `format`, `calculate`)
 - `timezone` (string, optional): Timezone for the operation
 - `format` (string, optional): Output format for date formatting
 - `date` (string, optional): Input date for calculations
 
 **Returns:**
+
 - `timestamp`: Current or calculated timestamp
 - `formatted`: Formatted date string
 - `timezone`: Timezone used
 - `day_of_week`: Day of the week
 
 ### File Operations
+
 **Name:** `file_operations`  
 **Category:** File System
 
 Perform basic file operations like reading, writing, and listing files.
 
 **Parameters:**
+
 - `operation` (string, required): Operation type (`read`, `write`, `list`, `delete`)
 - `path` (string, required): File or directory path
 - `content` (string, optional): Content for write operations
@@ -126,12 +144,14 @@ Perform basic file operations like reading, writing, and listing files.
 **Security Note:** File operations are sandboxed and restricted to designated directories for security.
 
 ### HTTP Request
+
 **Name:** `http_request`  
 **Category:** Network
 
 Make HTTP requests to external APIs and services.
 
 **Parameters:**
+
 - `url` (string, required): The URL to request
 - `method` (string, optional): HTTP method (default: GET)
 - `headers` (object, optional): Request headers
@@ -139,18 +159,21 @@ Make HTTP requests to external APIs and services.
 - `timeout` (number, optional): Request timeout in milliseconds
 
 **Returns:**
+
 - `status_code`: HTTP response status code
 - `headers`: Response headers
 - `body`: Response body
 - `response_time_ms`: Time taken for the request
 
 ### JSON Operations
+
 **Name:** `json_operations`  
 **Category:** Data Processing
 
 Parse, validate, and manipulate JSON data.
 
 **Parameters:**
+
 - `operation` (string, required): Operation type (`parse`, `stringify`, `validate`, `query`)
 - `data` (string/object, required): JSON data to process
 - `query` (string, optional): JSONPath query for data extraction
@@ -173,6 +196,7 @@ System tools are organized into categories for easier discovery:
 System tools are automatically available to all agents. To enable a tool for an agent:
 
 1. **Include in Agent Configuration:**
+
 ```json
 {
   "tools": [
@@ -191,6 +215,7 @@ System tools are automatically available to all agents. To enable a tool for an 
 ```
 
 2. **Reference in System Prompt:**
+
 ```text
 You have access to web search and calculator tools. Use them when you need current information or need to perform calculations.
 ```

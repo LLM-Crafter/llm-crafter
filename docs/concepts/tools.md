@@ -11,10 +11,12 @@ LLM Crafter provides several built-in system tools that are available to all age
 Search the internet for information using search engines.
 
 **Parameters:**
+
 - `query` (string): The search query
 - `max_results` (number): Maximum results to return (default: 5)
 
 **Example:**
+
 ```json
 {
   "tool_name": "web_search",
@@ -26,6 +28,7 @@ Search the internet for information using search engines.
 ```
 
 **Response:**
+
 ```json
 {
   "query": "latest TypeScript features 2024",
@@ -46,9 +49,11 @@ Search the internet for information using search engines.
 Perform mathematical calculations and evaluate expressions.
 
 **Parameters:**
+
 - `expression` (string): Mathematical expression to evaluate
 
 **Example:**
+
 ```json
 {
   "tool_name": "calculator",
@@ -59,6 +64,7 @@ Perform mathematical calculations and evaluate expressions.
 ```
 
 **Response:**
+
 ```json
 {
   "expression": "sqrt(144) + 2^3",
@@ -72,10 +78,12 @@ Perform mathematical calculations and evaluate expressions.
 Get current date and time information.
 
 **Parameters:**
+
 - `timezone` (string): Timezone (default: "UTC")
 - `format` (string): Output format - "iso", "unix", or "human" (default: "iso")
 
 **Example:**
+
 ```json
 {
   "tool_name": "current_time",
@@ -87,6 +95,7 @@ Get current date and time information.
 ```
 
 **Response:**
+
 ```json
 {
   "timestamp": "Tuesday, January 16, 2024 at 3:30 PM EST",
@@ -102,16 +111,18 @@ Get current date and time information.
 Parse, validate, and manipulate JSON data.
 
 **Parameters:**
+
 - `data` (any): The JSON data to process
 - `operation` (string): Operation - "parse", "stringify", "extract", or "validate"
 - `path` (string): Dot notation path for extract operation
 
 **Example:**
+
 ```json
 {
   "tool_name": "json_processor",
   "parameters": {
-    "data": {"user": {"name": "John", "age": 30}},
+    "data": { "user": { "name": "John", "age": 30 } },
     "operation": "extract",
     "path": "user.name"
   }
@@ -119,6 +130,7 @@ Parse, validate, and manipulate JSON data.
 ```
 
 **Response:**
+
 ```json
 {
   "operation": "extract",
@@ -132,6 +144,7 @@ Parse, validate, and manipulate JSON data.
 Make HTTP requests to pre-configured API endpoints with authentication.
 
 **Parameters:**
+
 - `endpoint_name` (string): Name of the configured endpoint
 - `method` (string): HTTP method (default: "GET")
 - `path_params` (object): Path parameters for URL substitution
@@ -140,6 +153,7 @@ Make HTTP requests to pre-configured API endpoints with authentication.
 - `headers` (object): Additional headers
 
 **Example:**
+
 ```json
 {
   "tool_name": "api_caller",
@@ -155,6 +169,7 @@ Make HTTP requests to pre-configured API endpoints with authentication.
 ```
 
 **Response:**
+
 ```json
 {
   "endpoint_name": "get_weather",
@@ -163,8 +178,8 @@ Make HTTP requests to pre-configured API endpoints with authentication.
   "status_code": 200,
   "success": true,
   "data": {
-    "weather": [{"main": "Clear", "description": "clear sky"}],
-    "main": {"temp": 15.2, "humidity": 65}
+    "weather": [{ "main": "Clear", "description": "clear sky" }],
+    "main": { "temp": 15.2, "humidity": 65 }
   },
   "execution_time_ms": 234
 }
@@ -175,19 +190,24 @@ Make HTTP requests to pre-configured API endpoints with authentication.
 Tools are organized into categories for easy discovery:
 
 ### Communication
+
 - `api_caller`: HTTP requests to external APIs
 - `web_search`: Internet search capabilities
 
 ### Computation
+
 - `calculator`: Mathematical calculations and expressions
 
 ### Data
+
 - `json_processor`: JSON data manipulation and validation
 
 ### Utility
+
 - `current_time`: Date and time information
 
 ### Web
+
 - `web_search`: Web search functionality
 
 ## Custom Tools
@@ -224,9 +244,9 @@ POST /api/v1/tools
   "return_schema": {
     "type": "object",
     "properties": {
-      "rows": {"type": "array"},
-      "count": {"type": "number"},
-      "execution_time_ms": {"type": "number"}
+      "rows": { "type": "array" },
+      "count": { "type": "number" },
+      "execution_time_ms": { "type": "number" }
     }
   },
   "implementation": {
@@ -246,33 +266,35 @@ POST /api/v1/tools
 Custom tools can be implemented as:
 
 #### Webhook Tools
+
 External HTTP endpoints that receive tool parameters and return results.
 
 ```javascript
 // Webhook endpoint implementation
-app.post('/tools/database-query', authenticateWebhook, async (req, res) => {
+app.post("/tools/database-query", authenticateWebhook, async (req, res) => {
   const { query, limit = 100 } = req.body.parameters;
-  
+
   try {
     const startTime = Date.now();
     const result = await database.query(query, { limit });
     const executionTime = Date.now() - startTime;
-    
+
     res.json({
       rows: result.rows,
       count: result.rowCount,
-      execution_time_ms: executionTime
+      execution_time_ms: executionTime,
     });
   } catch (error) {
     res.status(400).json({
       error: error.message,
-      type: 'database_error'
+      type: "database_error",
     });
   }
 });
 ```
 
 #### Internal Tools
+
 Built into the LLM Crafter system with direct code implementation.
 
 ```javascript
@@ -281,18 +303,18 @@ const customToolHandlers = {
   async database_query(parameters) {
     const { query, limit = 100 } = parameters;
     const startTime = Date.now();
-    
+
     try {
       const result = await database.query(query, { limit });
       return {
         rows: result.rows,
         count: result.rowCount,
-        execution_time_ms: Date.now() - startTime
+        execution_time_ms: Date.now() - startTime,
       };
     } catch (error) {
       throw new Error(`Database query failed: ${error.message}`);
     }
-  }
+  },
 };
 ```
 
@@ -306,12 +328,7 @@ Assign tools to agents when creating or updating them:
 {
   "name": "data_analyst",
   "type": "task",
-  "tools": [
-    "calculator",
-    "json_processor",
-    "api_caller",
-    "database_query"
-  ]
+  "tools": ["calculator", "json_processor", "api_caller", "database_query"]
 }
 ```
 
@@ -324,7 +341,7 @@ Control tool access at the organization level:
   "organization_tools": {
     "enabled_tools": [
       "web_search",
-      "calculator", 
+      "calculator",
       "current_time",
       "json_processor",
       "api_caller",
@@ -345,6 +362,7 @@ Agents automatically choose appropriate tools based on user requests:
 **User:** "What's the weather like in Tokyo right now?"
 
 **Agent Process:**
+
 1. Recognizes need for current weather data
 2. Selects `api_caller` tool with weather endpoint
 3. Makes API request to weather service
@@ -359,6 +377,7 @@ Agents can use multiple tools in sequence:
 **User:** "Calculate the compound interest on $10,000 at 5% for 10 years, then search for current savings account rates"
 
 **Agent Process:**
+
 1. Uses `calculator` tool: `10000 * (1.05)^10`
 2. Gets result: $16,288.95
 3. Uses `web_search` tool: "current savings account interest rates 2024"
@@ -383,6 +402,7 @@ When tools fail, agents gracefully handle errors:
 ### Best Practices
 
 #### Parameter Validation
+
 ```json
 {
   "parameters_schema": {
@@ -406,6 +426,7 @@ When tools fail, agents gracefully handle errors:
 ```
 
 #### Error Responses
+
 ```json
 {
   "error": "Invalid email format",
@@ -416,15 +437,16 @@ When tools fail, agents gracefully handle errors:
 ```
 
 #### Response Schemas
+
 ```json
 {
   "return_schema": {
     "type": "object",
     "properties": {
-      "success": {"type": "boolean"},
-      "data": {"type": "object"},
-      "message": {"type": "string"},
-      "execution_time_ms": {"type": "number"}
+      "success": { "type": "boolean" },
+      "data": { "type": "object" },
+      "message": { "type": "string" },
+      "execution_time_ms": { "type": "number" }
     },
     "required": ["success"]
   }
@@ -448,6 +470,7 @@ POST /api/v1/tools/calculator/execute
 ```
 
 **Response:**
+
 ```json
 {
   "result": {
@@ -471,6 +494,7 @@ GET /api/v1/tools/calculator/stats
 ```
 
 **Response:**
+
 ```json
 {
   "tool_name": "calculator",
@@ -478,11 +502,7 @@ GET /api/v1/tools/calculator/stats
     "total_executions": 1543,
     "success_rate": 98.5,
     "average_execution_time_ms": 45,
-    "most_common_operations": [
-      "addition",
-      "percentage",
-      "square_root"
-    ]
+    "most_common_operations": ["addition", "percentage", "square_root"]
   },
   "time_period": "last_30_days"
 }
@@ -501,20 +521,20 @@ Monitor tool performance:
 
 ### Tool Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/tools` | List all available tools |
-| GET | `/tools/categories` | Get tool categories |
-| GET | `/tools/{toolName}` | Get tool details |
-| POST | `/tools/{toolName}/execute` | Execute a tool |
-| GET | `/tools/{toolName}/stats` | Get usage statistics |
+| Method | Endpoint                    | Description              |
+| ------ | --------------------------- | ------------------------ |
+| GET    | `/tools`                    | List all available tools |
+| GET    | `/tools/categories`         | Get tool categories      |
+| GET    | `/tools/{toolName}`         | Get tool details         |
+| POST   | `/tools/{toolName}/execute` | Execute a tool           |
+| GET    | `/tools/{toolName}/stats`   | Get usage statistics     |
 
 ### Custom Tool Management
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/tools` | Create custom tool |
-| PUT | `/tools/{toolName}` | Update custom tool |
+| Method | Endpoint            | Description        |
+| ------ | ------------------- | ------------------ |
+| POST   | `/tools`            | Create custom tool |
+| PUT    | `/tools/{toolName}` | Update custom tool |
 | DELETE | `/tools/{toolName}` | Delete custom tool |
 
 ## Examples
@@ -544,12 +564,7 @@ Monitor tool performance:
   "name": "data_analyst",
   "type": "task",
   "system_prompt": "You are a data analyst. Use tools to process data, perform calculations, and retrieve information from APIs.",
-  "tools": [
-    "calculator",
-    "json_processor",
-    "api_caller",
-    "web_search"
-  ]
+  "tools": ["calculator", "json_processor", "api_caller", "web_search"]
 }
 ```
 
@@ -560,12 +575,7 @@ Monitor tool performance:
   "name": "research_assistant",
   "type": "chatbot",
   "system_prompt": "You are a research assistant. Search for information, analyze data, and provide comprehensive summaries.",
-  "tools": [
-    "web_search",
-    "calculator",
-    "current_time",
-    "json_processor"
-  ]
+  "tools": ["web_search", "calculator", "current_time", "json_processor"]
 }
 ```
 

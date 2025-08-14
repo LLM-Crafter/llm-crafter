@@ -40,18 +40,21 @@ Organizations represent the top-level entity in LLM Crafter. They provide:
 Organizations support three role levels:
 
 #### Admin
+
 - Full access to organization settings
 - Can invite and remove members
 - Can create and delete projects
 - Can manage billing and usage
 
 #### Member
+
 - Can create and manage agents
 - Can execute agent tasks
 - Can view organization projects
 - Cannot modify organization settings
 
 #### Viewer
+
 - Read-only access to projects and agents
 - Can view conversation history
 - Cannot create or modify resources
@@ -135,16 +138,19 @@ Projects are containers within organizations that group related AI resources. Ea
 ### Project Benefits
 
 #### Resource Organization
+
 - Group related agents together
 - Separate development from production
 - Organize by department or use case
 
 #### Access Control
+
 - Project-level permissions
 - Isolated API keys and resources
 - Separate conversation histories
 
 #### Cost Tracking
+
 - Monitor usage by project
 - Allocate costs to departments
 - Track ROI for specific initiatives
@@ -181,7 +187,7 @@ POST /api/v1/organizations/{orgId}/projects
   }
 }
 
-// Production Project  
+// Production Project
 {
   "name": "Support Automation - Prod",
   "settings": {
@@ -251,22 +257,26 @@ graph TD
 ### Organization Design
 
 #### Single Organization
+
 For small teams or single companies:
+
 ```
 Acme Corp
 ├── Development
-├── Testing  
+├── Testing
 └── Production
 ```
 
 #### Multi-Organization
+
 For agencies or large enterprises:
+
 ```
 Client A Org
 ├── Project 1
 └── Project 2
 
-Client B Org  
+Client B Org
 ├── Project 1
 └── Project 2
 
@@ -278,6 +288,7 @@ Internal Org
 ### Project Structure
 
 #### Feature-based Projects
+
 ```
 E-commerce AI
 ├── Product Recommendations
@@ -286,6 +297,7 @@ E-commerce AI
 ```
 
 #### Environment-based Projects
+
 ```
 Production Environment
 ├── Live Agents
@@ -299,11 +311,13 @@ Development Environment
 ### Naming Conventions
 
 #### Organizations
+
 - Use clear, descriptive names
 - Include company or client identifier
 - Example: "Acme Corp AI", "Client-ABC-Digital"
 
 #### Projects
+
 - Include purpose and environment
 - Use consistent naming pattern
 - Examples: "Support-Bot-Prod", "Sales-Assistant-Dev"
@@ -311,16 +325,19 @@ Development Environment
 ### Security Considerations
 
 #### Organization Isolation
+
 - Each organization has complete data separation
 - No cross-organization access possible
 - API keys are scoped to specific projects
 
 #### Member Management
+
 - Regularly audit member access
 - Use least-privilege principle
 - Remove inactive members promptly
 
 #### Resource Scoping
+
 - API keys are project-specific
 - Agents cannot access other projects
 - Conversations are isolated by project
@@ -409,7 +426,7 @@ curl -X POST http://localhost:3000/api/v1/organizations/{orgId}/projects \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Customer Support - Prod", 
+    "name": "Customer Support - Prod",
     "description": "Production support agents"
   }'
 
