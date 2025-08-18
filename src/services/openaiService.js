@@ -88,6 +88,40 @@ const PRICING = {
       output: 0,
     },
   },
+  anthropic: {
+    "claude-opus-4-1": {
+      input: 15.0, // $15 per million input tokens
+      output: 75.0, // $75 per million output tokens
+    },
+    "claude-opus-4": {
+      input: 15.0,
+      output: 75.0,
+    },
+    "claude-sonnet-4": {
+      input: 3.0, // $3 per million input tokens
+      output: 15.0, // $15 per million output tokens
+    },
+    "claude-3-5-sonnet": {
+      input: 3.0, // $3 per million input tokens
+      output: 15.0, // $15 per million output tokens
+    },
+    "claude-3-5-haiku": {
+      input: 0.8, // $0.80 per million input tokens
+      output: 4.0, // $4 per million output tokens
+    },
+    "claude-3-opus": {
+      input: 15.0,
+      output: 75.0,
+    },
+    "claude-3-sonnet": {
+      input: 3.0,
+      output: 15.0,
+    },
+    "claude-3-haiku": {
+      input: 0.8,
+      output: 4.0,
+    },
+  },
   deepseek: {
     "deepseek-chat": {
       input: 0.00014,
@@ -125,6 +159,10 @@ class OpenAIService {
     switch (provider.toLowerCase()) {
       case "deepseek":
         return "https://api.deepseek.com/v1";
+      case "anthropic":
+        return "https://api.anthropic.com/v1";
+      case "google":
+        return "https://generativelanguage.googleapis.com/v1beta/openai";
       case "openrouter":
         return "https://openrouter.ai/api/v1";
       case "openai":
@@ -151,6 +189,11 @@ class OpenAIService {
     if ("max_tokens" in mappedParams) {
       mappedParams.max_completion_tokens = mappedParams.max_tokens;
       delete mappedParams.max_tokens;
+    }
+
+    if (this.provider === "google") {
+      delete mappedParams.frequency_penalty;
+      delete mappedParams.presence_penalty;
     }
 
     return mappedParams;

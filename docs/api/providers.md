@@ -2,11 +2,24 @@
 
 The Providers API manages LLM providers and their configurations. Providers define how to connect to different LLM services like OpenAI, Anthropic, or custom endpoints.
 
+**Default Providers**: The system now comes with pre-configured default providers and their latest models. These are automatically initialized when the application starts.
+
 ## Base URL
 
 ```
-https://your-domain.com/api/providers
+https://your-domain.com/api/v1/providers
 ```
+
+## Default Providers
+
+The following providers are automatically configured on system initialization:
+
+- **OpenAI**: GPT-4, GPT-3.5-turbo, and embedding models
+- **Anthropic**: Claude 3.5 Sonnet, Claude 3 Opus, Haiku models
+- **Google**: Gemini 1.5 Pro, Flash models
+- **Cohere**: Command R+ and other chat models
+- **Mistral**: Large, Medium, Small, and Codestral models
+- **Perplexity**: Llama 3.1 Sonar models with online capabilities
 
 ## Authentication
 
@@ -340,6 +353,139 @@ POST /api/organizations/{organization_id}/providers/{provider_id}/test
       "timestamp": "2024-01-15T13:30:00Z"
     }
   }
+}
+```
+
+## New Endpoints
+
+### List All Providers
+
+Get all available providers with their models.
+
+```http
+GET /api/v1/providers
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "providers": [
+    {
+      "_id": "provider_123",
+      "name": "openai",
+      "models": [
+        "gpt-5",
+        "gpt-5-mini",
+        "o3-deep-research",
+        "o3-pro",
+        "gpt-4.1",
+        "gpt-4o",
+        "gpt-4o-mini"
+      ],
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2025-08-14T10:30:00Z"
+    },
+    {
+      "_id": "provider_456",
+      "name": "deepseek",
+      "models": ["DeepSeek-V3", "DeepSeek-R1", "DeepSeek-VL2", "DeepSeek-Math"],
+      "createdAt": "2025-08-14T10:30:00Z",
+      "updatedAt": "2025-08-14T10:30:00Z"
+    }
+  ]
+}
+```
+
+### Get Provider Details
+
+Get details for a specific provider.
+
+```http
+GET /api/v1/providers/{providerId}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "_id": "provider_123",
+  "name": "openai",
+  "models": [
+    "gpt-5",
+    "gpt-5-mini",
+    "o3-deep-research",
+    "o3-pro",
+    "gpt-4.1",
+    "gpt-4o"
+  ],
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2025-08-14T10:30:00Z"
+}
+```
+
+### Get Provider Models
+
+Get available models for a specific provider.
+
+```http
+GET /api/v1/providers/{providerId}/models
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "provider": "openai",
+  "models": [
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "o3-deep-research",
+    "o3-pro",
+    "o3",
+    "gpt-4.1",
+    "gpt-4o",
+    "gpt-4o-mini"
+  ]
+}
+```
+
+### Refresh Default Providers
+
+Refresh default providers with the latest model configurations (Admin only).
+
+```http
+POST /api/v1/providers/refresh
+```
+
+**Headers:**
+
+```
+Authorization: Bearer {jwt_token}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Default providers refreshed successfully",
+  "providers": [
+    {
+      "_id": "provider_123",
+      "name": "openai",
+      "models": ["gpt-5", "o3-deep-research", "gpt-4.1"],
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2025-08-14T16:45:00Z"
+    },
+    {
+      "_id": "provider_456",
+      "name": "deepseek",
+      "models": ["DeepSeek-V3", "DeepSeek-R1", "DeepSeek-VL2"],
+      "createdAt": "2025-08-14T10:30:00Z",
+      "updatedAt": "2025-08-14T16:45:00Z"
+    }
+  ]
 }
 ```
 

@@ -6,6 +6,7 @@ require("dotenv").config();
 
 const connectDB = require("./config/database");
 const { initializeSystemTools } = require("./config/systemTools");
+const { initializeDefaultProviders } = require("./config/defaultProviders");
 
 const app = express();
 const authRoutes = require("./routes/auth");
@@ -32,6 +33,9 @@ connectDB();
 
 // Initialize system tools
 initializeSystemTools().catch(console.error);
+
+// Initialize default providers
+initializeDefaultProviders().catch(console.error);
 
 // Basic route for testing
 app.get("/health", (req, res) => {

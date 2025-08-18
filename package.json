@@ -7,6 +7,7 @@
     "start": "nodemon src/app.js",
     "dev": "nodemon src/app.js",
     "test": "jest",
+    "test:providers": "node test-default-providers.js",
     "lint": "eslint src/",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

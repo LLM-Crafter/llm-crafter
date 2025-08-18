@@ -37,7 +37,13 @@ const testPrompt = async (req, res) => {
     }
 
     // Validate provider
-    const supportedProviders = ["openai", "deepseek", "openrouter"];
+    const supportedProviders = [
+      "openai",
+      "deepseek",
+      "openrouter",
+      "anthropic",
+      "google",
+    ];
     if (!supportedProviders.includes(apiKey.provider.name)) {
       return res.status(400).json({ error: "Unsupported provider" });
     }
@@ -53,7 +59,9 @@ const testPrompt = async (req, res) => {
     if (
       apiKey.provider.name === "openai" ||
       apiKey.provider.name === "deepseek" ||
-      apiKey.provider.name === "openrouter"
+      apiKey.provider.name === "openrouter" ||
+      apiKey.provider.name === "anthropic" ||
+      apiKey.provider.name === "google"
     ) {
       const openai = new OpenAIService(apiKey.key, apiKey.provider.name);
       result = await openai.generateCompletion(

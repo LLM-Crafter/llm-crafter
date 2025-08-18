@@ -7,6 +7,7 @@ A collaborative platform for managing and executing LLM prompts with intelligent
 - 🤖 **Intelligent Agents**: Create chatbot and task agents with customizable behavior
 - 💬 **Smart Conversations**: Automatic summarization reduces token usage by up to 70%
 - 🛠️ **Powerful Tools**: Built-in tools for web search, calculations, API calls, and more
+- 🎯 **Default Providers**: Pre-configured access to OpenAI, Anthropic, Google, and DeepSeek with latest models
 - 📊 **Organization Management**: Multi-tenant structure with role-based access control
 - 🔧 **API Integration**: Easy external API configuration with authentication
 - ⚡ **Performance Optimized**: Token-efficient processing with intelligent model selection
@@ -36,6 +37,8 @@ cp .env.example .env
 # Start the server
 npm run dev
 ```
+
+**🎉 That's it!** The application automatically initializes with default providers for OpenAI, Anthropic, Google, and DeepSeek, so you can start creating agents immediately.
 
 ### Create Your First Agent
 

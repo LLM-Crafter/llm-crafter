@@ -17,7 +17,13 @@ class AgentService {
     userIdentifier,
     dynamicContext = {}
   ) {
-    const agent = await Agent.findById(agentId).populate("api_key");
+    //populate agent with API key and provider of api key
+    const agent = await Agent.findById(agentId).populate({
+      path: "api_key",
+      populate: {
+        path: "provider",
+      },
+    });
     if (!agent) {
       throw new Error("Agent not found");
     }

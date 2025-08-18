@@ -1,38 +1,48 @@
-const express = require('express');
-const { body } = require('express-validator');
+const express = require("express");
+const { body } = require("express-validator");
 const router = express.Router();
-const providerController = require('../controllers/providerController');
-const auth = require('../middleware/auth');
-const validate = require('../middleware/validate');
+const providerController = require("../controllers/providerController");
+const auth = require("../middleware/auth");
+const validate = require("../middleware/validate");
 
 // Validation middleware
 const providerValidation = [
-  body('name').trim().notEmpty().withMessage('Name is required'),
-  body('models').isArray().withMessage('Models must be an array')
-    .notEmpty().withMessage('At least one model is required')
+  body("name").trim().notEmpty().withMessage("Name is required"),
+  body("models")
+    .isArray()
+    .withMessage("Models must be an array")
+    .notEmpty()
+    .withMessage("At least one model is required"),
 ];
 
 // Public route to get all providers
-router.get('/', providerController.getProviders);
+router.get("/", providerController.getProviders);
+
+// Public route to get a specific provider
+router.get("/:providerId", providerController.getProvider);
+
+// Public route to get models for a specific provider
+router.get("/:providerId/models", providerController.getProviderModels);
 
 // Protected routes for admin operations
-router.post('/',
+router.post(
+  "/",
   auth,
   providerValidation,
   validate,
   providerController.createProvider
 );
 
-router.put('/:providerId',
+router.post("/refresh", auth, providerController.refreshProviders);
+
+router.put(
+  "/:providerId",
   auth,
   providerValidation,
   validate,
   providerController.updateProvider
 );
 
-router.delete('/:providerId',
-  auth,
-  providerController.deleteProvider
-);
+router.delete("/:providerId", auth, providerController.deleteProvider);
 
 module.exports = router;
