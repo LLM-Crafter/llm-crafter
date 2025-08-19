@@ -231,6 +231,13 @@ GET /health/detailed
 | GET    | `/tools/{toolName}`         | Get tool details    |
 | POST   | `/tools/{toolName}/execute` | Execute tool        |
 
+### Statistics Endpoints
+
+| Method | Endpoint                                                    | Description                  |
+| ------ | ----------------------------------------------------------- | ---------------------------- |
+| GET    | `/organizations/{orgId}/statistics/dashboard`              | Get dashboard statistics     |
+| GET    | `/organizations/{orgId}/statistics/agents/{agentId}`       | Get agent-specific statistics|
+
 ### Provider Endpoints
 
 | Method | Endpoint                         | Description          |

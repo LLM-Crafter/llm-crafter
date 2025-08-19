@@ -14,6 +14,7 @@ const organizationRoutes = require("./routes/organizations");
 const providerRoutes = require("./routes/providers");
 const proxyRoutes = require("./routes/proxy");
 const toolRoutes = require("./routes/tools");
+const statisticsRoutes = require("./routes/statistics");
 
 // Middleware
 app.use(helmet());
@@ -24,6 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/organizations", organizationRoutes);
+app.use("/api/v1/organizations", statisticsRoutes);
 app.use("/api/v1/providers", providerRoutes);
 app.use("/api/v1/proxy", proxyRoutes);
 app.use("/api/v1/tools", toolRoutes);
