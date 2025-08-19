@@ -13,6 +13,7 @@ GET /api/v1/organizations/{orgId}/statistics/dashboard?period={period}
 Returns comprehensive dashboard statistics for an organization.
 
 **Parameters:**
+
 - `orgId` (path, required): Organization ID
 - `period` (query, optional): Time period for statistics. Options: `1d`, `1w`, `1m`. Default: `1d`
 
@@ -48,7 +49,7 @@ Returns comprehensive dashboard statistics for an organization.
   "agentExecutions": {
     "totalExecutions": 125,
     "totalTokens": 65000,
-    "totalCost": 1.60,
+    "totalCost": 1.6,
     "totalToolCalls": 45,
     "avgExecutionTime": 2345,
     "successRate": "92.00",
@@ -98,7 +99,7 @@ Returns comprehensive dashboard statistics for an organization.
       "_id": "2025-08-19",
       "executionCount": 125,
       "tokenCount": 65000,
-      "costSum": 1.60
+      "costSum": 1.6
     }
   ]
 }
@@ -113,6 +114,7 @@ GET /api/v1/organizations/{orgId}/statistics/agents/{agentId}?period={period}
 Returns detailed statistics for a specific agent.
 
 **Parameters:**
+
 - `orgId` (path, required): Organization ID
 - `agentId` (path, required): Agent ID
 - `period` (query, optional): Time period for statistics. Options: `1d`, `1w`, `1m`. Default: `1d`
@@ -167,6 +169,7 @@ Returns detailed statistics for a specific agent.
 ## Key Metrics Explained
 
 ### Overview Metrics
+
 - **Total Tokens Used**: Sum of all tokens consumed across prompt executions, agent executions, and conversations
 - **Total Cost**: Combined cost in USD for all LLM API calls
 - **Total API Calls**: Sum of prompt executions and agent executions
@@ -175,22 +178,26 @@ Returns detailed statistics for a specific agent.
 - **Total Projects**: Number of projects in the organization
 
 ### Prompt Executions
+
 - **Success Rate**: Percentage of successful prompt executions vs total executions
 - **Avg Tokens Per Call**: Average number of tokens used per prompt execution
 - **Breakdown**: Distribution of executions by status (successful, errors, cached)
 
 ### Agent Executions
+
 - **Success Rate**: Percentage of completed executions vs total executions
 - **Avg Execution Time**: Average time in milliseconds for agent executions
 - **Tool Calls**: Total number of tool calls made by agents
 - **Breakdown**: Distribution by status (completed, failed, pending)
 
 ### Conversations
+
 - **Avg Messages Per Conversation**: Average number of messages exchanged per conversation
 - **Tools Executed**: Total number of tools executed within conversations
 - **Breakdown**: Distribution by conversation status (active, ended)
 
 ### Additional Data
+
 - **Recent Activity**: Last 10-20 executions with basic details
 - **Top Agents**: Most active agents by execution count
 - **Daily Usage**: Day-by-day breakdown of usage metrics
@@ -198,6 +205,7 @@ Returns detailed statistics for a specific agent.
 ## Authentication
 
 All endpoints require:
+
 1. Valid authentication token in the `Authorization` header
 2. Organization membership for the specified organization
 
@@ -212,12 +220,14 @@ All endpoints require:
 ## Usage Examples
 
 ### Get 1-week dashboard statistics
+
 ```bash
 curl -H "Authorization: Bearer your_token" \
   "https://api.llm-crafter.com/api/v1/organizations/org_123/statistics/dashboard?period=1w"
 ```
 
 ### Get 1-month statistics for a specific agent
+
 ```bash
 curl -H "Authorization: Bearer your_token" \
   "https://api.llm-crafter.com/api/v1/organizations/org_123/statistics/agents/agent_456?period=1m"
