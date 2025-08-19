@@ -76,9 +76,11 @@ const updateProfile = async (req, res) => {
   try {
     const updates = {};
     if (req.body.name) updates.name = req.body.name;
-    if (req.body.password) updates.password = req.body.password;
 
     const user = await User.findById(req.user._id);
+    if (!user || !(await user.comparePassword(req.body.password))) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
     Object.assign(user, updates);
     await user.save();
 
