@@ -310,7 +310,15 @@ class ToolService {
       throw new Error("Invalid or inactive API key");
     }
 
-    const openai = new OpenAIService(apiKey.key, apiKey.provider.name);
+    // Get decrypted API key
+    let decryptedKey;
+    try {
+      decryptedKey = apiKey.getDecryptedKey();
+    } catch (error) {
+      throw new Error(`Failed to decrypt API key: ${error.message}`);
+    }
+
+    const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
     const result = await openai.generateCompletion(
       model,
       prompt,
@@ -745,7 +753,18 @@ Summary:`;
       if (agentApiKey && agentApiKey.key) {
         const OpenAIService = require("./openaiService");
         if (!agentApiKey.provider) agentApiKey.provider = "openai"; // Default to OpenAI if no provider specified
-        const openai = new OpenAIService(agentApiKey.key, agentApiKey.provider);
+        
+        // Get decrypted API key
+        let decryptedKey;
+        try {
+          decryptedKey = agentApiKey.getDecryptedKey();
+        } catch (error) {
+          console.log("Failed to decrypt agent API key, using fallback summarization");
+          // Fallback to basic summarization if decryption fails
+          return this.truncateText(JSON.stringify(apiResult), maxTokens * 3);
+        }
+        
+        const openai = new OpenAIService(decryptedKey, agentApiKey.provider);
 
         const response = await openai.generateCompletion(model, prompt, {
           max_tokens: maxTokens,

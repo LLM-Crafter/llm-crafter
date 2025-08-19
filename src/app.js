@@ -4,6 +4,10 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 require("dotenv").config();
 
+// Validate environment variables before starting
+const { validateEnvironment } = require("./utils/environmentValidator");
+validateEnvironment();
+
 const connectDB = require("./config/database");
 const { initializeSystemTools } = require("./config/systemTools");
 const { initializeDefaultProviders } = require("./config/defaultProviders");

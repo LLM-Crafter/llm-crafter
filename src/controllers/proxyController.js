@@ -36,6 +36,14 @@ const testPrompt = async (req, res) => {
       return res.status(400).json({ error: "API key is not active" });
     }
 
+    // Get decrypted API key
+    let decryptedKey;
+    try {
+      decryptedKey = apiKey.getDecryptedKey();
+    } catch (error) {
+      return res.status(500).json({ error: "Failed to decrypt API key" });
+    }
+
     // Validate provider
     const supportedProviders = [
       "openai",
@@ -63,7 +71,7 @@ const testPrompt = async (req, res) => {
       apiKey.provider.name === "anthropic" ||
       apiKey.provider.name === "google"
     ) {
-      const openai = new OpenAIService(apiKey.key, apiKey.provider.name);
+      const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
       result = await openai.generateCompletion(
         llm_settings.model,
         processedPrompt,
@@ -116,6 +124,14 @@ const executePrompt = async (req, res) => {
         .json({ error: "No API key configured for this prompt" });
     }
 
+    // Get decrypted API key
+    let decryptedApiKey;
+    try {
+      decryptedApiKey = prompt.api_key.getDecryptedKey();
+    } catch (error) {
+      return res.status(500).json({ error: "Failed to decrypt API key" });
+    }
+
     // Verify provider is supported
     const supportedProviders = ["openai", "deepseek", "openrouter"];
     if (!supportedProviders.includes(prompt.api_key.provider.name)) {
@@ -162,7 +178,7 @@ const executePrompt = async (req, res) => {
         prompt.api_key.provider.name == "openrouter"
       ) {
         const openai = new OpenAIService(
-          prompt.api_key.key,
+          decryptedApiKey,
           prompt.api_key.provider.name
         );
         result = await openai.generateCompletion(

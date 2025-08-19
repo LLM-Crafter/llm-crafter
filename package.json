@@ -11,7 +11,10 @@
     "lint": "eslint src/",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "migrate:encrypt-api-keys": "node scripts/migrate-encrypt-api-keys.js",
+    "test:encryption": "node scripts/migrate-encrypt-api-keys.js --test-only",
+    "verify:api-keys": "node scripts/migrate-encrypt-api-keys.js --verify-only"
   },
   "keywords": [
     "llm",
@@ -22,6 +25,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-validator": "^7.2.1",
