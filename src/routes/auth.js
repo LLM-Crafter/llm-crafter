@@ -11,12 +11,13 @@ const {
   authSlowDown,
   generalLimiter,
 } = require("../middleware/rateLimiting");
+const { expressValidatorPassword } = require("../utils/passwordPolicy");
 
-// Validation middleware
+// Validation middleware with strong password policy
 const registerValidation = [
   body("email").isEmail().normalizeEmail(),
-  body("password").isLength({ min: 6 }),
-  body("name").trim().notEmpty(),
+  body("password").custom(expressValidatorPassword),
+  body("name").trim().notEmpty().isLength({ min: 2, max: 100 }),
 ];
 
 const loginValidation = [
@@ -25,11 +26,17 @@ const loginValidation = [
 ];
 
 const updateValidation = [
-  body("name").optional().trim().notEmpty(),
-  body("password").optional().isLength({ min: 6 }),
+  body("name").optional().trim().notEmpty().isLength({ min: 2, max: 100 }),
+  body("password").optional().custom(expressValidatorPassword),
 ];
 
 // Routes with rate limiting
+router.get(
+  "/password-policy",
+  generalLimiter, // Rate limit: 10 requests per second
+  authController.getPasswordPolicy
+);
+
 router.post(
   "/register",
   authLimiter, // Rate limit: 5 requests per 15 minutes

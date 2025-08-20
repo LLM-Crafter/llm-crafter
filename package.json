@@ -15,7 +15,9 @@
     "migrate:encrypt-api-keys": "node scripts/migrate-encrypt-api-keys.js",
     "test:encryption": "node scripts/migrate-encrypt-api-keys.js --test-only",
     "verify:api-keys": "node scripts/migrate-encrypt-api-keys.js --verify-only",
-    "test:rate-limiting": "node scripts/test-rate-limiting.js"
+    "test:rate-limiting": "node scripts/test-rate-limiting.js",
+    "test:password-policy": "node scripts/test-password-policy.js",
+    "test:password-api": "node scripts/test-password-api.js"
   },
   "keywords": [
     "llm",
