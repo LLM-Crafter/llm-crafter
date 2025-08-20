@@ -619,6 +619,105 @@ const getApiEndpoints = async (req, res) => {
   }
 };
 
+// ===== FAQ CONFIGURATION =====
+
+const configureFAQs = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    // Check if agent has FAQ tool
+    const hasFAQTool = agent.tools.some((tool) => tool.name === "faq");
+    if (!hasFAQTool) {
+      return res
+        .status(400)
+        .json({ error: "Agent does not have faq tool configured" });
+    }
+
+    const { faqs } = req.body;
+
+    // Validate FAQs configuration
+    if (faqs && !Array.isArray(faqs)) {
+      return res.status(400).json({
+        error: "FAQs must be an array",
+      });
+    }
+
+    if (faqs) {
+      for (let i = 0; i < faqs.length; i++) {
+        const faq = faqs[i];
+        if (!faq.question || !faq.answer) {
+          return res.status(400).json({
+            error: `FAQ at index ${i} must have both question and answer`,
+          });
+        }
+        if (
+          typeof faq.question !== "string" ||
+          typeof faq.answer !== "string"
+        ) {
+          return res.status(400).json({
+            error: `FAQ at index ${i} question and answer must be strings`,
+          });
+        }
+        if (faq.category && typeof faq.category !== "string") {
+          return res.status(400).json({
+            error: `FAQ at index ${i} category must be a string`,
+          });
+        }
+      }
+    }
+
+    await agent.configureFAQs(faqs || []);
+
+    res.json({
+      message: "FAQ configuration updated successfully",
+      faqs: faqs || [],
+      count: (faqs || []).length,
+    });
+  } catch (error) {
+    console.error("Configure FAQs error:", error);
+    res.status(500).json({ error: "Failed to configure FAQs" });
+  }
+};
+
+const getFAQs = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    const faqConfig = agent.getFAQs();
+    if (!faqConfig) {
+      return res
+        .status(404)
+        .json({ error: "Agent does not have faq tool configured" });
+    }
+
+    res.json({
+      faqs: faqConfig.faqs,
+      enable_partial_matching: faqConfig.enable_partial_matching,
+      default_threshold: faqConfig.default_threshold,
+      count: faqConfig.faqs.length,
+    });
+  } catch (error) {
+    console.error("Get FAQs error:", error);
+    res.status(500).json({ error: "Failed to get FAQs" });
+  }
+};
+
 // ===== CONVERSATION SUMMARIZATION =====
 
 const summarizeConversation = async (req, res) => {
@@ -729,6 +828,8 @@ module.exports = {
   getAgentExecution,
   configureApiEndpoints,
   getApiEndpoints,
+  configureFAQs,
+  getFAQs,
   summarizeConversation,
   getConversationSummary,
 };

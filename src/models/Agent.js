@@ -208,4 +208,35 @@ agentSchema.methods.getApiEndpoints = function () {
   };
 };
 
+// Method to configure FAQ questions and answers for faq tool
+agentSchema.methods.configureFAQs = function (faqsConfig) {
+  const faqTool = this.tools.find((tool) => tool.name === "faq");
+  if (!faqTool) {
+    throw new Error("FAQ tool not found in agent tools");
+  }
+
+  // Merge new configuration with existing parameters
+  faqTool.parameters = {
+    ...faqTool.parameters,
+    faqs: faqsConfig,
+  };
+
+  return this.save();
+};
+
+// Method to get FAQ configuration
+agentSchema.methods.getFAQs = function () {
+  const faqTool = this.tools.find((tool) => tool.name === "faq");
+  if (!faqTool) {
+    return null;
+  }
+
+  return {
+    faqs: faqTool.parameters?.faqs || [],
+    enable_partial_matching:
+      faqTool.parameters?.enable_partial_matching !== false,
+    default_threshold: faqTool.parameters?.default_threshold || 0.7,
+  };
+};
+
 module.exports = mongoose.model("Agent", agentSchema);

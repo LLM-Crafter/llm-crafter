@@ -32,6 +32,7 @@ const toolSchema = new mongoose.Schema(
         "communication",
         "utility",
         "llm",
+        "knowledge",
         "custom",
       ],
       required: true,

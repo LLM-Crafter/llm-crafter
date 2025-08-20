@@ -179,6 +179,40 @@ Parse, validate, and manipulate JSON data.
 - `query` (string, optional): JSONPath query for data extraction
 - `pretty` (boolean, optional): Pretty print JSON output
 
+### FAQ
+
+**Name:** `faq`  
+**Category:** Knowledge
+
+Answer questions using pre-configured frequently asked questions and answers.
+
+**Parameters:**
+
+- `question` (string, required): The user's question to search for in the FAQ
+- `search_threshold` (number, optional): Minimum similarity threshold for FAQ matching (0-1, default: 0.7)
+
+**Returns:**
+
+- `question`: The original user question
+- `matched_faq`: The best matching FAQ entry with question, answer, category, and confidence
+- `all_matches`: Array of all FAQ entries above the threshold (up to 5 results)
+- `success`: Boolean indicating if a match was found
+- `execution_time_ms`: Execution time in milliseconds
+
+**Configuration Required:** FAQ entries must be configured for the agent using the FAQ configuration endpoint before the tool can be used effectively.
+
+**Example Usage:**
+
+```json
+{
+  "name": "faq",
+  "parameters": {
+    "question": "How do I reset my password?",
+    "search_threshold": 0.7
+  }
+}
+```
+
 ## Tool Categories
 
 System tools are organized into categories for easier discovery:
@@ -186,6 +220,7 @@ System tools are organized into categories for easier discovery:
 - **Web**: Tools for web interactions and search
 - **Computation**: Mathematical and computational tools
 - **LLM**: Tools for interacting with language models
+- **Knowledge**: Tools for accessing and searching knowledge bases
 - **Utility**: General utility functions
 - **File System**: File and directory operations
 - **Network**: HTTP and network-related tools

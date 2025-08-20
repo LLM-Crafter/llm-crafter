@@ -295,6 +295,70 @@ const systemTools = [
     },
     is_system_tool: true,
   },
+  {
+    name: "faq",
+    display_name: "FAQ",
+    description:
+      "Answer questions using pre-configured frequently asked questions and answers",
+    category: "knowledge",
+    parameters_schema: {
+      type: "object",
+      properties: {
+        question: {
+          type: "string",
+          description: "The user's question to search for in the FAQ",
+        },
+        search_threshold: {
+          type: "number",
+          description: "Minimum similarity threshold for FAQ matching (0-1)",
+          default: 0.2,
+          minimum: 0,
+          maximum: 1,
+        },
+      },
+      required: ["question"],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: "object",
+      properties: {
+        question: { type: "string" },
+        matched_faq: {
+          type: "object",
+          properties: {
+            question: { type: "string" },
+            answer: { type: "string" },
+            category: { type: "string" },
+            confidence: { type: "number" },
+          },
+        },
+        all_matches: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question: { type: "string" },
+              answer: { type: "string" },
+              category: { type: "string" },
+              confidence: { type: "number" },
+            },
+          },
+        },
+        success: { type: "boolean" },
+        execution_time_ms: { type: "number" },
+      },
+    },
+    implementation: {
+      type: "internal",
+      handler: "faqHandler",
+      config: {
+        faqs: [],
+        enable_partial_matching: true,
+        default_threshold: 0.7,
+      },
+    },
+    is_system_tool: true,
+  },
 ];
 
 async function initializeSystemTools() {

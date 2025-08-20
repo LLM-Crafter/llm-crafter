@@ -38,6 +38,9 @@ class ToolService {
 
     // API caller tool
     this.registerToolHandler("api_caller", this.apiCallerHandler.bind(this));
+
+    // FAQ tool
+    this.registerToolHandler("faq", this.faqHandler.bind(this));
   }
 
   /**
@@ -579,6 +582,68 @@ class ToolService {
     }
   }
 
+  /**
+   * FAQ tool handler
+   */
+  async faqHandler(parameters, config) {
+    const { question, search_threshold = 0.7 } = parameters;
+
+    console.log("Executing FAQ tool with parameters:", parameters);
+
+    if (!question || typeof question !== "string") {
+      throw new Error("Question is required and must be a string");
+    }
+
+    // Get FAQ configuration from tool config
+    const faqs = config.faqs || [];
+    const enablePartialMatching = config.enable_partial_matching !== false;
+    const threshold = Math.max(0, Math.min(1, search_threshold));
+
+    if (faqs.length === 0) {
+      return {
+        question: question,
+        matched_faq: null,
+        all_matches: [],
+        success: false,
+        message: "No FAQs configured for this agent",
+        execution_time_ms: 0,
+      };
+    }
+
+    // Calculate similarity scores for all FAQs
+    const matches = faqs.map((faq) => {
+      const confidence = this.calculateTextSimilarity(
+        question.toLowerCase(),
+        faq.question.toLowerCase()
+      );
+
+      return {
+        question: faq.question,
+        answer: faq.answer,
+        category: faq.category || "general",
+        confidence: confidence,
+      };
+    });
+
+    // Sort by confidence (highest first)
+    matches.sort((a, b) => b.confidence - a.confidence);
+
+    // Filter matches above threshold
+    const validMatches = matches.filter(
+      (match) => match.confidence >= threshold
+    );
+
+    const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
+
+    return {
+      question: question,
+      matched_faq: bestMatch,
+      all_matches: validMatches.slice(0, 5), // Return top 5 matches
+      success: bestMatch !== null,
+      execution_time_ms: 0,
+    };
+  }
+
   // ===== UTILITY METHODS =====
 
   /**
@@ -830,6 +895,56 @@ Summary:`;
     }
 
     return summary;
+  }
+
+  /**
+   * Calculate text similarity using a simple algorithm
+   * Returns a value between 0 and 1 (1 being identical)
+   */
+  calculateTextSimilarity(text1, text2) {
+    // Normalize texts
+    const normalize = (text) =>
+      text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const normalizedText1 = normalize(text1);
+    const normalizedText2 = normalize(text2);
+
+    // Check for exact match
+    if (normalizedText1 === normalizedText2) {
+      return 1.0;
+    }
+
+    // Check if one text contains the other
+    if (
+      normalizedText1.includes(normalizedText2) ||
+      normalizedText2.includes(normalizedText1)
+    ) {
+      const longer = Math.max(normalizedText1.length, normalizedText2.length);
+      const shorter = Math.min(normalizedText1.length, normalizedText2.length);
+      return shorter / longer;
+    }
+
+    // Calculate Jaccard similarity based on words
+    const words1 = new Set(normalizedText1.split(" "));
+    const words2 = new Set(normalizedText2.split(" "));
+
+    const intersection = new Set([...words1].filter((x) => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+
+    if (union.size === 0) return 0;
+
+    const jaccardSimilarity = intersection.size / union.size;
+
+    // Apply length penalty for very different lengths
+    const lengthRatio =
+      Math.min(normalizedText1.length, normalizedText2.length) /
+      Math.max(normalizedText1.length, normalizedText2.length);
+
+    return jaccardSimilarity * lengthRatio;
   }
 }
 

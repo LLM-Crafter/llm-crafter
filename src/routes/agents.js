@@ -196,6 +196,40 @@ router.get(
   agentController.getApiEndpoints
 );
 
+// ===== FAQ CONFIGURATION ROUTES =====
+
+const faqValidation = [
+  body("faqs").optional().isArray().withMessage("FAQs must be an array"),
+  body("faqs.*.question")
+    .if(body("faqs").exists())
+    .notEmpty()
+    .withMessage("FAQ question is required"),
+  body("faqs.*.answer")
+    .if(body("faqs").exists())
+    .notEmpty()
+    .withMessage("FAQ answer is required"),
+  body("faqs.*.category")
+    .optional()
+    .isString()
+    .withMessage("FAQ category must be a string"),
+];
+
+router.post(
+  "/:agentId/faq-config",
+  auth,
+  orgAuth.hasRole("member"),
+  faqValidation,
+  validate,
+  agentController.configureFAQs
+);
+
+router.get(
+  "/:agentId/faq-config",
+  auth,
+  orgAuth.hasRole("viewer"),
+  agentController.getFAQs
+);
+
 // ===== CONVERSATION SUMMARIZATION ROUTES =====
 
 router.post(
