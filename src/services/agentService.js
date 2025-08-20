@@ -147,8 +147,9 @@ class AgentService {
    * Core agent reasoning engine
    */
   async executeAgentReasoning(agent, conversation, dynamicContext = {}) {
+    let decriptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
-      agent.api_key.key,
+      decriptedApiKey,
       agent.api_key.provider.name
     );
 
