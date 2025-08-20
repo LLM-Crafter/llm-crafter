@@ -5,6 +5,7 @@ const apiKeyController = require("../controllers/apiKeyController");
 const auth = require("../middleware/auth");
 const validate = require("../middleware/validate");
 const orgAuth = require("../middleware/organizationAuth");
+const { apiKeyLimiter } = require("../middleware/rateLimiting");
 
 const apiKeyValidation = [
   body("name").trim().notEmpty().withMessage("Name is required"),
@@ -14,6 +15,7 @@ const apiKeyValidation = [
 
 router.post(
   "/",
+  apiKeyLimiter, // Rate limit: 20 requests per 15 minutes (sensitive operation)
   auth,
   orgAuth.hasRole("member"),
   apiKeyValidation,
@@ -23,6 +25,7 @@ router.post(
 
 router.delete(
   "/:apiKeyId",
+  apiKeyLimiter, // Rate limit: 20 requests per 15 minutes (sensitive operation)
   auth,
   orgAuth.hasRole("admin"),
   apiKeyController.deleteApiKey

@@ -14,7 +14,8 @@
     "docs:preview": "vitepress preview docs",
     "migrate:encrypt-api-keys": "node scripts/migrate-encrypt-api-keys.js",
     "test:encryption": "node scripts/migrate-encrypt-api-keys.js --test-only",
-    "verify:api-keys": "node scripts/migrate-encrypt-api-keys.js --verify-only"
+    "verify:api-keys": "node scripts/migrate-encrypt-api-keys.js --verify-only",
+    "test:rate-limiting": "node scripts/test-rate-limiting.js"
   },
   "keywords": [
     "llm",
@@ -28,6 +29,8 @@
     "crypto-js": "^4.2.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.0.1",
+    "express-slow-down": "^3.0.0",
     "express-validator": "^7.2.1",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
@@ -38,6 +41,7 @@
     "uuid": "^11.0.5"
   },
   "devDependencies": {
+    "axios": "^1.11.0",
     "eslint": "^9.18.0",
     "jest": "^29.7.0",
     "nodemon": "^3.1.9",

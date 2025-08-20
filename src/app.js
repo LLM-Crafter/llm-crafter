@@ -11,6 +11,7 @@ validateEnvironment();
 const connectDB = require("./config/database");
 const { initializeSystemTools } = require("./config/systemTools");
 const { initializeDefaultProviders } = require("./config/defaultProviders");
+const { publicLimiter } = require("./middleware/rateLimiting");
 
 const app = express();
 const authRoutes = require("./routes/auth");
@@ -44,7 +45,7 @@ initializeSystemTools().catch(console.error);
 initializeDefaultProviders().catch(console.error);
 
 // Basic route for testing
-app.get("/health", (req, res) => {
+app.get("/health", publicLimiter, (req, res) => {
   res.json({ status: "ok", service: "llm-crafter" });
 });
 

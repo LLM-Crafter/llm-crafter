@@ -4,6 +4,11 @@ const router = express.Router();
 const toolController = require("../controllers/toolController");
 const auth = require("../middleware/auth");
 const validate = require("../middleware/validate");
+const {
+  generalLimiter,
+  proxyLimiter,
+  generalSlowDown,
+} = require("../middleware/rateLimiting");
 
 // Validation middleware
 const createToolValidation = [
@@ -79,20 +84,39 @@ const executeToolValidation = [
 // ===== PUBLIC TOOL ROUTES =====
 
 // Get all available tools
-router.get("/", toolController.getTools);
+router.get(
+  "/",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  toolController.getTools
+);
 
 // Get tool categories
-router.get("/categories", toolController.getToolCategories);
+router.get(
+  "/categories",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  toolController.getToolCategories
+);
 
 // Get specific tool
-router.get("/:toolName", toolController.getTool);
+router.get(
+  "/:toolName",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  toolController.getTool
+);
 
 // Get tool usage statistics
-router.get("/:toolName/stats", auth, toolController.getToolUsageStats);
+router.get(
+  "/:toolName/stats",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  auth,
+  toolController.getToolUsageStats
+);
 
 // Execute a tool (for testing)
 router.post(
   "/:toolName/execute",
+  proxyLimiter, // Rate limit: 60 requests per minute (tool execution)
+  generalSlowDown, // Progressive delays
   auth,
   executeToolValidation,
   validate,
@@ -104,6 +128,8 @@ router.post(
 // Create custom tool (admin only)
 router.post(
   "/",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  generalSlowDown, // Progressive delays
   auth,
   createToolValidation,
   validate,
@@ -113,6 +139,8 @@ router.post(
 // Update custom tool (admin only)
 router.put(
   "/:toolName",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  generalSlowDown, // Progressive delays
   auth,
   updateToolValidation,
   validate,
@@ -120,6 +148,11 @@ router.put(
 );
 
 // Delete custom tool (admin only)
-router.delete("/:toolName", auth, toolController.deleteTool);
+router.delete(
+  "/:toolName",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  auth,
+  toolController.deleteTool
+);
 
 module.exports = router;

@@ -753,17 +753,19 @@ Summary:`;
       if (agentApiKey && agentApiKey.key) {
         const OpenAIService = require("./openaiService");
         if (!agentApiKey.provider) agentApiKey.provider = "openai"; // Default to OpenAI if no provider specified
-        
+
         // Get decrypted API key
         let decryptedKey;
         try {
           decryptedKey = agentApiKey.getDecryptedKey();
         } catch (error) {
-          console.log("Failed to decrypt agent API key, using fallback summarization");
+          console.log(
+            "Failed to decrypt agent API key, using fallback summarization"
+          );
           // Fallback to basic summarization if decryption fails
           return this.truncateText(JSON.stringify(apiResult), maxTokens * 3);
         }
-        
+
         const openai = new OpenAIService(decryptedKey, agentApiKey.provider);
 
         const response = await openai.generateCompletion(model, prompt, {

@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require("../middleware/auth");
 const orgAuth = require("../middleware/organizationAuth");
 const statisticsController = require("../controllers/statisticsController");
+const { generalLimiter } = require("../middleware/rateLimiting");
 
 /**
  * @route GET /api/v1/organizations/:orgId/statistics/dashboard
@@ -12,6 +13,7 @@ const statisticsController = require("../controllers/statisticsController");
  */
 router.get(
   "/:orgId/statistics/dashboard",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
   auth,
   orgAuth.isMember,
   statisticsController.getDashboardStats
@@ -25,6 +27,7 @@ router.get(
  */
 router.get(
   "/:orgId/statistics/agents/:agentId",
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
   auth,
   orgAuth.isMember,
   statisticsController.getAgentStats
