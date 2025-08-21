@@ -5,6 +5,195 @@ const http = require("http");
 const { URL } = require("url");
 const ApiKey = require("../models/ApiKey");
 
+// Language-specific abbreviation dictionaries for multi-language FAQ support
+const LANGUAGE_ABBREVIATIONS = {
+  en: {
+    // Common abbreviations
+    u: "you",
+    ur: "your",
+    youre: "you are",
+    cant: "cannot",
+    wont: "will not",
+    dont: "do not",
+    isnt: "is not",
+    arent: "are not",
+    wasnt: "was not",
+    werent: "were not",
+    hasnt: "has not",
+    havent: "have not",
+    hadnt: "had not",
+    shouldnt: "should not",
+    wouldnt: "would not",
+    couldnt: "could not",
+    mustnt: "must not",
+    neednt: "need not",
+    r: "are",
+    // Common question words
+    whats: "what is",
+    wheres: "where is",
+    whos: "who is",
+    hows: "how is",
+    whens: "when is",
+    whys: "why is",
+    thats: "that is",
+    theres: "there is",
+    heres: "here is",
+    // Other common abbreviations
+    im: "i am",
+    ive: "i have",
+    ill: "i will",
+    id: "i would",
+    youll: "you will",
+    youd: "you would",
+    youve: "you have",
+    theyll: "they will",
+    theyd: "they would",
+    theyve: "they have",
+    were: "we are",
+    weve: "we have",
+    well: "we will",
+    wed: "we would",
+    its: "it is",
+    itll: "it will",
+    itd: "it would",
+    // Technical abbreviations
+    api: "application programming interface",
+    faq: "frequently asked questions",
+    url: "uniform resource locator",
+    ui: "user interface",
+    ux: "user experience",
+    db: "database",
+    pw: "password",
+    pwd: "password",
+    pass: "password",
+    login: "log in",
+    signup: "sign up",
+    signin: "sign in",
+    logout: "log out",
+    signout: "sign out",
+  },
+  es: {
+    // Spanish abbreviations
+    q: "que",
+    xq: "por que",
+    pq: "por que",
+    tb: "tambien",
+    tbn: "tambien",
+    tmb: "tambien",
+    x: "por",
+    xfa: "por favor",
+    pfa: "por favor",
+    qtal: "que tal",
+    cmo: "como",
+    dnd: "donde",
+    qnd: "cuando",
+    qn: "quien",
+    salu2: "saludos",
+    bss: "besos",
+    mxo: "mucho",
+    mxa: "mucha",
+    ntp: "no te preocupes",
+    sldos: "saludos",
+    tkm: "te quiero mucho",
+  },
+  pt: {
+    // Portuguese abbreviations
+    vc: "voce",
+    vcs: "voces",
+    pq: "por que",
+    pra: "para",
+    tb: "tambem",
+    tbm: "tambem",
+    qnd: "quando",
+    qm: "quem",
+    eh: "e",
+    nd: "nada",
+    td: "tudo",
+    bjs: "beijos",
+    bjss: "beijos",
+    flw: "falou",
+    vlw: "valeu",
+    cmg: "comigo",
+    ctg: "contigo",
+    dps: "depois",
+    hj: "hoje",
+    ontem: "ontem",
+    amanha: "amanha",
+    sla: "sei la",
+    rsrs: "risos",
+    kk: "risos",
+  },
+  fr: {
+    // French abbreviations
+    pr: "pour",
+    qd: "quand",
+    ds: "dans",
+    vs: "vous",
+    tt: "tout",
+    tte: "toute",
+    ts: "tous",
+    ttes: "toutes",
+    bcp: "beaucoup",
+    bjr: "bonjour",
+    bsr: "bonsoir",
+    slt: "salut",
+    mtn: "maintenant",
+    qqs: "quelques",
+    qqn: "quelquun",
+    qq: "quelque",
+    qc: "quelque chose",
+    pk: "pourquoi",
+    pq: "pourquoi",
+    pcq: "parce que",
+    dsl: "desole",
+    mdr: "mort de rire",
+    lol: "mort de rire",
+    cc: "coucou",
+  },
+  de: {
+    // German abbreviations
+    u: "und",
+    od: "oder",
+    z: "zu",
+    v: "von",
+    m: "mit",
+    n: "ein",
+    ne: "eine",
+    aufm: "auf dem",
+    gehts: "geht es",
+    haste: "hast du",
+    biste: "bist du",
+    kannste: "kannst du",
+    willste: "willst du",
+    machste: "machst du",
+    isses: "ist es",
+    hats: "hat es",
+    wirds: "wird es",
+    wenns: "wenn es",
+    dass: "dass",
+    mfg: "mit freundlichen gruessen",
+    lg: "liebe gruesse",
+    vg: "viele gruesse",
+  },
+  it: {
+    // Italian abbreviations
+    x: "per",
+    xche: "perche",
+    piu: "piu",
+    nn: "non",
+    cmq: "comunque",
+    qnd: "quando",
+    qnt: "quanto",
+    qst: "questo",
+    qlc: "qualche",
+    qlcs: "qualcosa",
+    qlcn: "qualcuno",
+    tt: "tutto",
+    tvb: "ti voglio bene",
+    tvtb: "ti voglio tanto bene",
+  },
+};
+
 class ToolService {
   constructor() {
     this.toolHandlers = new Map();
@@ -138,63 +327,6 @@ class ToolService {
     } catch (error) {
       const executionTime = Date.now() - startTime;
       console.error(`Tool '${toolName}' execution failed:`, error.message);
-
-      // Try to record failed usage
-      try {
-        const tool = await Tool.findOne({ name: toolName });
-        if (tool) {
-          await tool.recordUsage(false, executionTime);
-        }
-      } catch (recordError) {
-        // Ignore recording errors
-      }
-
-      return {
-        success: false,
-        error: error.message,
-        execution_time_ms: executionTime,
-        tool_name: toolName,
-      };
-    }
-  }
-
-  /**
-   * Execute a tool by name with parameters (legacy method)
-   */
-  async executeTool_old(toolName, parameters = {}) {
-    const startTime = Date.now();
-
-    try {
-      // Get tool definition
-      const tool = await Tool.findOne({ name: toolName, is_active: true });
-      if (!tool) {
-        throw new Error(`Tool '${toolName}' not found or not active`);
-      }
-
-      // Validate parameters
-      tool.validateParameters(parameters);
-
-      // Get tool handler
-      const handler = this.toolHandlers.get(toolName);
-      if (!handler) {
-        throw new Error(`No handler registered for tool '${toolName}'`);
-      }
-
-      // Execute tool
-      const result = await handler(parameters, tool.implementation.config);
-      const executionTime = Date.now() - startTime;
-
-      // Record usage stats
-      await tool.recordUsage(true, executionTime);
-
-      return {
-        success: true,
-        result: result,
-        execution_time_ms: executionTime,
-        tool_name: toolName,
-      };
-    } catch (error) {
-      const executionTime = Date.now() - startTime;
 
       // Try to record failed usage
       try {
@@ -420,532 +552,956 @@ class ToolService {
    */
   async apiCallerHandler(parameters, config) {
     const {
-      endpoint_name,
+      url,
       method = "GET",
-      path_params = {},
-      query_params = {},
-      body_data = null,
       headers = {},
+      body = null,
+      timeout = 30000,
     } = parameters;
 
-    console.log("Executing API caller tool with parameters:", parameters);
-
-    if (!endpoint_name) {
-      console.log("API caller tool requires an endpoint name");
-      throw new Error("Endpoint name is required");
-    }
-
-    // Get endpoint configuration from tool config
-    const endpoints = config.endpoints || {};
-    const endpointConfig = endpoints[endpoint_name];
-
-    if (!endpointConfig) {
-      console.log(`Endpoint '${endpoint_name}' not configured for this tool`);
-      throw new Error(
-        `Endpoint '${endpoint_name}' not configured for this tool`
-      );
-    }
-
-    // Validate method is allowed for this endpoint
-    const allowedMethods = endpointConfig.methods || ["GET"];
-    if (!allowedMethods.includes(method.toUpperCase())) {
-      throw new Error(
-        `Method '${method}' not allowed for endpoint '${endpoint_name}'. Allowed: ${allowedMethods.join(", ")}`
-      );
-    }
-
-    // Build URL with path parameters
-    let url = endpointConfig.base_url + endpointConfig.path;
-
-    // Replace path parameters in URL
-    for (const [key, value] of Object.entries(path_params)) {
-      url = url.replace(`{${key}}`, encodeURIComponent(value));
-    }
-
-    // Check if there are unresolved path parameters
-    const unresolvedParams = url.match(/\{[^}]+\}/g);
-    if (unresolvedParams) {
-      throw new Error(
-        `Missing required path parameters: ${unresolvedParams.join(", ")}`
-      );
-    }
-
-    // Add query parameters
-    const finalQueryParams = { ...query_params };
-
-    // Add API key to query params if specified
-    const auth = config.authentication || {};
-    if (
-      auth.type === "api_key" &&
-      auth.api_key &&
-      auth.api_key_header === "appid"
-    ) {
-      // Special case for OpenWeather API - appid goes in query params
-      finalQueryParams.appid = auth.api_key;
-    }
-
-    if (Object.keys(finalQueryParams).length > 0) {
-      const searchParams = new URLSearchParams();
-      for (const [key, value] of Object.entries(finalQueryParams)) {
-        searchParams.append(key, value);
-      }
-      url += "?" + searchParams.toString();
-    }
-
-    // Build headers with authentication
-    const requestHeaders = { ...headers };
-
-    // Add authentication based on config (for header-based auth)
-    if (auth.type === "bearer_token" && auth.token) {
-      requestHeaders["Authorization"] = `Bearer ${auth.token}`;
-    } else if (
-      auth.type === "api_key" &&
-      auth.api_key &&
-      auth.api_key_header !== "appid"
-    ) {
-      // Only add to headers if not appid (which goes in query params)
-      if (auth.api_key_header) {
-        requestHeaders[auth.api_key_header] = auth.api_key;
-      } else {
-        requestHeaders["X-API-Key"] = auth.api_key;
-      }
-    } else if (auth.type === "cookie" && auth.cookie) {
-      requestHeaders["Cookie"] = auth.cookie;
-    }
-
-    // Set content type for POST/PUT requests with body
-    if (body_data && ["POST", "PUT", "PATCH"].includes(method.toUpperCase())) {
-      if (!requestHeaders["Content-Type"]) {
-        requestHeaders["Content-Type"] = "application/json";
-      }
+    if (!url) {
+      throw new Error("URL parameter is required for API caller");
     }
 
     try {
-      const startTime = Date.now();
-
-      // Parse URL to determine which module to use
-      const urlObj = new URL(url);
-      const isHttps = urlObj.protocol === "https:";
+      // Parse URL
+      const parsedUrl = new URL(url);
+      const isHttps = parsedUrl.protocol === "https:";
       const httpModule = isHttps ? https : http;
 
       // Prepare request options
-      const requestOptions = {
-        hostname: urlObj.hostname,
-        port: urlObj.port || (isHttps ? 443 : 80),
-        path: urlObj.pathname + urlObj.search,
+      const options = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (isHttps ? 443 : 80),
+        path: parsedUrl.pathname + parsedUrl.search,
         method: method.toUpperCase(),
-        headers: requestHeaders,
-        timeout: config.timeout || 30000,
+        headers: {
+          "Content-Type": "application/json",
+          ...headers,
+        },
+        timeout: timeout,
       };
 
-      // Make the HTTP request using Promise wrapper
-      const response = await this.makeHttpRequest(
-        httpModule,
-        requestOptions,
-        body_data
-      );
-      const executionTime = Date.now() - startTime;
-
-      // Parse response based on content type
-      let responseData;
-      const contentType = response.headers["content-type"] || "";
-
-      if (contentType.includes("application/json")) {
-        try {
-          responseData = JSON.parse(response.body);
-        } catch (e) {
-          responseData = response.body;
-        }
-      } else if (contentType.includes("text/")) {
-        responseData = response.body;
-      } else {
-        // For binary data, just return basic info
-        responseData = {
-          type: "binary",
-          size: response.headers["content-length"] || "unknown",
-        };
+      // Add body if present
+      let requestBody = null;
+      if (
+        body &&
+        (method.toUpperCase() === "POST" || method.toUpperCase() === "PUT")
+      ) {
+        requestBody = typeof body === "string" ? body : JSON.stringify(body);
+        options.headers["Content-Length"] = Buffer.byteLength(requestBody);
       }
 
-      return {
-        endpoint_name: endpoint_name,
-        url: url,
-        method: method.toUpperCase(),
-        status_code: response.statusCode,
-        status_text: response.statusMessage,
-        success: response.statusCode >= 200 && response.statusCode < 300,
-        headers: response.headers,
-        data: responseData,
-        execution_time_ms: executionTime,
-      };
+      return new Promise((resolve, reject) => {
+        const req = httpModule.request(options, (res) => {
+          let data = "";
+          res.on("data", (chunk) => {
+            data += chunk;
+          });
+
+          res.on("end", () => {
+            try {
+              const result = {
+                status: res.statusCode,
+                headers: res.headers,
+                data: data,
+                success: res.statusCode >= 200 && res.statusCode < 300,
+              };
+
+              // Try to parse JSON response
+              try {
+                result.json = JSON.parse(data);
+              } catch (parseError) {
+                // Not JSON, keep as string
+              }
+
+              resolve(result);
+            } catch (error) {
+              reject(new Error(`Response processing error: ${error.message}`));
+            }
+          });
+        });
+
+        req.on("timeout", () => {
+          req.destroy();
+          reject(new Error("Request timeout"));
+        });
+
+        req.on("error", (error) => {
+          reject(new Error(`Request error: ${error.message}`));
+        });
+
+        // Send request body if present
+        if (requestBody) {
+          req.write(requestBody);
+        }
+
+        req.end();
+      });
     } catch (error) {
       throw new Error(`API call failed: ${error.message}`);
     }
   }
 
   /**
-   * FAQ tool handler
+   * FAQ tool handler using semantic similarity with OpenAI embeddings
    */
   async faqHandler(parameters, config) {
-    const { question, search_threshold = 0.7 } = parameters;
+    console.log("FAQ Handler called with parameters:", parameters);
+    console.log("FAQ Handler config:", config);
 
-    console.log("Executing FAQ tool with parameters:", parameters);
+    const { question, language = "auto" } = parameters;
+    const startTime = Date.now();
 
-    if (!question || typeof question !== "string") {
-      throw new Error("Question is required and must be a string");
+    if (!question) {
+      throw new Error("Question parameter is required for FAQ search");
     }
 
-    // Get FAQ configuration from tool config
+    // Get FAQ data from config
     const faqs = config.faqs || [];
-    const enablePartialMatching = config.enable_partial_matching !== false;
-    const threshold = Math.max(0, Math.min(1, search_threshold));
-
     if (faqs.length === 0) {
       return {
         question: question,
         matched_faq: null,
-        all_matches: [],
         success: false,
-        message: "No FAQs configured for this agent",
-        execution_time_ms: 0,
+        error: "No FAQ data configured",
+        execution_time_ms: Date.now() - startTime,
       };
     }
 
-    // Calculate similarity scores for all FAQs
-    const matches = faqs.map((faq) => {
-      const confidence = this.calculateTextSimilarity(
-        question.toLowerCase(),
-        faq.question.toLowerCase()
+    console.log(`FAQ handler processing question: "${question}"`);
+    console.log(`Available FAQs: ${faqs.length}`);
+
+    try {
+      // Use hybrid matching system for better accuracy
+      const result = await this.calculateHybridFAQMatching(
+        question,
+        faqs,
+        config,
+        language
       );
 
+      console.log("FAQ matching result:", result);
+      return result;
+    } catch (error) {
+      console.error("FAQ handler error:", error);
+
+      // Fallback to enhanced text matching if semantic matching fails
+      console.log("Attempting fallback to enhanced text matching...");
+
+      const detectedLanguage =
+        language === "auto" ? this.detectLanguage(question) : language;
+      const threshold = config.threshold || 0.3;
+
+      const matches = faqs.map((faq) => {
+        const confidence = this.calculateEnhancedTextSimilarity(
+          question,
+          faq.question,
+          detectedLanguage
+        );
+        return {
+          question: faq.question,
+          answer: faq.answer,
+          category: faq.category || "general",
+          confidence: confidence,
+          method: "enhanced_text",
+        };
+      });
+
+      matches.sort((a, b) => b.confidence - a.confidence);
+      const validMatches = this.filterRelevantMatches(matches, threshold);
+      const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
+
       return {
-        question: faq.question,
-        answer: faq.answer,
-        category: faq.category || "general",
-        confidence: confidence,
+        question: question,
+        detected_language: detectedLanguage,
+        matched_faq: bestMatch,
+        all_matches: validMatches.slice(0, 5),
+        success: bestMatch !== null,
+        execution_time_ms: Date.now() - startTime,
+        fallback_used: true,
+        matching_method: "enhanced_text",
       };
-    });
-
-    // Sort by confidence (highest first)
-    matches.sort((a, b) => b.confidence - a.confidence);
-
-    // Filter matches above threshold
-    const validMatches = matches.filter(
-      (match) => match.confidence >= threshold
-    );
-
-    const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
-
-    return {
-      question: question,
-      matched_faq: bestMatch,
-      all_matches: validMatches.slice(0, 5), // Return top 5 matches
-      success: bestMatch !== null,
-      execution_time_ms: 0,
-    };
+    }
   }
 
-  // ===== UTILITY METHODS =====
+  /**
+   * Hybrid FAQ matching system combining multiple approaches for better accuracy
+   */
+  async calculateHybridFAQMatching(question, faqs, config, language = "en") {
+    const startTime = Date.now();
+    const detectedLanguage =
+      language === "auto" ? this.detectLanguage(question) : language;
+    const threshold = config.threshold || 0.3;
+
+    console.log(
+      `Hybrid FAQ matching - Language: ${detectedLanguage}, Threshold: ${threshold}`
+    );
+
+    try {
+      // First try semantic similarity if API key is available
+      if (config._agent_api_key) {
+        console.log("Attempting semantic similarity matching...");
+        const semanticResult = await this.calculateSemanticSimilarity(
+          question,
+          faqs,
+          config
+        );
+
+        if (
+          semanticResult &&
+          semanticResult.matches &&
+          semanticResult.matches.length > 0
+        ) {
+          console.log(
+            `Semantic similarity found ${semanticResult.matches.length} matches`
+          );
+
+          // Filter matches by threshold and relevance
+          const validMatches = this.filterRelevantMatches(
+            semanticResult.matches,
+            threshold
+          );
+          console.log(`After filtering: ${validMatches.length} valid matches`);
+
+          if (validMatches.length > 0) {
+            return {
+              question: question,
+              detected_language: detectedLanguage,
+              matched_faq: validMatches[0],
+              all_matches: validMatches.slice(0, 5),
+              success: true,
+              execution_time_ms: Date.now() - startTime,
+              matching_method: "semantic",
+              debug: {
+                total_matches: semanticResult.matches.length,
+                matches_after_filtering: validMatches.length,
+                threshold_used: threshold,
+              },
+            };
+          }
+        }
+      }
+
+      // Fallback to enhanced text similarity
+      console.log("Falling back to enhanced text similarity...");
+      const matches = faqs.map((faq) => {
+        const confidence = this.calculateEnhancedTextSimilarity(
+          question,
+          faq.question,
+          detectedLanguage
+        );
+        return {
+          question: faq.question,
+          answer: faq.answer,
+          category: faq.category || "general",
+          confidence: confidence,
+          method: "enhanced_text",
+        };
+      });
+
+      matches.sort((a, b) => b.confidence - a.confidence);
+      const validMatches = this.filterRelevantMatches(matches, threshold);
+      const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
+
+      return {
+        question: question,
+        detected_language: detectedLanguage,
+        matched_faq: bestMatch,
+        all_matches: validMatches.slice(0, 5),
+        success: bestMatch !== null,
+        execution_time_ms: Date.now() - startTime,
+        fallback_used: true,
+        matching_method: "enhanced_text",
+        debug: {
+          total_matches: matches.length,
+          matches_after_filtering: validMatches.length,
+          threshold_used: threshold,
+        },
+      };
+    } catch (error) {
+      console.error(
+        "FAQ hybrid matching failed, falling back to basic similarity:",
+        error.message
+      );
+
+      // Final fallback to basic text similarity
+      const matches = faqs.map((faq) => {
+        const confidence = this.calculateBasicTextSimilarity(
+          question,
+          faq.question
+        );
+        return {
+          question: faq.question,
+          answer: faq.answer,
+          category: faq.category || "general",
+          confidence: confidence,
+          method: "basic_text",
+        };
+      });
+
+      matches.sort((a, b) => b.confidence - a.confidence);
+      const validMatches = this.filterRelevantMatches(matches, threshold);
+      const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
+
+      return {
+        question: question,
+        detected_language: detectedLanguage,
+        matched_faq: bestMatch,
+        all_matches: validMatches.slice(0, 5),
+        success: bestMatch !== null,
+        execution_time_ms: Date.now() - startTime,
+        fallback_used: true,
+        matching_method: "basic_text",
+        error: error.message,
+      };
+    }
+  }
 
   /**
-   * Safe expression evaluation for calculator
+   * Calculate semantic similarity using OpenAI embeddings
    */
-  evaluateExpression(expression) {
-    // Remove any non-math characters for safety
-    const safeExpression = expression.replace(/[^0-9+\-*/().\s]/g, "");
+  async calculateSemanticSimilarity(question, faqs, config) {
+    console.log("Starting semantic similarity calculation...");
+    console.log(`Question: "${question}"`);
+    console.log(`Question length: ${question.length}`);
 
-    // Basic validation
-    if (!safeExpression || safeExpression.trim() === "") {
-      throw new Error("Invalid expression");
+    if (!config._agent_api_key) {
+      console.log("No agent API key available for semantic similarity");
+      return null;
     }
 
-    // Use Function constructor for safe evaluation (still be careful in production)
     try {
-      return Function('"use strict"; return (' + safeExpression + ")")();
+      // Create OpenAI service instance with agent's API key
+      console.log("Creating OpenAI service instance...");
+      let openaiService;
+
+      if (
+        typeof config._agent_api_key === "object" &&
+        config._agent_api_key.getDecryptedKey
+      ) {
+        // It's an API key object, decrypt it
+        const decryptedKey = config._agent_api_key.getDecryptedKey();
+        console.log(
+          `Decrypted API key length: ${decryptedKey ? decryptedKey.length : "null"}`
+        );
+        openaiService = new OpenAIService(decryptedKey);
+      } else if (typeof config._agent_api_key === "string") {
+        // It's already a string
+        console.log(
+          `API key is string, length: ${config._agent_api_key.length}`
+        );
+        openaiService = new OpenAIService(config._agent_api_key);
+      } else {
+        console.error("Invalid API key format:", typeof config._agent_api_key);
+        return null;
+      }
+
+      // Get embedding for the question
+      console.log("Getting embedding for question...");
+      const questionEmbedding = await this.getTextEmbedding(
+        question,
+        openaiService
+      );
+      if (!questionEmbedding) {
+        console.error("Failed to get question embedding");
+        return null;
+      }
+
+      console.log(`Question embedding dimensions: ${questionEmbedding.length}`);
+
+      // Get embeddings for all FAQ questions and calculate similarities
+      console.log(`Getting embeddings for ${faqs.length} FAQ entries...`);
+      const matches = await Promise.all(
+        faqs.map(async (faq, index) => {
+          try {
+            console.log(`Processing FAQ ${index + 1}: "${faq.question}"`);
+            const faqEmbedding = await this.getTextEmbedding(
+              faq.question,
+              openaiService
+            );
+            if (!faqEmbedding) {
+              console.log(`Failed to get embedding for FAQ: "${faq.question}"`);
+              return null;
+            }
+
+            const similarity = this.cosineSimilarity(
+              questionEmbedding,
+              faqEmbedding
+            );
+            console.log(
+              `Similarity for "${faq.question}": ${similarity.toFixed(3)}`
+            );
+
+            return {
+              question: faq.question,
+              answer: faq.answer,
+              category: faq.category || "general",
+              confidence: similarity,
+              method: "semantic",
+            };
+          } catch (error) {
+            console.error(
+              `Error processing FAQ "${faq.question}":`,
+              error.message
+            );
+            return null;
+          }
+        })
+      );
+
+      // Filter out null results and sort by confidence
+      const validMatches = matches.filter((match) => match !== null);
+      validMatches.sort((a, b) => b.confidence - a.confidence);
+
+      console.log(
+        `Semantic similarity complete. Found ${validMatches.length} valid matches out of ${faqs.length} FAQs`
+      );
+      return { matches: validMatches };
+    } catch (error) {
+      console.error("Semantic similarity calculation failed:", error.message);
+      console.error("Error stack:", error.stack);
+      return null;
+    }
+  }
+
+  /**
+   * Get text embedding using OpenAI
+   */
+  async getTextEmbedding(text, openaiService) {
+    try {
+      // Validate and clean the input text
+      if (!text || typeof text !== "string") {
+        console.error("Invalid text input for embedding:", text);
+        return null;
+      }
+
+      const cleanText = text.trim();
+      if (cleanText.length === 0) {
+        console.error("Empty text after cleaning:", text);
+        return null;
+      }
+
+      console.log(
+        `Getting embedding for text: "${cleanText}" (length: ${cleanText.length})`
+      );
+
+      // Call the OpenAI service with proper parameter format
+      const response = await openaiService.createEmbedding({
+        input: cleanText,
+        model: "text-embedding-3-small",
+      });
+
+      if (
+        !response ||
+        !response.data ||
+        !response.data[0] ||
+        !response.data[0].embedding
+      ) {
+        console.error("Invalid embedding response structure:", response);
+        return null;
+      }
+
+      console.log(
+        `Successfully got embedding with ${response.data[0].embedding.length} dimensions`
+      );
+      return response.data[0].embedding;
+    } catch (error) {
+      console.error("Failed to get text embedding:", error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Filter matches based on relevance and threshold
+   */
+  filterRelevantMatches(matches, threshold = 0.5) {
+    console.log(`Filtering matches with threshold: ${threshold}`);
+    console.log(`Input matches: ${matches.length}`);
+
+    if (matches.length === 0) {
+      console.log("No matches to filter");
+      return [];
+    }
+
+    // Sort by confidence
+    matches.sort((a, b) => b.confidence - a.confidence);
+
+    // Log all match scores for debugging
+    matches.forEach((match, index) => {
+      console.log(
+        `Match ${index + 1}: confidence=${match.confidence.toFixed(3)}, question="${match.question}"`
+      );
+    });
+
+    // Apply threshold filter
+    const thresholdFiltered = matches.filter(
+      (match) => match.confidence >= threshold
+    );
+    console.log(
+      `After threshold filter (>= ${threshold}): ${thresholdFiltered.length} matches`
+    );
+
+    if (thresholdFiltered.length === 0) {
+      console.log("No matches met the threshold requirement");
+      return [];
+    }
+
+    // Apply relevance filter - ensure the best match is significantly better than noise
+    const bestScore = thresholdFiltered[0].confidence;
+
+    // Dynamic minimum relevant score based on match method
+    let minRelevantScore;
+    if (thresholdFiltered[0].method === "semantic") {
+      // For semantic matching, use a higher relative threshold
+      minRelevantScore = Math.max(threshold, bestScore * 0.8);
+    } else {
+      // For text matching, be more lenient but still filter noise
+      minRelevantScore = Math.max(threshold, bestScore * 0.7);
+    }
+
+    // Additional quality check: if the best score is very low, increase the relative threshold
+    if (bestScore < 0.5) {
+      minRelevantScore = Math.max(minRelevantScore, bestScore * 0.85);
+    }
+
+    const relevantMatches = thresholdFiltered.filter(
+      (match) => match.confidence >= minRelevantScore
+    );
+    console.log(
+      `After relevance filter (>= ${minRelevantScore.toFixed(3)}): ${relevantMatches.length} matches`
+    );
+
+    // Final sanity check: if we have multiple matches with very similar scores,
+    // only keep the top ones to avoid confusion
+    if (relevantMatches.length > 3) {
+      const scoreGap =
+        relevantMatches[0].confidence - relevantMatches[2].confidence;
+      if (scoreGap < 0.1) {
+        // Scores are too close, only keep top 3
+        console.log("Scores too close, limiting to top 3 matches");
+        return relevantMatches.slice(0, 3);
+      }
+    }
+
+    return relevantMatches;
+  }
+
+  /**
+   * Calculate enhanced text similarity with multi-language support
+   */
+  calculateEnhancedTextSimilarity(text1, text2, language = "en") {
+    // Normalize and expand abbreviations
+    const normalized1 = this.normalizeText(text1, language);
+    const normalized2 = this.normalizeText(text2, language);
+
+    // Check for exact word matches that indicate opposite meanings
+    const negationPenalty = this.calculateNegationPenalty(
+      normalized1,
+      normalized2
+    );
+
+    // Calculate multiple similarity metrics
+    const jaccardScore = this.jaccardSimilarity(normalized1, normalized2);
+    const levenshteinScore = this.normalizedLevenshtein(
+      normalized1,
+      normalized2
+    );
+    const wordOverlapScore = this.wordOverlapSimilarity(
+      normalized1,
+      normalized2
+    );
+    const ngramScore = this.ngramSimilarity(normalized1, normalized2, 2);
+
+    // Semantic context bonus for related concepts
+    const contextBonus = this.calculateContextBonus(normalized1, normalized2);
+
+    // Weighted combination of metrics
+    const weights = {
+      jaccard: 0.3,
+      levenshtein: 0.2,
+      wordOverlap: 0.3,
+      ngram: 0.2,
+    };
+
+    const combinedScore =
+      jaccardScore * weights.jaccard +
+      levenshteinScore * weights.levenshtein +
+      wordOverlapScore * weights.wordOverlap +
+      ngramScore * weights.ngram;
+
+    // Apply negation penalty and context bonus
+    const finalScore =
+      Math.max(0, combinedScore - negationPenalty) + contextBonus;
+
+    return Math.min(1, Math.max(0, finalScore));
+  }
+
+  /**
+   * Calculate basic text similarity
+   */
+  calculateBasicTextSimilarity(text1, text2) {
+    const normalized1 = text1.toLowerCase().trim();
+    const normalized2 = text2.toLowerCase().trim();
+
+    if (normalized1 === normalized2) return 1.0;
+
+    return this.jaccardSimilarity(normalized1, normalized2);
+  }
+
+  /**
+   * Normalize text for better matching
+   */
+  normalizeText(text, language = "en") {
+    let normalized = text.toLowerCase().trim();
+
+    // Remove extra whitespace
+    normalized = normalized.replace(/\s+/g, " ");
+
+    // Remove punctuation but keep apostrophes for contractions
+    normalized = normalized.replace(/[^\w\s']/g, "");
+
+    // Expand abbreviations based on language
+    normalized = this.expandAbbreviations(normalized, language);
+
+    return normalized;
+  }
+
+  /**
+   * Expand abbreviations based on language
+   */
+  expandAbbreviations(text, language = "en") {
+    const abbreviations =
+      LANGUAGE_ABBREVIATIONS[language] || LANGUAGE_ABBREVIATIONS.en;
+    const words = text.split(/\s+/);
+
+    const expanded = words.map((word) => {
+      const cleanWord = word.replace(/[^\w]/g, "");
+      return abbreviations[cleanWord] || word;
+    });
+
+    return expanded.join(" ");
+  }
+
+  /**
+   * Detect language of text (simple heuristic)
+   */
+  detectLanguage(text) {
+    const normalized = text.toLowerCase();
+
+    // Simple language detection based on common words
+    const languagePatterns = {
+      es: /\b(que|como|donde|cuando|por|para|con|una|este|esta|muy|mas|todo|hacer|tiempo|año|si|no|hola|gracias)\b/g,
+      pt: /\b(que|como|onde|quando|por|para|com|uma|este|esta|muito|mais|todo|fazer|tempo|ano|sim|nao|ola|obrigado)\b/g,
+      fr: /\b(que|comment|ou|quand|pour|avec|une|cette|tres|plus|tout|faire|temps|annee|oui|non|bonjour|merci)\b/g,
+      de: /\b(was|wie|wo|wann|fur|mit|eine|diese|sehr|mehr|alle|machen|zeit|jahr|ja|nein|hallo|danke)\b/g,
+      it: /\b(che|come|dove|quando|per|con|una|questa|molto|piu|tutto|fare|tempo|anno|si|no|ciao|grazie)\b/g,
+    };
+
+    let maxMatches = 0;
+    let detectedLang = "en";
+
+    for (const [lang, pattern] of Object.entries(languagePatterns)) {
+      const matches = (normalized.match(pattern) || []).length;
+      if (matches > maxMatches) {
+        maxMatches = matches;
+        detectedLang = lang;
+      }
+    }
+
+    return detectedLang;
+  }
+
+  /**
+   * Calculate Jaccard similarity
+   */
+  jaccardSimilarity(text1, text2) {
+    const set1 = new Set(text1.split(/\s+/));
+    const set2 = new Set(text2.split(/\s+/));
+
+    const intersection = new Set([...set1].filter((x) => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+
+    return intersection.size / union.size;
+  }
+
+  /**
+   * Calculate normalized Levenshtein distance
+   */
+  normalizedLevenshtein(text1, text2) {
+    const distance = this.levenshteinDistance(text1, text2);
+    const maxLength = Math.max(text1.length, text2.length);
+    return maxLength > 0 ? 1 - distance / maxLength : 1;
+  }
+
+  /**
+   * Calculate Levenshtein distance
+   */
+  levenshteinDistance(str1, str2) {
+    const matrix = Array(str2.length + 1)
+      .fill(null)
+      .map(() => Array(str1.length + 1).fill(null));
+
+    for (let i = 0; i <= str1.length; i++) {
+      matrix[0][i] = i;
+    }
+
+    for (let j = 0; j <= str2.length; j++) {
+      matrix[j][0] = j;
+    }
+
+    for (let j = 1; j <= str2.length; j++) {
+      for (let i = 1; i <= str1.length; i++) {
+        const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+        matrix[j][i] = Math.min(
+          matrix[j][i - 1] + 1,
+          matrix[j - 1][i] + 1,
+          matrix[j - 1][i - 1] + indicator
+        );
+      }
+    }
+
+    return matrix[str2.length][str1.length];
+  }
+
+  /**
+   * Calculate word overlap similarity
+   */
+  wordOverlapSimilarity(text1, text2) {
+    const words1 = text1.split(/\s+/);
+    const words2 = text2.split(/\s+/);
+
+    const commonWords = words1.filter((word) => words2.includes(word));
+    const totalWords = Math.max(words1.length, words2.length);
+
+    return totalWords > 0 ? commonWords.length / totalWords : 0;
+  }
+
+  /**
+   * Calculate n-gram similarity
+   */
+  ngramSimilarity(text1, text2, n = 2) {
+    const ngrams1 = this.getNgrams(text1, n);
+    const ngrams2 = this.getNgrams(text2, n);
+
+    const set1 = new Set(ngrams1);
+    const set2 = new Set(ngrams2);
+
+    const intersection = new Set([...set1].filter((x) => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+
+    return union.size > 0 ? intersection.size / union.size : 0;
+  }
+
+  /**
+   * Get n-grams from text
+   */
+  getNgrams(text, n) {
+    const ngrams = [];
+    for (let i = 0; i <= text.length - n; i++) {
+      ngrams.push(text.substring(i, i + n));
+    }
+    return ngrams;
+  }
+
+  /**
+   * Safely evaluate mathematical expressions
+   */
+  evaluateExpression(expression) {
+    // Basic safety check - only allow numbers, operators, and whitespace
+    if (!/^[0-9+\-*/.() ]+$/.test(expression)) {
+      throw new Error("Invalid characters in expression");
+    }
+
+    try {
+      // Use Function constructor for safer evaluation than eval
+      return Function('"use strict"; return (' + expression + ")")();
     } catch (error) {
       throw new Error("Invalid mathematical expression");
     }
   }
 
   /**
-   * Make HTTP request using Node.js built-in modules
-   */
-  makeHttpRequest(httpModule, options, body) {
-    return new Promise((resolve, reject) => {
-      const req = httpModule.request(options, (res) => {
-        let responseBody = "";
-
-        res.on("data", (chunk) => {
-          responseBody += chunk;
-        });
-
-        res.on("end", () => {
-          resolve({
-            statusCode: res.statusCode,
-            statusMessage: res.statusMessage,
-            headers: res.headers,
-            body: responseBody,
-          });
-        });
-      });
-
-      req.on("error", (error) => {
-        reject(new Error(`Request failed: ${error.message}`));
-      });
-
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error("Request timeout"));
-      });
-
-      // Write body data if provided
-      if (body) {
-        const bodyData = typeof body === "object" ? JSON.stringify(body) : body;
-        req.write(bodyData);
-      }
-
-      req.end();
-    });
-  }
-
-  /**
    * Extract value from object using dot notation path
    */
-  extractFromPath(data, path) {
-    const keys = path.split(".");
-    let result = data;
-
-    for (const key of keys) {
-      if (result === null || result === undefined) {
-        return null;
-      }
-      result = result[key];
-    }
-
-    return result;
+  extractFromPath(obj, path) {
+    return path.split(".").reduce((current, key) => {
+      return current && current[key] !== undefined ? current[key] : undefined;
+    }, obj);
   }
 
   /**
-   * Maybe summarize API result if it's large enough
+   * Maybe summarize API result if it's too large
    */
   async maybeSummarizeApiResult(
-    apiResult,
+    result,
     parameters,
-    summaryConfig,
-    agentApiKey = null
+    summarizationConfig,
+    agentApiKey
   ) {
+    // Check if result needs summarization
+    const resultStr = JSON.stringify(result);
+    const maxLength = summarizationConfig.max_length || 2000;
+
+    if (resultStr.length <= maxLength) {
+      return result;
+    }
+
     try {
-      // Check if we should summarize this result
-      const resultSize = JSON.stringify(apiResult).length;
-      const minSizeToSummarize = summaryConfig.min_size || 1000;
-
-      if (resultSize < minSizeToSummarize) {
-        console.log(
-          `API result size ${resultSize} below threshold ${minSizeToSummarize}, not summarizing`
-        );
-        return apiResult;
-      }
-
-      console.log(
-        `API result size ${resultSize} exceeds threshold, summarizing...`
-      );
-
-      // Get endpoint-specific configuration
-      const endpointName = parameters.endpoint_name;
-      const endpointConfig = summaryConfig.endpoint_rules?.[endpointName] || {};
-
-      const maxTokens =
-        endpointConfig.max_tokens || summaryConfig.max_tokens || 150;
-      const focus =
-        endpointConfig.focus ||
-        summaryConfig.focus ||
-        "key information relevant to user queries";
-
-      const summary = await this.summarizeApiResult(
-        apiResult,
-        endpointName,
-        maxTokens,
-        focus,
-        agentApiKey,
-        summaryConfig.model
+      // Use summarization service
+      const SummarizationService = require("./summarizationService");
+      const summary = await SummarizationService.summarizeApiResult(
+        result,
+        parameters.url,
+        agentApiKey
       );
 
       return {
+        ...result,
         _summarized: true,
-        _original_size: resultSize,
-        _endpoint: endpointName,
-        _summary_tokens: maxTokens,
+        _original_length: resultStr.length,
         summary: summary,
-        // Preserve important metadata
-        status_code: apiResult.status_code,
-        success: apiResult.success,
-        url: apiResult.url,
-        method: apiResult.method,
       };
     } catch (error) {
       console.error("Failed to summarize API result:", error.message);
-      // Return original result if summarization fails
-      return apiResult;
+      return result;
     }
   }
 
   /**
-   * Summarize API result using the agent's LLM API key
+   * Calculate cosine similarity between two embedding vectors
    */
-  async summarizeApiResult(
-    apiResult,
-    endpointName,
-    maxTokens,
-    focus,
-    agentApiKey = null,
-    model = "gpt-4.1-nano"
-  ) {
-    // Build summarization prompt
-    const prompt = `You are an AI assistant that summarizes API responses for other AI agents.
-
-Summarize this API response from endpoint "${endpointName}" in ${maxTokens} tokens or less.
-Focus on: ${focus}
-
-Keep the summary concise but include all information that would be useful for answering user questions.
-If the API returned an error, clearly state what went wrong.
-
-API Response:
-${JSON.stringify(apiResult, null, 2)}
-
-Summary:`;
-
-    try {
-      // Use agent's API key if available, otherwise fallback
-      if (agentApiKey && agentApiKey.key) {
-        const OpenAIService = require("./openaiService");
-        if (!agentApiKey.provider) agentApiKey.provider = "openai"; // Default to OpenAI if no provider specified
-
-        // Get decrypted API key
-        let decryptedKey;
-        try {
-          decryptedKey = agentApiKey.getDecryptedKey();
-        } catch (error) {
-          console.log(
-            "Failed to decrypt agent API key, using fallback summarization"
-          );
-          // Fallback to basic summarization if decryption fails
-          return this.truncateText(JSON.stringify(apiResult), maxTokens * 3);
-        }
-
-        const openai = new OpenAIService(decryptedKey, agentApiKey.provider);
-
-        const response = await openai.generateCompletion(model, prompt, {
-          max_tokens: maxTokens,
-          temperature: 0.3, // Low temperature for consistent summaries
-        });
-
-        console.log(
-          `Summarized ${JSON.stringify(apiResult).length} chars to ${response.content.length} chars using agent's API key`
-        );
-        return response.content.trim();
-      } else {
-        console.log("No agent API key available, using fallback summarization");
-        return this.createFallbackSummary(apiResult, endpointName, maxTokens);
-      }
-    } catch (error) {
-      console.error("Summarization service failed:", error.message);
-      // Fallback: create a simple summary
-      return this.createFallbackSummary(apiResult, endpointName, maxTokens);
+  cosineSimilarity(vectorA, vectorB) {
+    if (!vectorA || !vectorB || vectorA.length !== vectorB.length) {
+      return 0;
     }
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < vectorA.length; i++) {
+      dotProduct += vectorA[i] * vectorB[i];
+      normA += vectorA[i] * vectorA[i];
+      normB += vectorB[i] * vectorB[i];
+    }
+
+    if (normA === 0 || normB === 0) {
+      return 0;
+    }
+
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
   /**
-   * Create a simple fallback summary if LLM summarization fails
+   * Calculate penalty for potentially opposite meanings (e.g., check in vs check out)
    */
-  createFallbackSummary(apiResult, endpointName, maxTokens) {
-    const parts = [];
+  calculateNegationPenalty(text1, text2) {
+    const opposites = [
+      ["in", "out"],
+      ["on", "off"],
+      ["start", "end"],
+      ["begin", "finish"],
+      ["open", "close"],
+      ["enter", "exit"],
+      ["arrive", "depart"],
+      ["login", "logout"],
+      ["signin", "signout"],
+      ["checkin", "checkout"],
+      ["upload", "download"],
+      ["import", "export"],
+      ["enable", "disable"],
+      ["activate", "deactivate"],
+      ["connect", "disconnect"],
+      ["lock", "unlock"],
+      ["show", "hide"],
+      ["expand", "collapse"],
+      ["increase", "decrease"],
+      ["add", "remove"],
+      ["create", "delete"],
+      ["save", "cancel"],
+      ["accept", "reject"],
+      ["allow", "deny"],
+      ["grant", "revoke"],
+      ["install", "uninstall"],
+      ["freeze", "unfreeze"],
+      ["subscribe", "unsubscribe"],
+    ];
 
-    // Basic status info
-    if (apiResult.status_code) {
-      parts.push(
-        `Status: ${apiResult.status_code} ${apiResult.status_text || ""}`
-      );
-    }
+    const words1 = text1.toLowerCase().split(/\s+/);
+    const words2 = text2.toLowerCase().split(/\s+/);
 
-    // Success/failure
-    if (apiResult.success === false) {
-      parts.push("Request failed");
-      if (apiResult.data?.message) {
-        parts.push(`Error: ${apiResult.data.message}`);
+    for (const [word1, word2] of opposites) {
+      const hasWord1InText1 = words1.some((w) => w.includes(word1));
+      const hasWord2InText1 = words1.some((w) => w.includes(word2));
+      const hasWord1InText2 = words2.some((w) => w.includes(word1));
+      const hasWord2InText2 = words2.some((w) => w.includes(word2));
+
+      // If one text contains word1 and the other contains word2 (opposites)
+      if (
+        (hasWord1InText1 && hasWord2InText2) ||
+        (hasWord2InText1 && hasWord1InText2)
+      ) {
+        // Strong penalty for opposite words
+        return 0.4;
       }
-    } else {
-      parts.push("Request successful");
     }
 
-    // Try to extract key data
-    if (apiResult.data && typeof apiResult.data === "object") {
-      const dataStr = JSON.stringify(apiResult.data);
-      if (dataStr.length > 200) {
-        parts.push(`Data: ${dataStr.substring(0, 200)}...`);
-      } else {
-        parts.push(`Data: ${dataStr}`);
-      }
-    }
-
-    const summary = parts.join(". ");
-
-    // Truncate if too long
-    if (summary.length > maxTokens * 4) {
-      // Rough token estimation
-      return summary.substring(0, maxTokens * 4) + "...";
-    }
-
-    return summary;
+    return 0;
   }
 
   /**
-   * Calculate text similarity using a simple algorithm
-   * Returns a value between 0 and 1 (1 being identical)
+   * Calculate context bonus for related concepts
    */
-  calculateTextSimilarity(text1, text2) {
-    // Normalize texts
-    const normalize = (text) =>
-      text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
+  calculateContextBonus(text1, text2) {
+    const contextGroups = [
+      // Hotel/accommodation contexts
+      ["check", "room", "hotel", "guest", "stay", "reservation", "booking"],
+      ["wifi", "internet", "connection", "network", "password"],
+      ["breakfast", "food", "meal", "restaurant", "dining", "eat"],
+      ["pool", "swimming", "water", "swim", "deck"],
+      ["parking", "car", "vehicle", "garage", "valet"],
+      ["towel", "linen", "clean", "housekeeping", "service"],
+      ["key", "card", "access", "door", "lock", "unlock"],
+      ["checkout", "checkin", "arrival", "departure", "time"],
+      ["gym", "fitness", "exercise", "workout", "equipment"],
+      ["pet", "animal", "dog", "cat", "allowed", "policy"],
+      // Technical contexts
+      ["api", "endpoint", "request", "response", "data"],
+      ["database", "query", "table", "record", "sql"],
+      ["authentication", "login", "password", "user", "account"],
+      ["error", "bug", "issue", "problem", "fix", "solve"],
+      ["file", "upload", "download", "document", "attachment"],
+    ];
 
-    const normalizedText1 = normalize(text1);
-    const normalizedText2 = normalize(text2);
+    const words1 = text1.toLowerCase().split(/\s+/);
+    const words2 = text2.toLowerCase().split(/\s+/);
 
-    // Check for exact match
-    if (normalizedText1 === normalizedText2) {
-      return 1.0;
+    for (const group of contextGroups) {
+      const matches1 = words1.filter((word) =>
+        group.some(
+          (contextWord) =>
+            word.includes(contextWord) || contextWord.includes(word)
+        )
+      ).length;
+      const matches2 = words2.filter((word) =>
+        group.some(
+          (contextWord) =>
+            word.includes(contextWord) || contextWord.includes(word)
+        )
+      ).length;
+
+      if (matches1 > 0 && matches2 > 0) {
+        // Bonus based on how many context words match
+        const totalMatches = matches1 + matches2;
+        return Math.min(0.2, totalMatches * 0.05);
+      }
     }
 
-    // Check if one text contains the other
-    if (
-      normalizedText1.includes(normalizedText2) ||
-      normalizedText2.includes(normalizedText1)
-    ) {
-      const longer = Math.max(normalizedText1.length, normalizedText2.length);
-      const shorter = Math.min(normalizedText1.length, normalizedText2.length);
-      return shorter / longer;
-    }
-
-    // Calculate Jaccard similarity based on words
-    const words1 = new Set(normalizedText1.split(" "));
-    const words2 = new Set(normalizedText2.split(" "));
-
-    const intersection = new Set([...words1].filter((x) => words2.has(x)));
-    const union = new Set([...words1, ...words2]);
-
-    if (union.size === 0) return 0;
-
-    const jaccardSimilarity = intersection.size / union.size;
-
-    // Apply length penalty for very different lengths
-    const lengthRatio =
-      Math.min(normalizedText1.length, normalizedText2.length) /
-      Math.max(normalizedText1.length, normalizedText2.length);
-
-    return jaccardSimilarity * lengthRatio;
+    return 0;
   }
+
+  // ===== HELPER METHODS =====
 }
 
 module.exports = new ToolService();

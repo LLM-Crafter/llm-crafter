@@ -591,12 +591,21 @@ Your response:`;
     // Start with the tool's parameters as config
     const config = { ...tool.parameters };
 
-    // Add agent's API key information for summarization if enabled
-    if (config.summarization?.enabled && agent.api_key) {
-      config._agent_api_key = {
-        key: agent.api_key.key,
-        provider: agent.api_key.provider.name,
-      };
+    // Add agent's API key information for tools that need it
+    if (agent.api_key) {
+      // Add API key for summarization if enabled
+      if (config.summarization?.enabled) {
+        config._agent_api_key = {
+          key: agent.api_key.key,
+          provider: agent.api_key.provider.name,
+        };
+      }
+
+      // Add API key for FAQ tool to enable semantic similarity
+      // Pass the full API key object so it can be decrypted
+      if (toolName === "faq") {
+        config._agent_api_key = agent.api_key; // Pass full object with decryption method
+      }
     }
 
     return config;

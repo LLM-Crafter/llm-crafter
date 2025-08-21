@@ -311,9 +311,29 @@ const systemTools = [
         search_threshold: {
           type: "number",
           description: "Minimum similarity threshold for FAQ matching (0-1)",
-          default: 0.2,
+          default: 0.7,
           minimum: 0,
           maximum: 1,
+        },
+        language: {
+          type: "string",
+          description:
+            "Language code for language-specific processing (auto-detects if not specified)",
+          enum: [
+            "auto",
+            "en",
+            "es",
+            "pt",
+            "fr",
+            "de",
+            "it",
+            "zh",
+            "ar",
+            "ru",
+            "ja",
+            "he",
+          ],
+          default: "auto",
         },
       },
       required: ["question"],
@@ -323,6 +343,7 @@ const systemTools = [
       type: "object",
       properties: {
         question: { type: "string" },
+        detected_language: { type: "string" },
         matched_faq: {
           type: "object",
           properties: {

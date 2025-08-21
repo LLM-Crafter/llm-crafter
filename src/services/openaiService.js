@@ -245,6 +245,33 @@ class OpenAIService {
       throw new Error(`${this.provider} API Error: ${error.message}`);
     }
   }
+
+  async createEmbedding(options) {
+    const { model = "text-embedding-3-small", input } = options;
+
+    if (!input) {
+      throw new Error("Input text is required for embedding");
+    }
+
+    try {
+      const response = await this.client.embeddings.create({
+        model: model,
+        input: input,
+      });
+
+      if (!response.data || response.data.length === 0) {
+        throw new Error("No embedding data returned");
+      }
+
+      return {
+        data: response.data,
+        model: response.model,
+        usage: response.usage,
+      };
+    } catch (error) {
+      throw new Error(`${this.provider} Embedding API Error: ${error.message}`);
+    }
+  }
 }
 
 module.exports = OpenAIService;
