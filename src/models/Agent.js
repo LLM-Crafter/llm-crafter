@@ -133,6 +133,28 @@ const agentSchema = new mongoose.Schema(
         default: "basic",
       },
     },
+    question_suggestions: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      count: {
+        type: Number,
+        default: 3,
+        min: 1,
+        max: 5,
+      },
+      api_key: {
+        type: String,
+        ref: "ApiKey",
+      },
+      model: {
+        type: String,
+      },
+      custom_prompt: {
+        type: String,
+      },
+    },
     is_active: {
       type: Boolean,
       default: true,
@@ -236,6 +258,26 @@ agentSchema.methods.getFAQs = function () {
     enable_partial_matching:
       faqTool.parameters?.enable_partial_matching !== false,
     default_threshold: faqTool.parameters?.default_threshold || 0.7,
+  };
+};
+
+// Method to configure question suggestions
+agentSchema.methods.configureQuestionSuggestions = function (config) {
+  this.question_suggestions = {
+    ...this.question_suggestions,
+    ...config,
+  };
+  return this.save();
+};
+
+// Method to get question suggestions configuration
+agentSchema.methods.getQuestionSuggestions = function () {
+  return {
+    enabled: this.question_suggestions.enabled || false,
+    count: this.question_suggestions.count || 3,
+    api_key: this.question_suggestions.api_key,
+    model: this.question_suggestions.model,
+    custom_prompt: this.question_suggestions.custom_prompt,
   };
 };
 

@@ -31,6 +31,31 @@ const createAgentValidation = [
     .isInt({ min: 1 })
     .withMessage("Max tokens must be a positive integer"),
   body("tools").optional().isArray().withMessage("Tools must be an array"),
+  // Question suggestions validation
+  body("question_suggestions")
+    .optional()
+    .isObject()
+    .withMessage("Question suggestions must be an object"),
+  body("question_suggestions.enabled")
+    .optional()
+    .isBoolean()
+    .withMessage("Question suggestions enabled must be a boolean"),
+  body("question_suggestions.count")
+    .optional()
+    .isInt({ min: 1, max: 5 })
+    .withMessage("Question suggestions count must be between 1 and 5"),
+  body("question_suggestions.api_key")
+    .optional()
+    .isString()
+    .withMessage("Question suggestions API key must be a string"),
+  body("question_suggestions.model")
+    .optional()
+    .isString()
+    .withMessage("Question suggestions model must be a string"),
+  body("question_suggestions.custom_prompt")
+    .optional()
+    .isString()
+    .withMessage("Question suggestions custom prompt must be a string"),
 ];
 
 const updateAgentValidation = [
@@ -55,6 +80,31 @@ const updateAgentValidation = [
     .withMessage("Max tokens must be a positive integer"),
   body("tools").optional().isArray().withMessage("Tools must be an array"),
   body("is_active").optional().isBoolean(),
+  // Question suggestions validation
+  body("question_suggestions")
+    .optional()
+    .isObject()
+    .withMessage("Question suggestions must be an object"),
+  body("question_suggestions.enabled")
+    .optional()
+    .isBoolean()
+    .withMessage("Question suggestions enabled must be a boolean"),
+  body("question_suggestions.count")
+    .optional()
+    .isInt({ min: 1, max: 5 })
+    .withMessage("Question suggestions count must be between 1 and 5"),
+  body("question_suggestions.api_key")
+    .optional()
+    .isString()
+    .withMessage("Question suggestions API key must be a string"),
+  body("question_suggestions.model")
+    .optional()
+    .isString()
+    .withMessage("Question suggestions model must be a string"),
+  body("question_suggestions.custom_prompt")
+    .optional()
+    .isString()
+    .withMessage("Question suggestions custom prompt must be a string"),
 ];
 
 const chatbotExecutionValidation = [
@@ -244,6 +294,41 @@ router.get(
   auth,
   orgAuth.hasRole("viewer"),
   agentController.getConversationSummary
+);
+
+// ===== QUESTION SUGGESTIONS ROUTES =====
+
+const questionSuggestionsValidation = [
+  body("enabled")
+    .optional()
+    .isBoolean()
+    .withMessage("Enabled must be a boolean"),
+  body("count")
+    .optional()
+    .isInt({ min: 1, max: 5 })
+    .withMessage("Count must be between 1 and 5"),
+  body("api_key").optional().isString().withMessage("API key must be a string"),
+  body("model").optional().isString().withMessage("Model must be a string"),
+  body("custom_prompt")
+    .optional()
+    .isString()
+    .withMessage("Custom prompt must be a string"),
+];
+
+router.put(
+  "/:agentId/question-suggestions",
+  auth,
+  orgAuth.hasRole("member"),
+  questionSuggestionsValidation,
+  validate,
+  agentController.configureQuestionSuggestions
+);
+
+router.get(
+  "/:agentId/question-suggestions",
+  auth,
+  orgAuth.hasRole("viewer"),
+  agentController.getQuestionSuggestions
 );
 
 module.exports = router;

@@ -5,6 +5,7 @@ const OpenAIService = require("./openaiService");
 const toolService = require("./toolService");
 const APIKey = require("../models/ApiKey");
 const summarizationService = require("./summarizationService");
+const suggestionService = require("./suggestionService");
 
 class AgentService {
   /**
@@ -74,16 +75,41 @@ class AgentService {
       timestamp: new Date(),
     });
 
+    // Generate question suggestions if enabled
+    let suggestions = null;
+    let suggestionUsage = null;
+
+    if (agent.question_suggestions?.enabled) {
+      const suggestionResult =
+        await suggestionService.generateQuestionSuggestions(
+          agent,
+          conversation.messages
+        );
+
+      if (suggestionResult) {
+        suggestions = suggestionResult.suggestions;
+        suggestionUsage = suggestionResult.usage;
+      }
+    }
+
     // Check if conversation needs summarization
     await this.handleConversationSummarization(conversation, agent);
 
-    return {
+    const result = {
       conversation_id: conversation._id,
       response: response.content,
       thinking_process: response.thinking_process,
       tools_used: response.tools_used,
       token_usage: response.token_usage,
     };
+
+    // Add suggestions to response if available
+    if (suggestions) {
+      result.suggestions = suggestions;
+      result.suggestion_usage = suggestionUsage;
+    }
+
+    return result;
   }
 
   /**

@@ -67,6 +67,65 @@ const createAgent = async (req, res) => {
       };
     });
 
+    // Validate question suggestions if provided
+    let questionSuggestions = {};
+    if (req.body.question_suggestions) {
+      const { enabled, count, api_key, model, custom_prompt } =
+        req.body.question_suggestions;
+
+      // If enabled, validate required fields
+      if (enabled) {
+        if (!api_key || !model) {
+          return res.status(400).json({
+            error:
+              "API key and model are required when enabling question suggestions",
+          });
+        }
+
+        // Validate suggestion API key exists and belongs to the project
+        const suggestionApiKey = await ApiKey.findOne({
+          _id: api_key,
+          project: req.params.projectId,
+        }).populate("provider");
+
+        if (!suggestionApiKey) {
+          return res
+            .status(404)
+            .json({ error: "Suggestion API key not found in this project" });
+        }
+
+        // Verify the model belongs to the provider
+        if (!suggestionApiKey.provider.models.includes(model)) {
+          return res
+            .status(400)
+            .json({ error: "Invalid suggestion model for selected provider" });
+        }
+
+        // Validate count if provided
+        if (count && (count < 1 || count > 5)) {
+          return res.status(400).json({
+            error: "Question count must be between 1 and 5",
+          });
+        }
+
+        questionSuggestions = {
+          enabled: true,
+          count: count || 3,
+          api_key,
+          model,
+          custom_prompt: custom_prompt || null,
+        };
+      } else {
+        questionSuggestions = {
+          enabled: false,
+          count: count || 3,
+          api_key: api_key || null,
+          model: model || null,
+          custom_prompt: custom_prompt || null,
+        };
+      }
+    }
+
     const agent = new Agent({
       name: req.body.name,
       description: req.body.description,
@@ -78,6 +137,7 @@ const createAgent = async (req, res) => {
       llm_settings: req.body.llm_settings,
       tools: agentTools,
       config: req.body.config || {},
+      question_suggestions: questionSuggestions,
     });
 
     await agent.save();
@@ -227,6 +287,62 @@ const updateAgent = async (req, res) => {
       agent.config = { ...agent.config, ...req.body.config };
     }
     if (req.body.is_active !== undefined) agent.is_active = req.body.is_active;
+
+    // Update question suggestions if provided
+    if (req.body.question_suggestions !== undefined) {
+      const { enabled, count, api_key, model, custom_prompt } =
+        req.body.question_suggestions;
+
+      // If enabling, validate required fields
+      if (enabled) {
+        if (!api_key || !model) {
+          return res.status(400).json({
+            error:
+              "API key and model are required when enabling question suggestions",
+          });
+        }
+
+        // Validate suggestion API key exists and belongs to the project
+        const suggestionApiKey = await ApiKey.findOne({
+          _id: api_key,
+          project: req.params.projectId,
+        }).populate("provider");
+
+        if (!suggestionApiKey) {
+          return res
+            .status(404)
+            .json({ error: "Suggestion API key not found in this project" });
+        }
+
+        // Verify the model belongs to the provider
+        if (!suggestionApiKey.provider.models.includes(model)) {
+          return res
+            .status(400)
+            .json({ error: "Invalid suggestion model for selected provider" });
+        }
+      }
+
+      // Validate count if provided
+      if (count !== undefined && (count < 1 || count > 5)) {
+        return res.status(400).json({
+          error: "Question count must be between 1 and 5",
+        });
+      }
+
+      // Update question suggestions configuration
+      agent.question_suggestions = {
+        enabled:
+          enabled !== undefined ? enabled : agent.question_suggestions.enabled,
+        count: count !== undefined ? count : agent.question_suggestions.count,
+        api_key:
+          api_key !== undefined ? api_key : agent.question_suggestions.api_key,
+        model: model !== undefined ? model : agent.question_suggestions.model,
+        custom_prompt:
+          custom_prompt !== undefined
+            ? custom_prompt
+            : agent.question_suggestions.custom_prompt,
+      };
+    }
 
     // Increment version on update
     agent.version += 1;
@@ -814,6 +930,108 @@ const getConversationSummary = async (req, res) => {
   }
 };
 
+// ===== QUESTION SUGGESTIONS CONFIGURATION =====
+
+const configureQuestionSuggestions = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    const { enabled, count, api_key, model, custom_prompt } = req.body;
+
+    // Validate configuration
+    if (enabled && (!api_key || !model)) {
+      return res.status(400).json({
+        error:
+          "API key and model are required when enabling question suggestions",
+      });
+    }
+
+    if (count && (count < 1 || count > 5)) {
+      return res.status(400).json({
+        error: "Question count must be between 1 and 5",
+      });
+    }
+
+    // Validate API key exists and belongs to the project
+    if (api_key) {
+      const apiKeyObj = await ApiKey.findOne({
+        _id: api_key,
+        project: req.params.projectId,
+      }).populate("provider");
+
+      if (!apiKeyObj) {
+        return res
+          .status(404)
+          .json({ error: "API key not found in this project" });
+      }
+
+      // Verify the model belongs to the provider
+      if (model && !apiKeyObj.provider.models.includes(model)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid model for selected provider" });
+      }
+    }
+
+    const config = {};
+    if (enabled !== undefined) config.enabled = enabled;
+    if (count !== undefined) config.count = count;
+    if (api_key !== undefined) config.api_key = api_key;
+    if (model !== undefined) config.model = model;
+    if (custom_prompt !== undefined) config.custom_prompt = custom_prompt;
+
+    await agent.configureQuestionSuggestions(config);
+
+    res.json({
+      message: "Question suggestions configuration updated successfully",
+      configuration: agent.getQuestionSuggestions(),
+    });
+  } catch (error) {
+    console.error("Configure question suggestions error:", error);
+    res.status(500).json({ error: "Failed to configure question suggestions" });
+  }
+};
+
+const getQuestionSuggestions = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    const config = agent.getQuestionSuggestions();
+
+    // Don't expose the API key ID in the response for security
+    const sanitizedConfig = {
+      enabled: config.enabled,
+      count: config.count,
+      model: config.model,
+      custom_prompt: config.custom_prompt,
+      api_key_configured: !!config.api_key,
+    };
+
+    res.json(sanitizedConfig);
+  } catch (error) {
+    console.error("Get question suggestions error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to get question suggestions configuration" });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -832,4 +1050,6 @@ module.exports = {
   getFAQs,
   summarizeConversation,
   getConversationSummary,
+  configureQuestionSuggestions,
+  getQuestionSuggestions,
 };

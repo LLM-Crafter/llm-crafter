@@ -85,6 +85,30 @@ const agentExecutionSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
+      suggestions: {
+        prompt_tokens: {
+          type: Number,
+          default: 0,
+        },
+        completion_tokens: {
+          type: Number,
+          default: 0,
+        },
+        total_tokens: {
+          type: Number,
+          default: 0,
+        },
+        cost: {
+          type: Number,
+          default: 0,
+        },
+        model: String,
+        execution_time_ms: Number,
+        generated: {
+          type: Boolean,
+          default: false,
+        },
+      },
     },
     execution_time_ms: Number,
     started_at: Date,
