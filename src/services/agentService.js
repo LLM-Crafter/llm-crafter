@@ -305,11 +305,11 @@ class AgentService {
    * Task-specific reasoning (simpler, single execution)
    */
   async executeTaskReasoning(agent, input, execution, dynamicContext = {}) {
+    let decryptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
-      agent.api_key.key,
+      decryptedApiKey,
       agent.api_key.provider.name
     );
-
     await execution.addThinkingStep(
       "analyze_task",
       "Analyzing task input and determining execution strategy"
