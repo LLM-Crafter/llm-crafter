@@ -400,7 +400,7 @@ class AgentService {
         if (toolResult.success) {
           toolResultForAgent.result = toolResult.result;
           toolResultForAgent.success = true;
-          
+
           await execution.addToolExecution(
             parsedResponse.tool_name,
             parsedResponse.tool_parameters,
@@ -410,7 +410,7 @@ class AgentService {
         } else {
           toolResultForAgent.error = toolResult.error;
           toolResultForAgent.success = false;
-          
+
           // Add thinking step about tool failure
           thinkingProcess.push({
             step: "tool_failed",
@@ -457,7 +457,7 @@ class AgentService {
     if (!finalOutput) {
       finalOutput =
         "I apologize, but I wasn't able to complete the task within the allowed processing iterations. Please try simplifying the request or providing more specific instructions.";
-      
+
       await execution.addThinkingStep(
         "max_iterations_reached",
         "Maximum iterations reached without completing task"
@@ -577,7 +577,13 @@ Your response:`;
   /**
    * Build reasoning prompt for task agents
    */
-  buildTaskReasoningPrompt(agent, input, thinkingProcess, toolsUsed, iteration) {
+  buildTaskReasoningPrompt(
+    agent,
+    input,
+    thinkingProcess,
+    toolsUsed,
+    iteration
+  ) {
     let prompt = `You are an AI task agent. Your goal is to complete the given task by using available tools when necessary.
 
 Task Input:

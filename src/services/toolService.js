@@ -563,7 +563,9 @@ class ToolService {
 
     // Check if we have endpoint_name (new format) or url (legacy format)
     if (!endpoint_name && !parameters.url) {
-      throw new Error("Either endpoint_name or url parameter is required for API caller");
+      throw new Error(
+        "Either endpoint_name or url parameter is required for API caller"
+      );
     }
 
     let finalUrl;
@@ -572,18 +574,22 @@ class ToolService {
     if (endpoint_name) {
       // New endpoint-based format
       if (!config.endpoints || !config.endpoints[endpoint_name]) {
-        throw new Error(`Endpoint '${endpoint_name}' not configured for this agent`);
+        throw new Error(
+          `Endpoint '${endpoint_name}' not configured for this agent`
+        );
       }
 
       const endpointConfig = config.endpoints[endpoint_name];
-      
+
       if (!endpointConfig.base_url || !endpointConfig.path) {
-        throw new Error(`Endpoint '${endpoint_name}' missing base_url or path configuration`);
+        throw new Error(
+          `Endpoint '${endpoint_name}' missing base_url or path configuration`
+        );
       }
 
       // Build URL from endpoint configuration
       let path = endpointConfig.path;
-      
+
       // Replace path parameters
       for (const [key, value] of Object.entries(path_params)) {
         path = path.replace(`{${key}}`, encodeURIComponent(value));
@@ -600,7 +606,7 @@ class ToolService {
       // Handle authentication if configured
       if (config.authentication) {
         const auth = config.authentication;
-        
+
         switch (auth.type) {
           case "bearer_token":
             if (auth.token) {
@@ -624,7 +630,6 @@ class ToolService {
             break;
         }
       }
-
     } else {
       // Legacy URL format (for backward compatibility)
       finalUrl = new URL(parameters.url);
@@ -655,9 +660,12 @@ class ToolService {
       let requestBody = null;
       if (
         body_data &&
-        (method.toUpperCase() === "POST" || method.toUpperCase() === "PUT" || method.toUpperCase() === "PATCH")
+        (method.toUpperCase() === "POST" ||
+          method.toUpperCase() === "PUT" ||
+          method.toUpperCase() === "PATCH")
       ) {
-        requestBody = typeof body_data === "string" ? body_data : JSON.stringify(body_data);
+        requestBody =
+          typeof body_data === "string" ? body_data : JSON.stringify(body_data);
         options.headers["Content-Length"] = Buffer.byteLength(requestBody);
       }
 
