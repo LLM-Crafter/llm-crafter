@@ -552,43 +552,112 @@ class ToolService {
    */
   async apiCallerHandler(parameters, config) {
     const {
-      url,
+      endpoint_name,
       method = "GET",
       headers = {},
-      body = null,
+      query_params = {},
+      path_params = {},
+      body_data = null,
       timeout = 30000,
     } = parameters;
 
-    if (!url) {
-      throw new Error("URL parameter is required for API caller");
+    // Check if we have endpoint_name (new format) or url (legacy format)
+    if (!endpoint_name && !parameters.url) {
+      throw new Error("Either endpoint_name or url parameter is required for API caller");
+    }
+
+    let finalUrl;
+    let authHeaders = {};
+
+    if (endpoint_name) {
+      // New endpoint-based format
+      if (!config.endpoints || !config.endpoints[endpoint_name]) {
+        throw new Error(`Endpoint '${endpoint_name}' not configured for this agent`);
+      }
+
+      const endpointConfig = config.endpoints[endpoint_name];
+      
+      if (!endpointConfig.base_url || !endpointConfig.path) {
+        throw new Error(`Endpoint '${endpoint_name}' missing base_url or path configuration`);
+      }
+
+      // Build URL from endpoint configuration
+      let path = endpointConfig.path;
+      
+      // Replace path parameters
+      for (const [key, value] of Object.entries(path_params)) {
+        path = path.replace(`{${key}}`, encodeURIComponent(value));
+      }
+
+      // Build base URL
+      finalUrl = new URL(path, endpointConfig.base_url);
+
+      // Add query parameters
+      for (const [key, value] of Object.entries(query_params)) {
+        finalUrl.searchParams.append(key, value);
+      }
+
+      // Handle authentication if configured
+      if (config.authentication) {
+        const auth = config.authentication;
+        
+        switch (auth.type) {
+          case "bearer_token":
+            if (auth.token) {
+              authHeaders["Authorization"] = `Bearer ${auth.token}`;
+            }
+            break;
+          case "api_key":
+            if (auth.api_key) {
+              if (auth.header) {
+                authHeaders[auth.header] = auth.api_key;
+              } else {
+                // Default to X-API-Key if no header specified
+                authHeaders["X-API-Key"] = auth.api_key;
+              }
+            }
+            break;
+          case "cookie":
+            if (auth.cookie) {
+              authHeaders["Cookie"] = auth.cookie;
+            }
+            break;
+        }
+      }
+
+    } else {
+      // Legacy URL format (for backward compatibility)
+      finalUrl = new URL(parameters.url);
     }
 
     try {
-      // Parse URL
-      const parsedUrl = new URL(url);
-      const isHttps = parsedUrl.protocol === "https:";
+      const isHttps = finalUrl.protocol === "https:";
       const httpModule = isHttps ? https : http;
+
+      // Merge all headers
+      const finalHeaders = {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...headers,
+      };
 
       // Prepare request options
       const options = {
-        hostname: parsedUrl.hostname,
-        port: parsedUrl.port || (isHttps ? 443 : 80),
-        path: parsedUrl.pathname + parsedUrl.search,
+        hostname: finalUrl.hostname,
+        port: finalUrl.port || (isHttps ? 443 : 80),
+        path: finalUrl.pathname + finalUrl.search,
         method: method.toUpperCase(),
-        headers: {
-          "Content-Type": "application/json",
-          ...headers,
-        },
+        headers: finalHeaders,
         timeout: timeout,
       };
 
       // Add body if present
       let requestBody = null;
       if (
-        body &&
-        (method.toUpperCase() === "POST" || method.toUpperCase() === "PUT")
+        body_data &&
+        (method.toUpperCase() === "POST" || method.toUpperCase() === "PUT" || method.toUpperCase() === "PATCH")
       ) {
-        requestBody = typeof body === "string" ? body : JSON.stringify(body);
+        requestBody = typeof body_data === "string" ? body_data : JSON.stringify(body_data);
         options.headers["Content-Length"] = Buffer.byteLength(requestBody);
       }
 
@@ -602,18 +671,24 @@ class ToolService {
           res.on("end", () => {
             try {
               const result = {
-                status: res.statusCode,
+                endpoint_name: endpoint_name,
+                url: finalUrl.toString(),
+                method: method.toUpperCase(),
+                status_code: res.statusCode,
                 headers: res.headers,
-                data: data,
                 success: res.statusCode >= 200 && res.statusCode < 300,
               };
 
               // Try to parse JSON response
               try {
-                result.json = JSON.parse(data);
+                result.body = JSON.parse(data);
               } catch (parseError) {
                 // Not JSON, keep as string
+                result.body = data;
               }
+
+              // Add raw data field for compatibility
+              result.data = data;
 
               resolve(result);
             } catch (error) {

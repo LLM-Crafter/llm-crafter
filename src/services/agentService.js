@@ -121,7 +121,12 @@ class AgentService {
     userIdentifier = null,
     dynamicContext = {}
   ) {
-    const agent = await Agent.findById(agentId).populate("api_key");
+    const agent = await Agent.findById(agentId).populate({
+      path: "api_key",
+      populate: {
+        path: "provider",
+      },
+    });
     if (!agent) {
       throw new Error("Agent not found");
     }
@@ -302,7 +307,7 @@ class AgentService {
   }
 
   /**
-   * Task-specific reasoning (simpler, single execution)
+   * Task-specific reasoning with iterative tool usage
    */
   async executeTaskReasoning(agent, input, execution, dynamicContext = {}) {
     let decryptedApiKey = agent.api_key.getDecryptedKey();
@@ -310,66 +315,158 @@ class AgentService {
       decryptedApiKey,
       agent.api_key.provider.name
     );
+
+    let thinkingProcess = [];
+    let toolsUsed = [];
+    let totalTokenUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      cost: 0,
+    };
+
     await execution.addThinkingStep(
       "analyze_task",
       "Analyzing task input and determining execution strategy"
     );
 
-    // Build task context
-    const prompt = this.buildTaskPrompt(agent, input);
+    thinkingProcess.push({
+      step: "analyze_task",
+      reasoning: "Analyzing task input and determining execution strategy",
+    });
 
-    // Execute reasoning
-    const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
-      agent.system_prompt,
-      dynamicContext
-    );
-    const llmResponse = await openai.generateCompletion(
-      agent.llm_settings.model,
-      prompt,
-      agent.llm_settings.parameters,
-      enhancedSystemPrompt
-    );
+    let maxIterations = agent.config.max_tool_calls || 5;
+    let currentIteration = 0;
+    let finalOutput = "";
 
-    // Parse response for tool usage or direct output
-    const parsedResponse = this.parseAgentResponse(llmResponse.content);
+    while (currentIteration < maxIterations) {
+      currentIteration++;
 
-    let output = parsedResponse.response || llmResponse.content;
-
-    // Execute tools if needed
-    if (parsedResponse.action === "use_tool") {
-      const toolResult = await toolService.executeToolWithConfig(
-        parsedResponse.tool_name,
-        parsedResponse.tool_parameters,
-        this.getAgentToolConfig(agent, parsedResponse.tool_name)
+      // Build prompt for current iteration
+      const prompt = this.buildTaskReasoningPrompt(
+        agent,
+        input,
+        thinkingProcess,
+        toolsUsed,
+        currentIteration
       );
 
-      await execution.addToolExecution(
-        parsedResponse.tool_name,
-        parsedResponse.tool_parameters,
-        toolResult.result,
-        toolResult.execution_time_ms
+      // Get LLM response
+      const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
+        agent.system_prompt,
+        dynamicContext
       );
-
-      // Generate final output with tool result
-      const finalPrompt = `Based on the tool result: ${JSON.stringify(toolResult.result)}\n\nProvide the final output for the task: ${JSON.stringify(input)}`;
-
-      const finalResponse = await openai.generateCompletion(
+      const llmResponse = await openai.generateCompletion(
         agent.llm_settings.model,
-        finalPrompt,
-        agent.llm_settings.parameters
+        prompt,
+        agent.llm_settings.parameters,
+        enhancedSystemPrompt
       );
 
-      output = finalResponse.content;
+      // Update token usage
+      totalTokenUsage.prompt_tokens += llmResponse.usage.prompt_tokens;
+      totalTokenUsage.completion_tokens += llmResponse.usage.completion_tokens;
+      totalTokenUsage.total_tokens += llmResponse.usage.total_tokens;
+      totalTokenUsage.cost += llmResponse.usage.cost;
+
+      // Parse LLM response to determine next action
+      const parsedResponse = this.parseAgentResponse(llmResponse.content);
+
+      if (parsedResponse.action === "use_tool") {
+        // Execute tool
+        thinkingProcess.push({
+          step: "tool_execution",
+          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
+        });
+
+        await execution.addThinkingStep(
+          "tool_execution",
+          `Using tool: ${parsedResponse.tool_name}`
+        );
+
+        const toolResult = await toolService.executeToolWithConfig(
+          parsedResponse.tool_name,
+          parsedResponse.tool_parameters,
+          this.getAgentToolConfig(agent, parsedResponse.tool_name)
+        );
+
+        // Handle tool result properly - check for success/failure
+        const toolResultForAgent = {
+          tool_name: parsedResponse.tool_name,
+          parameters: parsedResponse.tool_parameters,
+          execution_time_ms: toolResult.execution_time_ms,
+        };
+
+        if (toolResult.success) {
+          toolResultForAgent.result = toolResult.result;
+          toolResultForAgent.success = true;
+          
+          await execution.addToolExecution(
+            parsedResponse.tool_name,
+            parsedResponse.tool_parameters,
+            toolResult.result,
+            toolResult.execution_time_ms
+          );
+        } else {
+          toolResultForAgent.error = toolResult.error;
+          toolResultForAgent.success = false;
+          
+          // Add thinking step about tool failure
+          thinkingProcess.push({
+            step: "tool_failed",
+            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
+          });
+
+          await execution.addThinkingStep(
+            "tool_failed",
+            `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
+          );
+        }
+
+        toolsUsed.push(toolResultForAgent);
+
+        // Continue reasoning with tool result (success or failure)
+        continue;
+      } else if (parsedResponse.action === "respond") {
+        // Agent decided to provide final output
+        finalOutput = parsedResponse.response;
+        thinkingProcess.push({
+          step: "task_completed",
+          reasoning: "Determined sufficient information to complete the task",
+        });
+
+        await execution.addThinkingStep(
+          "task_completed",
+          "Task processing completed with final output"
+        );
+        break;
+      } else {
+        // Continue thinking
+        thinkingProcess.push({
+          step: "continue_reasoning",
+          reasoning: parsedResponse.reasoning || "Continuing task analysis",
+        });
+
+        await execution.addThinkingStep(
+          "continue_reasoning",
+          parsedResponse.reasoning || "Continuing task analysis"
+        );
+      }
     }
 
-    await execution.addThinkingStep(
-      "task_completed",
-      "Task processing completed"
-    );
+    if (!finalOutput) {
+      finalOutput =
+        "I apologize, but I wasn't able to complete the task within the allowed processing iterations. Please try simplifying the request or providing more specific instructions.";
+      
+      await execution.addThinkingStep(
+        "max_iterations_reached",
+        "Maximum iterations reached without completing task"
+      );
+    }
 
     return {
-      output: output,
-      token_usage: llmResponse.usage,
+      output: finalOutput,
+      token_usage: totalTokenUsage,
     };
   }
 
@@ -475,6 +572,78 @@ Analyze the task and either:
 2. Provide direct output (respond with ACTION: respond, RESPONSE: your_output)
 
 Your response:`;
+  }
+
+  /**
+   * Build reasoning prompt for task agents
+   */
+  buildTaskReasoningPrompt(agent, input, thinkingProcess, toolsUsed, iteration) {
+    let prompt = `You are an AI task agent. Your goal is to complete the given task by using available tools when necessary.
+
+Task Input:
+${JSON.stringify(input)}
+
+Available Tools:
+${agent.tools
+  .map((tool) => {
+    let toolInfo = `- ${tool.name}: ${tool.description}`;
+    if (
+      tool.name === "api_caller" &&
+      tool.parameters &&
+      tool.parameters.endpoints
+    ) {
+      const endpoints = Object.keys(tool.parameters.endpoints);
+      toolInfo += `\n  Available endpoints: ${endpoints.join(", ")}`;
+    }
+    return toolInfo;
+  })
+  .join("\n")}
+
+Previous Thinking Process:
+${thinkingProcess.map((step) => `${step.step}: ${step.reasoning}`).join("\n")}
+
+Tools Used So Far:
+${toolsUsed
+  .map((tool) => {
+    if (tool.success) {
+      return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+    } else {
+      return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+    }
+  })
+  .join("\n")}
+
+Current Iteration: ${iteration}
+
+You must respond in one of these formats:
+
+1. To use a tool:
+ACTION: use_tool
+TOOL: tool_name
+PARAMETERS: {"param1": "value1", "param2": "value2"}
+REASONING: Why you need to use this tool
+
+For api_caller tool, use this format:
+PARAMETERS: {
+  "endpoint_name": "endpoint_name",
+  "method": "GET|POST|PUT|DELETE",
+  "query_params": {"key": "value"},
+  "path_params": {"key": "value"}, 
+  "body_data": {"key": "value"}
+}
+
+2. To provide final task output:
+ACTION: respond
+RESPONSE: Your final output/result for the task
+REASONING: Why this completes the task
+
+3. To continue analyzing:
+ACTION: think
+REASONING: What you're thinking about and what you need to do next
+
+Choose your action:`;
+
+    return prompt;
   }
 
   /**
