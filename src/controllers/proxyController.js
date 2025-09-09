@@ -444,6 +444,7 @@ const executePromptWithApiKey = async (req, res) => {
       project: req.params.projectId,
       api_key: prompt.api_key._id,
       user_api_key: req.apiKey._id, // Track which user API key was used
+      status: cached ? "cached" : "success",
       metadata: {
         model: prompt.llm_settings.model,
         finish_reason: result.finish_reason,
