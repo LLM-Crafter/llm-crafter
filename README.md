@@ -24,7 +24,7 @@ A collaborative platform for managing and executing LLM prompts with intelligent
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/llm-crafter.git
+git clone https://github.com/LLM-Crafter/llm-crafter.git
 cd llm-crafter
 
 # Install dependencies
@@ -114,7 +114,7 @@ npm run docs:preview
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/llm-crafter.git
+git clone hhttps://github.com/LLM-Crafter/llm-crafter.git
 cd llm-crafter
 
 # Install dependencies
