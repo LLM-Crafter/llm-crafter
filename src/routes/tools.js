@@ -87,6 +87,7 @@ const executeToolValidation = [
 router.get(
   "/",
   generalLimiter, // Rate limit: 100 requests per 15 minutes
+  auth,
   toolController.getTools
 );
 
@@ -94,6 +95,7 @@ router.get(
 router.get(
   "/categories",
   generalLimiter, // Rate limit: 100 requests per 15 minutes
+  auth,
   toolController.getToolCategories
 );
 
@@ -101,6 +103,7 @@ router.get(
 router.get(
   "/:toolName",
   generalLimiter, // Rate limit: 100 requests per 15 minutes
+  auth,
   toolController.getTool
 );
 

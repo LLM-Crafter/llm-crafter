@@ -16,13 +16,13 @@ const providerValidation = [
 ];
 
 // Public route to get all providers
-router.get("/", providerController.getProviders);
+router.get("/", auth, providerController.getProviders);
 
 // Public route to get a specific provider
-router.get("/:providerId", providerController.getProvider);
+router.get("/:providerId", auth, providerController.getProvider);
 
 // Public route to get models for a specific provider
-router.get("/:providerId/models", providerController.getProviderModels);
+router.get("/:providerId/models", auth, providerController.getProviderModels);
 
 // Protected routes for admin operations
 router.post(
