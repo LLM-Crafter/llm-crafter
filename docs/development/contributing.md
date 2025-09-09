@@ -30,14 +30,8 @@ Before you begin, ensure you have the following installed:
 2. Clone your fork locally:
 
 ```bash
-git clone https://github.com/your-username/llm-crafter.git
+git clone https://github.com/LLM-Crafter/llm-crafter.git
 cd llm-crafter
-```
-
-3. Add the upstream repository:
-
-```bash
-git remote add upstream https://github.com/original-owner/llm-crafter.git
 ```
 
 ## Development Setup
@@ -59,9 +53,6 @@ MONGODB_URI=mongodb://localhost:27017/llm-crafter-dev
 # JWT
 JWT_SECRET=your-jwt-secret-key
 
-# OpenAI (for testing)
-OPENAI_API_KEY=your-openai-api-key
-
 # Server
 PORT=3000
 NODE_ENV=development
@@ -78,8 +69,6 @@ brew services start mongodb-community
 # Linux
 sudo systemctl start mongod
 
-# Windows
-net start MongoDB
 ```
 
 ### 4. Run the Application

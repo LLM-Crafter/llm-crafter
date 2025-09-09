@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: llm-crafter-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongo:27017/llm-crafter
+      # Add other environment variables as needed
+      # - JWT_SECRET=your-jwt-secret
+      # - ENCRYPTION_KEY=your-encryption-key
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    networks:
+      - llm-crafter-network
+
+  mongo:
+    image: mongo:7.0
+    container_name: llm-crafter-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=llm-crafter
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    networks:
+      - llm-crafter-network
+
+volumes:
+  mongo_data:
+
+networks:
+  llm-crafter-network:
+    driver: bridge
