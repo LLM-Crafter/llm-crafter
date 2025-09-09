@@ -2,6 +2,8 @@
 
 A collaborative platform for managing and executing LLM prompts with intelligent agents, conversation management, and powerful tool integrations.
 
+> ⚠️ **Alpha Version** - This project is currently in active development and not finalized yet. Features and APIs may change.
+
 ## ✨ Features
 
 - 🤖 **Intelligent Agents**: Create chatbot and task agents with customizable behavior
