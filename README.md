@@ -139,11 +139,6 @@ npm run dev
 MONGODB_URI=mongodb://localhost:27017/llm-crafter
 JWT_SECRET=your-super-secret-key-min-32-chars
 PORT=3000
-
-# Optional
-OPENAI_API_KEY=sk-your-openai-key
-LOG_LEVEL=info
-NODE_ENV=development
 ```
 
 ### Running Tests
