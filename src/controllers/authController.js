@@ -2,12 +2,12 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const {
   getPasswordPolicyDescription,
-  validatePassword
+  validatePassword,
 } = require('../utils/passwordPolicy');
 
-const generateToken = (userId) => {
+const generateToken = userId => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN
+    expiresIn: process.env.JWT_EXPIRES_IN,
   });
 };
 
@@ -16,7 +16,7 @@ const getPasswordPolicy = async (req, res) => {
     const policyDescription = getPasswordPolicyDescription();
     res.json({
       success: true,
-      data: policyDescription
+      data: policyDescription,
     });
   } catch (error) {
     res.status(500).json({ error: 'Could not fetch password policy' });
@@ -38,7 +38,7 @@ const register = async (req, res) => {
       return res.status(400).json({
         error: 'Password does not meet security requirements',
         details: passwordValidation.errors,
-        policy: passwordValidation.policy
+        policy: passwordValidation.policy,
       });
     }
 
@@ -52,10 +52,10 @@ const register = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
-        name: user.name
+        name: user.name,
       },
       passwordStrength: passwordValidation.strength,
-      warnings: passwordValidation.warnings
+      warnings: passwordValidation.warnings,
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -63,11 +63,11 @@ const register = async (req, res) => {
     // Handle validation errors specifically
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map(
-        (err) => err.message
+        err => err.message
       );
       return res.status(400).json({
         error: 'Validation failed',
-        details: validationErrors
+        details: validationErrors,
       });
     }
 
@@ -91,8 +91,8 @@ const login = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
-        name: user.name
-      }
+        name: user.name,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
@@ -110,8 +110,8 @@ const getProfile = async (req, res) => {
       name: user.name,
       security: {
         shouldUpdatePassword,
-        passwordStrength: user.passwordStrength
-      }
+        passwordStrength: user.passwordStrength,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: 'Could not fetch profile' });
@@ -121,7 +121,9 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const updates = {};
-    if (req.body.name) {updates.name = req.body.name;}
+    if (req.body.name) {
+      updates.name = req.body.name;
+    }
     if (req.body.password) {
       // Validate new password
       const passwordValidation = validatePassword(req.body.password);
@@ -129,7 +131,7 @@ const updateProfile = async (req, res) => {
         return res.status(400).json({
           error: 'New password does not meet security requirements',
           details: passwordValidation.errors,
-          policy: passwordValidation.policy
+          policy: passwordValidation.policy,
         });
       }
       updates.password = req.body.password;
@@ -149,8 +151,8 @@ const updateProfile = async (req, res) => {
       name: user.name,
       security: {
         shouldUpdatePassword: user.shouldUpdatePassword(),
-        passwordStrength: user.passwordStrength
-      }
+        passwordStrength: user.passwordStrength,
+      },
     });
   } catch (error) {
     console.error('Profile update error:', error);
@@ -158,11 +160,11 @@ const updateProfile = async (req, res) => {
     // Handle validation errors specifically
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map(
-        (err) => err.message
+        err => err.message
       );
       return res.status(400).json({
         error: 'Validation failed',
-        details: validationErrors
+        details: validationErrors,
       });
     }
 
@@ -175,5 +177,5 @@ module.exports = {
   login,
   getProfile,
   updateProfile,
-  getPasswordPolicy
+  getPasswordPolicy,
 };

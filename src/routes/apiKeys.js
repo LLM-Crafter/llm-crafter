@@ -10,7 +10,7 @@ const { apiKeyLimiter } = require('../middleware/rateLimiting');
 const apiKeyValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('key').trim().notEmpty().withMessage('API key is required'),
-  body('provider').notEmpty().withMessage('Provider is required')
+  body('provider').notEmpty().withMessage('Provider is required'),
 ];
 
 router.post(

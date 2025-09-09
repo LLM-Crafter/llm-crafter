@@ -6,7 +6,7 @@ const agentController = require('../controllers/agentController');
 const { apiKeyAuth, flexibleAuth } = require('../middleware/apiKeyAuth');
 const {
   sessionAuth,
-  flexibleSessionAuth
+  flexibleSessionAuth,
 } = require('../middleware/sessionAuth');
 const validate = require('../middleware/validate');
 const { proxyLimiter, generalLimiter } = require('../middleware/rateLimiting');
@@ -16,7 +16,7 @@ const promptExecutionValidation = [
   body('variables')
     .optional()
     .isObject()
-    .withMessage('Variables must be an object')
+    .withMessage('Variables must be an object'),
 ];
 
 const agentChatValidation = [
@@ -37,7 +37,7 @@ const agentChatValidation = [
   body('dynamicContext')
     .optional()
     .isObject()
-    .withMessage('Dynamic context must be an object')
+    .withMessage('Dynamic context must be an object'),
 ];
 
 const agentTaskValidation = [
@@ -49,7 +49,7 @@ const agentTaskValidation = [
   body('context')
     .optional()
     .isObject()
-    .withMessage('Context must be an object')
+    .withMessage('Context must be an object'),
 ];
 
 // Middleware to validate project access for API keys
@@ -57,7 +57,7 @@ const validateProjectAccess = (req, res, next) => {
   if (req.apiKey && !req.apiKey.canAccessProject(req.params.projectId)) {
     return res.status(403).json({
       error: 'Access denied to this project',
-      code: 'PROJECT_ACCESS_DENIED'
+      code: 'PROJECT_ACCESS_DENIED',
     });
   }
   next();
@@ -143,8 +143,8 @@ router.get(
       data: {
         id: req.params.projectId,
         organization: req.params.orgId,
-        accessible: true
-      }
+        accessible: true,
+      },
     });
   }
 );
@@ -169,7 +169,7 @@ router.get(
 
       res.json({
         success: true,
-        data: projects
+        data: projects,
       });
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch projects' });
@@ -193,12 +193,12 @@ router.get(
         restrictions: req.apiKey.restrictions,
         daily_limit_remaining: req.apiKey.restrictions.max_executions_per_day
           ? Math.max(
-            0,
-            req.apiKey.restrictions.max_executions_per_day -
+              0,
+              req.apiKey.restrictions.max_executions_per_day -
                 req.apiKey.usage.executions_today
-          )
-          : null
-      }
+            )
+          : null,
+      },
     });
   }
 );

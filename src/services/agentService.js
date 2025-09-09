@@ -22,8 +22,8 @@ class AgentService {
     const agent = await Agent.findById(agentId).populate({
       path: 'api_key',
       populate: {
-        path: 'provider'
-      }
+        path: 'provider',
+      },
     });
     if (!agent) {
       throw new Error('Agent not found');
@@ -46,7 +46,7 @@ class AgentService {
       conversation = new Conversation({
         agent: agentId,
         user_identifier: userIdentifier,
-        title: this.generateConversationTitle(userMessage)
+        title: this.generateConversationTitle(userMessage),
       });
       await conversation.save();
     }
@@ -55,7 +55,7 @@ class AgentService {
     await conversation.addMessage({
       role: 'user',
       content: userMessage,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     // Execute agent reasoning
@@ -72,7 +72,7 @@ class AgentService {
       thinking_process: response.thinking_process,
       tools_used: response.tools_used,
       token_usage: response.token_usage,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     // Generate question suggestions if enabled
@@ -100,7 +100,7 @@ class AgentService {
       response: response.content,
       thinking_process: response.thinking_process,
       tools_used: response.tools_used,
-      token_usage: response.token_usage
+      token_usage: response.token_usage,
     };
 
     // Add suggestions to response if available
@@ -124,8 +124,8 @@ class AgentService {
     const agent = await Agent.findById(agentId).populate({
       path: 'api_key',
       populate: {
-        path: 'provider'
-      }
+        path: 'provider',
+      },
     });
     if (!agent) {
       throw new Error('Agent not found');
@@ -141,8 +141,8 @@ class AgentService {
       type: 'task',
       input,
       metadata: {
-        user_identifier: userIdentifier
-      }
+        user_identifier: userIdentifier,
+      },
     });
     await execution.save();
     await execution.start();
@@ -166,7 +166,7 @@ class AgentService {
         thinking_process: execution.thinking_process,
         tools_used: execution.tools_executed,
         token_usage: result.token_usage,
-        status: 'completed'
+        status: 'completed',
       };
     } catch (error) {
       await execution.fail(error);
@@ -190,7 +190,7 @@ class AgentService {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
-      cost: 0
+      cost: 0,
     };
 
     // Build context for the agent
@@ -199,7 +199,7 @@ class AgentService {
     // Initial reasoning step
     thinkingProcess.push({
       step: 'analyze_input',
-      reasoning: 'Analyzing user input and determining response strategy'
+      reasoning: 'Analyzing user input and determining response strategy',
     });
 
     const maxIterations = agent.config.max_tool_calls || 5;
@@ -243,7 +243,7 @@ class AgentService {
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`
+          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
         });
 
         const toolResult = await toolService.executeToolWithConfig(
@@ -256,7 +256,7 @@ class AgentService {
         const toolResultForAgent = {
           tool_name: parsedResponse.tool_name,
           parameters: parsedResponse.tool_parameters,
-          execution_time_ms: toolResult.execution_time_ms
+          execution_time_ms: toolResult.execution_time_ms,
         };
 
         if (toolResult.success) {
@@ -268,7 +268,7 @@ class AgentService {
           // Add thinking step about tool failure
           thinkingProcess.push({
             step: 'tool_failed',
-            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
+            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
           });
         }
 
@@ -281,28 +281,28 @@ class AgentService {
         finalResponse = parsedResponse.response;
         thinkingProcess.push({
           step: 'final_response',
-          reasoning: 'Determined sufficient information to respond to user'
+          reasoning: 'Determined sufficient information to respond to user',
         });
         break;
       } else {
         // Continue thinking
         thinkingProcess.push({
           step: 'continue_reasoning',
-          reasoning: parsedResponse.reasoning || 'Continuing analysis'
+          reasoning: parsedResponse.reasoning || 'Continuing analysis',
         });
       }
     }
 
     if (!finalResponse) {
       finalResponse =
-        'I apologize, but I wasn\'t able to complete your request within the allowed processing time. Please try rephrasing your request.';
+        "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
     }
 
     return {
       content: finalResponse,
       thinking_process: thinkingProcess,
       tools_used: toolsUsed,
-      token_usage: totalTokenUsage
+      token_usage: totalTokenUsage,
     };
   }
 
@@ -322,7 +322,7 @@ class AgentService {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
-      cost: 0
+      cost: 0,
     };
 
     await execution.addThinkingStep(
@@ -332,7 +332,7 @@ class AgentService {
 
     thinkingProcess.push({
       step: 'analyze_task',
-      reasoning: 'Analyzing task input and determining execution strategy'
+      reasoning: 'Analyzing task input and determining execution strategy',
     });
 
     const maxIterations = agent.config.max_tool_calls || 5;
@@ -376,7 +376,7 @@ class AgentService {
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`
+          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
         });
 
         await execution.addThinkingStep(
@@ -394,7 +394,7 @@ class AgentService {
         const toolResultForAgent = {
           tool_name: parsedResponse.tool_name,
           parameters: parsedResponse.tool_parameters,
-          execution_time_ms: toolResult.execution_time_ms
+          execution_time_ms: toolResult.execution_time_ms,
         };
 
         if (toolResult.success) {
@@ -414,7 +414,7 @@ class AgentService {
           // Add thinking step about tool failure
           thinkingProcess.push({
             step: 'tool_failed',
-            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
+            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
           });
 
           await execution.addThinkingStep(
@@ -432,7 +432,7 @@ class AgentService {
         finalOutput = parsedResponse.response;
         thinkingProcess.push({
           step: 'task_completed',
-          reasoning: 'Determined sufficient information to complete the task'
+          reasoning: 'Determined sufficient information to complete the task',
         });
 
         await execution.addThinkingStep(
@@ -444,7 +444,7 @@ class AgentService {
         // Continue thinking
         thinkingProcess.push({
           step: 'continue_reasoning',
-          reasoning: parsedResponse.reasoning || 'Continuing task analysis'
+          reasoning: parsedResponse.reasoning || 'Continuing task analysis',
         });
 
         await execution.addThinkingStep(
@@ -456,7 +456,7 @@ class AgentService {
 
     if (!finalOutput) {
       finalOutput =
-        'I apologize, but I wasn\'t able to complete the task within the allowed processing iterations. Please try simplifying the request or providing more specific instructions.';
+        "I apologize, but I wasn't able to complete the task within the allowed processing iterations. Please try simplifying the request or providing more specific instructions.";
 
       await execution.addThinkingStep(
         'max_iterations_reached',
@@ -466,7 +466,7 @@ class AgentService {
 
     return {
       output: finalOutput,
-      token_usage: totalTokenUsage
+      token_usage: totalTokenUsage,
     };
   }
 
@@ -482,7 +482,7 @@ class AgentService {
       available_tools: agent.tools,
       agent_config: agent.config,
       has_summary: !!conversation.conversation_summary,
-      summary_version: conversation.metadata.summary_version || 0
+      summary_version: conversation.metadata.summary_version || 0,
     };
   }
 
@@ -493,37 +493,37 @@ class AgentService {
     const prompt = `You are an AI agent. Your task is to analyze the conversation and decide on the next action.
 
 Conversation History:
-${context.conversation_history.map((msg) => `${msg.role}: ${msg.content}`).join('\n')}
+${context.conversation_history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
 
 Available Tools:
 ${agent.tools
-    .map((tool) => {
-      let toolInfo = `- ${tool.name}: ${tool.description}`;
-      if (
-        tool.name === 'api_caller' &&
+  .map(tool => {
+    let toolInfo = `- ${tool.name}: ${tool.description}`;
+    if (
+      tool.name === 'api_caller' &&
       tool.parameters &&
       tool.parameters.endpoints
-      ) {
-        const endpoints = Object.keys(tool.parameters.endpoints);
-        toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
-      }
-      return toolInfo;
-    })
-    .join('\n')}
+    ) {
+      const endpoints = Object.keys(tool.parameters.endpoints);
+      toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
+    }
+    return toolInfo;
+  })
+  .join('\n')}
 
 Previous Thinking Process:
-${thinkingProcess.map((step) => `${step.step}: ${step.reasoning}`).join('\n')}
+${thinkingProcess.map(step => `${step.step}: ${step.reasoning}`).join('\n')}
 
 Tools Used So Far:
 ${toolsUsed
-    .map((tool) => {
-      if (tool.success) {
-        return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
-      } else {
-        return `- ${tool.tool_name}: FAILED - ${tool.error}`;
-      }
-    })
-    .join('\n')}
+  .map(tool => {
+    if (tool.success) {
+      return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+    } else {
+      return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+    }
+  })
+  .join('\n')}
 
 Current Iteration: ${iteration}
 
@@ -565,7 +565,7 @@ Choose your action:`;
     return `Task Input: ${JSON.stringify(input)}
 
 Available Tools:
-${agent.tools.map((tool) => `- ${tool.name}: ${tool.description}`).join('\n')}
+${agent.tools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n')}
 
 Analyze the task and either:
 1. Use a tool if needed (respond with ACTION: use_tool, TOOL: tool_name, PARAMETERS: {...})
@@ -591,33 +591,33 @@ ${JSON.stringify(input)}
 
 Available Tools:
 ${agent.tools
-    .map((tool) => {
-      let toolInfo = `- ${tool.name}: ${tool.description}`;
-      if (
-        tool.name === 'api_caller' &&
+  .map(tool => {
+    let toolInfo = `- ${tool.name}: ${tool.description}`;
+    if (
+      tool.name === 'api_caller' &&
       tool.parameters &&
       tool.parameters.endpoints
-      ) {
-        const endpoints = Object.keys(tool.parameters.endpoints);
-        toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
-      }
-      return toolInfo;
-    })
-    .join('\n')}
+    ) {
+      const endpoints = Object.keys(tool.parameters.endpoints);
+      toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
+    }
+    return toolInfo;
+  })
+  .join('\n')}
 
 Previous Thinking Process:
-${thinkingProcess.map((step) => `${step.step}: ${step.reasoning}`).join('\n')}
+${thinkingProcess.map(step => `${step.step}: ${step.reasoning}`).join('\n')}
 
 Tools Used So Far:
 ${toolsUsed
-    .map((tool) => {
-      if (tool.success) {
-        return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
-      } else {
-        return `- ${tool.tool_name}: FAILED - ${tool.error}`;
-      }
-    })
-    .join('\n')}
+  .map(tool => {
+    if (tool.success) {
+      return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+    } else {
+      return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+    }
+  })
+  .join('\n')}
 
 Current Iteration: ${iteration}
 
@@ -775,7 +775,7 @@ Choose your action:`;
    */
   generateConversationTitle(message) {
     if (message.length > 50) {
-      return `${message.substring(0, 47)  }...`;
+      return `${message.substring(0, 47)}...`;
     }
     return message;
   }
@@ -784,7 +784,7 @@ Choose your action:`;
    * Get agent-specific tool configuration
    */
   getAgentToolConfig(agent, toolName) {
-    const tool = agent.tools.find((t) => t.name === toolName);
+    const tool = agent.tools.find(t => t.name === toolName);
     if (!tool || !tool.parameters) {
       return {};
     }
@@ -798,7 +798,7 @@ Choose your action:`;
       if (config.summarization?.enabled) {
         config._agent_api_key = {
           key: agent.api_key.key,
-          provider: agent.api_key.provider.name
+          provider: agent.api_key.provider.name,
         };
       }
 
@@ -897,7 +897,7 @@ Choose your action:`;
       summary_version: conversation.metadata.summary_version,
       tokens_used: result.token_usage.total_tokens,
       cost: result.token_usage.cost,
-      model_used: result.model_used
+      model_used: result.model_used,
     });
   }
 

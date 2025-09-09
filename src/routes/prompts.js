@@ -17,7 +17,7 @@ const createPromptValidation = [
     ),
   body('description').optional().isString(),
   body('content').optional().isString(),
-  body('system_prompt').optional().isString()
+  body('system_prompt').optional().isString(),
 ];
 
 const updatePromptValidation = [
@@ -30,7 +30,7 @@ const updatePromptValidation = [
   body('llm_settings.parameters.temperature')
     .optional()
     .isFloat({ min: 0, max: 1 }),
-  body('llm_settings.parameters.max_tokens').optional().isInt({ min: 1 })
+  body('llm_settings.parameters.max_tokens').optional().isInt({ min: 1 }),
 ];
 
 // Routes

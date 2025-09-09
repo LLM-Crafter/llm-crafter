@@ -7,20 +7,20 @@ const userSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     email: {
       type: String,
       required: true,
       unique: true,
       lowercase: true,
-      trim: true
+      trim: true,
     },
     password: {
       type: String,
       required: true,
       validate: {
-        validator (password) {
+        validator(password) {
           // Skip validation if password is already hashed (during save operations)
           if (this.isModified('password') && !password.startsWith('$2a$')) {
             const result = validatePassword(password);
@@ -28,40 +28,42 @@ const userSchema = new mongoose.Schema(
           }
           return true;
         },
-        message (props) {
+        message(props) {
           const result = validatePassword(props.value);
           return (
             result.errors[0] || 'Password does not meet security requirements'
           );
-        }
-      }
+        },
+      },
     },
     name: {
       type: String,
-      required: true
+      required: true,
     },
     passwordStrength: {
       type: String,
       enum: ['very-weak', 'weak', 'medium', 'strong', 'very-strong'],
-      default: 'weak'
-    }
+      default: 'weak',
+    },
   },
   {
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform (doc, ret) {
+      transform(doc, ret) {
         delete ret.password;
         delete ret.passwordStrength;
         return ret;
-      }
+      },
     },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {return next();}
+  if (!this.isModified('password')) {
+    return next();
+  }
 
   try {
     // Calculate password strength before hashing

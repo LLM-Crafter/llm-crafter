@@ -16,7 +16,7 @@ const createStore = () => {
       const redis = new Redis(process.env.REDIS_URL);
 
       return new RedisStore({
-        sendCommand: (...args) => redis.call(...args)
+        sendCommand: (...args) => redis.call(...args),
       });
     } catch (error) {
       console.warn(
@@ -30,7 +30,7 @@ const createStore = () => {
 };
 
 // Common rate limiter configuration
-const createRateLimiter = (options) => {
+const createRateLimiter = options => {
   return rateLimit({
     store: createStore(),
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
@@ -38,9 +38,9 @@ const createRateLimiter = (options) => {
     message: {
       error: 'Too many requests',
       message: 'You have exceeded the rate limit. Please try again later.',
-      retryAfter: options.windowMs / 1000
+      retryAfter: options.windowMs / 1000,
     },
-    ...options
+    ...options,
   });
 };
 
@@ -54,8 +54,8 @@ const authLimiter = createRateLimiter({
     error: 'Too many authentication attempts',
     message:
       'Too many login/register attempts. Please try again in 15 minutes.',
-    retryAfter: 15 * 60
-  }
+    retryAfter: 15 * 60,
+  },
 });
 
 // Login specifically - Even stricter
@@ -67,8 +67,8 @@ const loginLimiter = createRateLimiter({
   message: {
     error: 'Too many login attempts',
     message: 'Too many failed login attempts. Please try again in 10 minutes.',
-    retryAfter: 10 * 60
-  }
+    retryAfter: 10 * 60,
+  },
 });
 
 // Password reset/sensitive operations - Very strict
@@ -79,8 +79,8 @@ const sensitiveOpLimiter = createRateLimiter({
     error: 'Too many sensitive operation attempts',
     message:
       'Too many password reset or sensitive operation attempts. Please try again in 1 hour.',
-    retryAfter: 60 * 60
-  }
+    retryAfter: 60 * 60,
+  },
 });
 
 // API key operations - 1 request per second
@@ -91,8 +91,8 @@ const apiKeyLimiter = createRateLimiter({
     error: 'Too many API key operations',
     message:
       'API key operations are limited to 1 request per second. Please slow down.',
-    retryAfter: 1
-  }
+    retryAfter: 1,
+  },
 });
 
 // LLM proxy endpoints - 20 requests per second
@@ -102,8 +102,8 @@ const proxyLimiter = createRateLimiter({
   message: {
     error: 'Too many LLM requests',
     message: 'LLM requests are limited to 20 per second. Please slow down.',
-    retryAfter: 1
-  }
+    retryAfter: 1,
+  },
 });
 
 // General API endpoints - 10 requests per second
@@ -113,8 +113,8 @@ const generalLimiter = createRateLimiter({
   message: {
     error: 'Too many requests',
     message: 'API requests are limited to 10 per second. Please slow down.',
-    retryAfter: 1
-  }
+    retryAfter: 1,
+  },
 });
 
 // Health check and public endpoints - Very generous
@@ -124,15 +124,15 @@ const publicLimiter = createRateLimiter({
   message: {
     error: 'Rate limit exceeded',
     message: 'Too many requests to public endpoints.',
-    retryAfter: 60
-  }
+    retryAfter: 60,
+  },
 });
 
 // Slow down middleware for gradual response delays
-const createSlowDown = (options) => {
+const createSlowDown = options => {
   return slowDown({
     store: createStore(),
-    ...options
+    ...options,
   });
 };
 
@@ -144,7 +144,7 @@ const authSlowDown = createSlowDown({
     const delayAfter = req.slowDown.limit || 2;
     return (used - delayAfter) * 500; // Add 500ms delay per request after delayAfter
   },
-  maxDelayMs: 20000 // Maximum delay of 20 seconds
+  maxDelayMs: 20000, // Maximum delay of 20 seconds
 });
 
 // Progressive delays for general API
@@ -155,12 +155,12 @@ const generalSlowDown = createSlowDown({
     const delayAfter = req.slowDown.limit || 50;
     return (used - delayAfter) * 100; // Add 100ms delay per request after delayAfter
   },
-  maxDelayMs: 5000 // Maximum delay of 5 seconds
+  maxDelayMs: 5000, // Maximum delay of 5 seconds
 });
 
 // IP whitelist for testing/admin (optional)
 const createWhitelistSkip = (whitelist = []) => {
-  return (req) => {
+  return req => {
     const clientIp = req.ip || req.connection.remoteAddress;
     return whitelist.includes(clientIp);
   };
@@ -168,7 +168,7 @@ const createWhitelistSkip = (whitelist = []) => {
 
 // Development mode bypass
 const createDevSkip = () => {
-  return (req) => {
+  return req => {
     return (
       process.env.NODE_ENV === 'development' &&
       process.env.SKIP_RATE_LIMIT === 'true'
@@ -188,7 +188,7 @@ const customHandler = (req, res, next, options) => {
     endpoint,
     timestamp: new Date().toISOString(),
     limit: options.max,
-    windowMs: options.windowMs
+    windowMs: options.windowMs,
   });
 
   // Could integrate with monitoring/alerting system here
@@ -206,8 +206,8 @@ const limitersWithCustomHandler = {
       error: 'Too many authentication attempts',
       message:
         'Too many login/register attempts. Please try again in 15 minutes.',
-      retryAfter: 15 * 60
-    }
+      retryAfter: 15 * 60,
+    },
   }),
 
   loginLimiter: createRateLimiter({
@@ -219,9 +219,9 @@ const limitersWithCustomHandler = {
       error: 'Too many login attempts',
       message:
         'Too many failed login attempts. Please try again in 15 minutes.',
-      retryAfter: 15 * 60
-    }
-  })
+      retryAfter: 15 * 60,
+    },
+  }),
 
   // Add custom handlers to other limiters as needed
 };
@@ -248,5 +248,5 @@ module.exports = {
   customHandler,
 
   // Enhanced limiters with custom handlers
-  limitersWithCustomHandler
+  limitersWithCustomHandler,
 };

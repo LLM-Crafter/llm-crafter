@@ -19,7 +19,7 @@ const apiKeyAuth = (requiredScopes = []) => {
       if (!apiKey) {
         return res.status(401).json({
           error: 'API key required',
-          code: 'API_KEY_REQUIRED'
+          code: 'API_KEY_REQUIRED',
         });
       }
 
@@ -29,13 +29,13 @@ const apiKeyAuth = (requiredScopes = []) => {
       // Find and validate the key
       const userApiKey = await UserApiKey.findOne({
         key_hash: keyHash,
-        is_active: true
+        is_active: true,
       }).populate(['user', 'organization']);
 
       if (!userApiKey) {
         return res.status(401).json({
           error: 'Invalid API key',
-          code: 'INVALID_API_KEY'
+          code: 'INVALID_API_KEY',
         });
       }
 
@@ -43,13 +43,13 @@ const apiKeyAuth = (requiredScopes = []) => {
       if (userApiKey.isExpired()) {
         return res.status(401).json({
           error: 'API key expired',
-          code: 'API_KEY_EXPIRED'
+          code: 'API_KEY_EXPIRED',
         });
       }
 
       // Check scopes
       if (requiredScopes.length > 0) {
-        const hasRequiredScope = requiredScopes.some((scope) =>
+        const hasRequiredScope = requiredScopes.some(scope =>
           userApiKey.hasScope(scope)
         );
         if (!hasRequiredScope) {
@@ -57,7 +57,7 @@ const apiKeyAuth = (requiredScopes = []) => {
             error: 'Insufficient permissions',
             code: 'INSUFFICIENT_PERMISSIONS',
             required_scopes: requiredScopes,
-            available_scopes: userApiKey.scopes
+            available_scopes: userApiKey.scopes,
           });
         }
       }
@@ -84,13 +84,13 @@ const apiKeyAuth = (requiredScopes = []) => {
       ) {
         return res.status(403).json({
           error: error.message,
-          code: 'ACCESS_RESTRICTED'
+          code: 'ACCESS_RESTRICTED',
         });
       }
 
       res.status(401).json({
         error: 'API key authentication failed',
-        code: 'AUTH_FAILED'
+        code: 'AUTH_FAILED',
       });
     }
   };
@@ -180,8 +180,8 @@ const flexibleAuth = (options = {}) => {
         ...(allowJWT ? ['JWT Token (Authorization: Bearer <token>)'] : []),
         ...(allowApiKey
           ? ['API Key (X-API-Key: <key> or Authorization: Bearer <key>)']
-          : [])
-      ]
+          : []),
+      ],
     });
   };
 };
@@ -189,5 +189,5 @@ const flexibleAuth = (options = {}) => {
 module.exports = {
   apiKeyAuth,
   flexibleAuth,
-  validateApiKeyRestrictions
+  validateApiKeyRestrictions,
 };

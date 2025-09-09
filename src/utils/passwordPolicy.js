@@ -18,7 +18,7 @@ const PASSWORD_POLICY = {
     // Common patterns to reject
     /^(.)\1+$/, // All same character (e.g., "aaaaaaa")
     /^(012|123|234|345|456|567|678|789|890|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz)/i, // Sequential patterns
-    /^(qwerty|asdfgh|zxcvbn)/i // Keyboard patterns
+    /^(qwerty|asdfgh|zxcvbn)/i, // Keyboard patterns
   ],
   bannedWords: [
     'password',
@@ -34,8 +34,8 @@ const PASSWORD_POLICY = {
     'demo',
     'temp',
     'default',
-    'secret'
-  ]
+    'secret',
+  ],
 };
 
 /**
@@ -53,7 +53,7 @@ function validatePassword(password) {
       isValid: false,
       errors: ['Password is required and must be a string'],
       warnings: [],
-      strength: 'invalid'
+      strength: 'invalid',
     };
   }
 
@@ -124,7 +124,7 @@ function validatePassword(password) {
     errors,
     warnings,
     strength,
-    policy: PASSWORD_POLICY
+    policy: PASSWORD_POLICY,
   };
 }
 
@@ -137,35 +137,58 @@ function calculatePasswordStrength(password) {
   let score = 0;
 
   // Length scoring
-  if (password.length >= 12) {score += 2;}
-  else if (password.length >= 8) {score += 1;}
+  if (password.length >= 12) {
+    score += 2;
+  } else if (password.length >= 8) {
+    score += 1;
+  }
 
   // Character variety scoring
-  if (/[a-z]/.test(password)) {score += 1;}
-  if (/[A-Z]/.test(password)) {score += 1;}
-  if (/[0-9]/.test(password)) {score += 1;}
-  if (/[^a-zA-Z0-9]/.test(password)) {score += 2;}
+  if (/[a-z]/.test(password)) {
+    score += 1;
+  }
+  if (/[A-Z]/.test(password)) {
+    score += 1;
+  }
+  if (/[0-9]/.test(password)) {
+    score += 1;
+  }
+  if (/[^a-zA-Z0-9]/.test(password)) {
+    score += 2;
+  }
 
   // Bonus for length
-  if (password.length >= 16) {score += 1;}
-  if (password.length >= 20) {score += 1;}
+  if (password.length >= 16) {
+    score += 1;
+  }
+  if (password.length >= 20) {
+    score += 1;
+  }
 
   // Penalty for common patterns
-  if (
-    PASSWORD_POLICY.bannedPatterns.some((pattern) => pattern.test(password))
-  ) {
+  if (PASSWORD_POLICY.bannedPatterns.some(pattern => pattern.test(password))) {
     score -= 2;
   }
 
   // Character uniqueness bonus
   const uniqueChars = new Set(password).size;
-  if (uniqueChars >= password.length * 0.7) {score += 1;}
+  if (uniqueChars >= password.length * 0.7) {
+    score += 1;
+  }
 
   // Return strength level
-  if (score <= 2) {return 'very-weak';}
-  if (score <= 4) {return 'weak';}
-  if (score <= 6) {return 'medium';}
-  if (score <= 8) {return 'strong';}
+  if (score <= 2) {
+    return 'very-weak';
+  }
+  if (score <= 4) {
+    return 'weak';
+  }
+  if (score <= 6) {
+    return 'medium';
+  }
+  if (score <= 8) {
+    return 'strong';
+  }
   return 'very-strong';
 }
 
@@ -182,18 +205,18 @@ function getPasswordPolicyDescription() {
       'At least one number (0-9)',
       `At least one special character (${PASSWORD_POLICY.specialChars})`,
       'Cannot contain common words or predictable patterns',
-      'Cannot be all the same character or simple sequences'
+      'Cannot be all the same character or simple sequences',
     ],
     recommendations: [
       'Use a mix of unrelated words, numbers, and symbols',
       'Consider using a passphrase with special characters',
       'Avoid personal information like names or dates',
-      'Use a password manager to generate and store strong passwords'
+      'Use a password manager to generate and store strong passwords',
     ],
     examples: {
       good: ['MyDog$Loves2Fetch!', 'Coffee&Code#2024Time', 'BlueOcean$Waves9!'],
-      bad: ['password123', 'qwerty', '123456789', 'admin', 'aaaaaaaaaa']
-    }
+      bad: ['password123', 'qwerty', '123456789', 'admin', 'aaaaaaaaaa'],
+    },
   };
 }
 
@@ -215,5 +238,5 @@ module.exports = {
   calculatePasswordStrength,
   getPasswordPolicyDescription,
   expressValidatorPassword,
-  PASSWORD_POLICY
+  PASSWORD_POLICY,
 };

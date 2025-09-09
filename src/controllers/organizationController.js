@@ -1,14 +1,13 @@
 const Organization = require('../models/Organization');
 const User = require('../models/User');
 
-
 const createOrganization = async (req, res) => {
   try {
     const organization = new Organization({
       name: req.body.name,
       description: req.body.description,
       owner: req.user._id,
-      members: [{ user: req.user._id, role: 'admin' }]
+      members: [{ user: req.user._id, role: 'admin' }],
     });
 
     await organization.save();
@@ -21,7 +20,7 @@ const createOrganization = async (req, res) => {
 const getOrganizations = async (req, res) => {
   try {
     const organizations = await Organization.find({
-      'members.user': req.user._id
+      'members.user': req.user._id,
     }).populate('owner', 'name email');
 
     res.json(organizations);
@@ -34,7 +33,7 @@ const getOrganization = async (req, res) => {
   try {
     const organization = await Organization.findOne({
       _id: req.params.orgId,
-      'members.user': req.user._id
+      'members.user': req.user._id,
     }).populate('members.user', 'name email');
 
     if (!organization) {
@@ -64,11 +63,13 @@ const inviteUserToOrg = async (req, res) => {
     // Check if user is already a member
     const organization = await Organization.findOne({
       _id: req.params.orgId,
-      'members.user': user._id
+      'members.user': user._id,
     });
 
     if (organization) {
-      return res.status(400).json({ error: 'User is already a member of this organization' });
+      return res
+        .status(400)
+        .json({ error: 'User is already a member of this organization' });
     }
 
     // Add user to organization
@@ -78,9 +79,9 @@ const inviteUserToOrg = async (req, res) => {
         $push: {
           members: {
             user: user._id,
-            role
-          }
-        }
+            role,
+          },
+        },
       },
       { new: true }
     ).populate('members.user', 'name email');
@@ -91,12 +92,11 @@ const inviteUserToOrg = async (req, res) => {
         user: {
           id: user._id,
           email: user.email,
-          name: user.name
+          name: user.name,
         },
-        role
-      }
+        role,
+      },
     });
-
   } catch (error) {
     res.status(500).json({ error: 'Failed to add user to organization' });
   }
@@ -122,18 +122,20 @@ const updateMemberRole = async (req, res) => {
     const organization = await Organization.findOneAndUpdate(
       {
         _id: req.params.orgId,
-        'members.user': req.params.userId
+        'members.user': req.params.userId,
       },
       {
         $set: {
-          'members.$.role': role
-        }
+          'members.$.role': role,
+        },
       },
       { new: true }
     ).populate('members.user', 'name email');
 
     if (!organization) {
-      return res.status(404).json({ error: 'Member not found in organization' });
+      return res
+        .status(404)
+        .json({ error: 'Member not found in organization' });
     }
 
     const updatedMember = organization.members.find(
@@ -146,17 +148,15 @@ const updateMemberRole = async (req, res) => {
         user: {
           id: updatedMember.user._id,
           email: updatedMember.user.email,
-          name: updatedMember.user.name
+          name: updatedMember.user.name,
         },
-        role: updatedMember.role
-      }
+        role: updatedMember.role,
+      },
     });
-
   } catch (error) {
     res.status(500).json({ error: 'Failed to update member role' });
   }
 };
-
 
 const removeMember = async (req, res) => {
   try {
@@ -174,9 +174,9 @@ const removeMember = async (req, res) => {
       {
         $pull: {
           members: {
-            user: req.params.userId
-          }
-        }
+            user: req.params.userId,
+          },
+        },
       },
       { new: true }
     );
@@ -186,12 +186,10 @@ const removeMember = async (req, res) => {
     }
 
     res.json({ message: 'Member removed successfully' });
-
   } catch (error) {
     res.status(500).json({ error: 'Failed to remove member' });
   }
 };
-
 
 module.exports = {
   getOrganization,
@@ -199,5 +197,5 @@ module.exports = {
   createOrganization,
   inviteUserToOrg,
   updateMemberRole,
-  removeMember
+  removeMember,
 };

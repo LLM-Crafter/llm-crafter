@@ -19,11 +19,13 @@ const createApiKey = async (req, res) => {
     // Check if API key already exists for this project and provider
     const existingKey = await APIKey.findOne({
       project: req.params.projectId,
-      key: req.body.key
+      key: req.body.key,
     });
 
     if (existingKey) {
-      return res.status(400).json({ error: 'API key already exists in this project' });
+      return res
+        .status(400)
+        .json({ error: 'API key already exists in this project' });
     }
 
     const apiKey = new APIKey({
@@ -31,7 +33,7 @@ const createApiKey = async (req, res) => {
       key: req.body.key,
       provider: req.body.provider,
       project: req.params.projectId,
-      is_active: true
+      is_active: true,
     });
 
     await apiKey.save();
@@ -41,7 +43,7 @@ const createApiKey = async (req, res) => {
       name: apiKey.name,
       provider: apiKey.provider,
       project: req.params.projectId,
-      created_at: apiKey.createdAt
+      created_at: apiKey.createdAt,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create API key' });
@@ -52,21 +54,25 @@ const deleteApiKey = async (req, res) => {
     // Verify project exists and belongs to the organization
     const project = await Project.findOne({
       _id: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!project) {
-      return res.status(404).json({ error: 'Project not found in this organization' });
+      return res
+        .status(404)
+        .json({ error: 'Project not found in this organization' });
     }
 
     // Find and delete the API key
     const apiKey = await APIKey.findOneAndDelete({
       _id: req.params.apiKeyId,
-      project: req.params.projectId
+      project: req.params.projectId,
     });
 
     if (!apiKey) {
-      return res.status(404).json({ error: 'API key not found in this project' });
+      return res
+        .status(404)
+        .json({ error: 'API key not found in this project' });
     }
 
     res.json({ message: 'API key deleted successfully' });
@@ -77,5 +83,5 @@ const deleteApiKey = async (req, res) => {
 
 module.exports = {
   createApiKey,
-  deleteApiKey
+  deleteApiKey,
 };

@@ -9,7 +9,7 @@ const orgAuth = require('../middleware/organizationAuth');
 const {
   generalLimiter,
   apiKeyLimiter,
-  generalSlowDown
+  generalSlowDown,
 } = require('../middleware/rateLimiting');
 
 const promptRoutes = require('./prompts');
@@ -23,14 +23,14 @@ router.use('/:orgId/user-api-keys', userApiKeyRoutes);
 // Organization validation
 const organizationValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
-  body('description').optional().trim()
+  body('description').optional().trim(),
 ];
 
 // Project validation
 const projectValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('description').optional().trim(),
-  body('llm_configurations').optional().isArray()
+  body('llm_configurations').optional().isArray(),
 ];
 
 router.use('/:orgId/projects/:projectId/prompts', promptRoutes);
@@ -96,7 +96,7 @@ router.post(
   orgAuth.isAdmin,
   [
     body('email').isEmail().normalizeEmail(),
-    body('role').isIn(['admin', 'member', 'viewer'])
+    body('role').isIn(['admin', 'member', 'viewer']),
   ],
   validate,
   organizationController.inviteUserToOrg

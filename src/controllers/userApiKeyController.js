@@ -17,7 +17,7 @@ const createApiKey = async (req, res) => {
     }
 
     const membership = organization.members.find(
-      (member) => member.user.toString() === req.user._id.toString()
+      member => member.user.toString() === req.user._id.toString()
     );
 
     if (!membership) {
@@ -28,14 +28,14 @@ const createApiKey = async (req, res) => {
     const existingKeysCount = await UserApiKey.countDocuments({
       user: req.user._id,
       organization: req.params.orgId,
-      is_active: true
+      is_active: true,
     });
 
     const maxApiKeys = process.env.MAX_API_KEYS_PER_USER || 10;
     if (existingKeysCount >= maxApiKeys) {
       return res.status(400).json({
         error: `Maximum number of API keys reached (${maxApiKeys})`,
-        code: 'MAX_API_KEYS_EXCEEDED'
+        code: 'MAX_API_KEYS_EXCEEDED',
       });
     }
 
@@ -46,17 +46,15 @@ const createApiKey = async (req, res) => {
       'agents:execute',
       'agents:chat',
       'projects:read',
-      'statistics:read'
+      'statistics:read',
     ];
 
-    const invalidScopes = scopes.filter(
-      (scope) => !validScopes.includes(scope)
-    );
+    const invalidScopes = scopes.filter(scope => !validScopes.includes(scope));
     if (invalidScopes.length > 0) {
       return res.status(400).json({
         error: 'Invalid scopes provided',
         invalid_scopes: invalidScopes,
-        valid_scopes: validScopes
+        valid_scopes: validScopes,
       });
     }
 
@@ -64,12 +62,12 @@ const createApiKey = async (req, res) => {
     if (allowed_projects && allowed_projects.length > 0) {
       const projects = await Project.find({
         _id: { $in: allowed_projects },
-        organization: req.params.orgId
+        organization: req.params.orgId,
       });
 
       if (projects.length !== allowed_projects.length) {
         return res.status(400).json({
-          error: 'Some projects not found in this organization'
+          error: 'Some projects not found in this organization',
         });
       }
     }
@@ -104,7 +102,7 @@ const createApiKey = async (req, res) => {
       restrictions: restrictions || {},
       expires_at: expirationDate,
       created_by: req.user._id,
-      allowed_projects: allowed_projects || []
+      allowed_projects: allowed_projects || [],
     });
 
     await userApiKey.save();
@@ -120,10 +118,10 @@ const createApiKey = async (req, res) => {
         restrictions: userApiKey.restrictions,
         expires_at: userApiKey.expires_at,
         allowed_projects: userApiKey.allowed_projects,
-        created_at: userApiKey.createdAt
+        created_at: userApiKey.createdAt,
       },
       message:
-        'API key created successfully. Save this key securely - it won\'t be shown again.'
+        "API key created successfully. Save this key securely - it won't be shown again.",
     });
   } catch (error) {
     console.error('Create API key error:', error);
@@ -141,7 +139,7 @@ const getApiKeys = async (req, res) => {
   try {
     const apiKeys = await UserApiKey.find({
       user: req.user._id,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     })
       .populate('allowed_projects', 'name')
       .select('-key_hash') // Never return the hash
@@ -149,12 +147,12 @@ const getApiKeys = async (req, res) => {
 
     res.json({
       success: true,
-      data: apiKeys.map((key) => ({
+      data: apiKeys.map(key => ({
         ...key.toJSON(),
         // Add computed fields
         is_expired: key.isExpired(),
-        masked_key: `ak_${'*'.repeat(32)}${key._id.slice(-8)}`
-      }))
+        masked_key: `ak_${'*'.repeat(32)}${key._id.slice(-8)}`,
+      })),
     });
   } catch (error) {
     console.error('Get API keys error:', error);
@@ -170,7 +168,7 @@ const getApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     }).populate('allowed_projects', 'name');
 
     if (!apiKey) {
@@ -182,8 +180,8 @@ const getApiKey = async (req, res) => {
       data: {
         ...apiKey.toJSON(),
         is_expired: apiKey.isExpired(),
-        masked_key: `ak_${'*'.repeat(32)}${apiKey._id.slice(-8)}`
-      }
+        masked_key: `ak_${'*'.repeat(32)}${apiKey._id.slice(-8)}`,
+      },
     });
   } catch (error) {
     console.error('Get API key error:', error);
@@ -202,7 +200,7 @@ const updateApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!apiKey) {
@@ -217,17 +215,17 @@ const updateApiKey = async (req, res) => {
         'agents:execute',
         'agents:chat',
         'projects:read',
-        'statistics:read'
+        'statistics:read',
       ];
 
       const invalidScopes = scopes.filter(
-        (scope) => !validScopes.includes(scope)
+        scope => !validScopes.includes(scope)
       );
       if (invalidScopes.length > 0) {
         return res.status(400).json({
           error: 'Invalid scopes provided',
           invalid_scopes: invalidScopes,
-          valid_scopes: validScopes
+          valid_scopes: validScopes,
         });
       }
       apiKey.scopes = scopes;
@@ -238,12 +236,12 @@ const updateApiKey = async (req, res) => {
       if (allowed_projects.length > 0) {
         const projects = await Project.find({
           _id: { $in: allowed_projects },
-          organization: req.params.orgId
+          organization: req.params.orgId,
         });
 
         if (projects.length !== allowed_projects.length) {
           return res.status(400).json({
-            error: 'Some projects not found in this organization'
+            error: 'Some projects not found in this organization',
           });
         }
       }
@@ -251,8 +249,12 @@ const updateApiKey = async (req, res) => {
     }
 
     // Update other fields
-    if (name !== undefined) {apiKey.name = name;}
-    if (restrictions !== undefined) {apiKey.restrictions = restrictions;}
+    if (name !== undefined) {
+      apiKey.name = name;
+    }
+    if (restrictions !== undefined) {
+      apiKey.restrictions = restrictions;
+    }
 
     if (expires_at !== undefined) {
       if (expires_at === null) {
@@ -278,9 +280,9 @@ const updateApiKey = async (req, res) => {
       data: {
         ...apiKey.toJSON(),
         is_expired: apiKey.isExpired(),
-        masked_key: `ak_${'*'.repeat(32)}${apiKey._id.slice(-8)}`
+        masked_key: `ak_${'*'.repeat(32)}${apiKey._id.slice(-8)}`,
       },
-      message: 'API key updated successfully'
+      message: 'API key updated successfully',
     });
   } catch (error) {
     console.error('Update API key error:', error);
@@ -296,7 +298,7 @@ const rotateApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!apiKey) {
@@ -314,7 +316,7 @@ const rotateApiKey = async (req, res) => {
     apiKey.usage = {
       total_requests: 0,
       executions_today: 0,
-      last_reset_date: new Date()
+      last_reset_date: new Date(),
     };
 
     await apiKey.save();
@@ -325,10 +327,10 @@ const rotateApiKey = async (req, res) => {
         id: apiKey._id,
         name: apiKey.name,
         api_key: newApiKey, // Only shown once!
-        rotated_at: apiKey.last_rotated_at
+        rotated_at: apiKey.last_rotated_at,
       },
       message:
-        'API key rotated successfully. Save the new key securely - it won\'t be shown again.'
+        "API key rotated successfully. Save the new key securely - it won't be shown again.",
     });
   } catch (error) {
     console.error('Rotate API key error:', error);
@@ -344,7 +346,7 @@ const revokeApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!apiKey) {
@@ -356,7 +358,7 @@ const revokeApiKey = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'API key revoked successfully'
+      message: 'API key revoked successfully',
     });
   } catch (error) {
     console.error('Revoke API key error:', error);
@@ -372,7 +374,7 @@ const getApiKeyUsage = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!apiKey) {
@@ -388,13 +390,13 @@ const getApiKeyUsage = async (req, res) => {
         restrictions: apiKey.restrictions,
         daily_limit_remaining: apiKey.restrictions.max_executions_per_day
           ? Math.max(
-            0,
-            apiKey.restrictions.max_executions_per_day -
+              0,
+              apiKey.restrictions.max_executions_per_day -
                 apiKey.usage.executions_today
-          )
+            )
           : null,
-        is_within_daily_limit: apiKey.isWithinDailyLimit()
-      }
+        is_within_daily_limit: apiKey.isWithinDailyLimit(),
+      },
     });
   } catch (error) {
     console.error('Get API key usage error:', error);
@@ -409,5 +411,5 @@ module.exports = {
   updateApiKey,
   rotateApiKey,
   revokeApiKey,
-  getApiKeyUsage
+  getApiKeyUsage,
 };

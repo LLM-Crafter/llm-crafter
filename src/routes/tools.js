@@ -7,7 +7,7 @@ const validate = require('../middleware/validate');
 const {
   generalLimiter,
   proxyLimiter,
-  generalSlowDown
+  generalSlowDown,
 } = require('../middleware/rateLimiting');
 
 // Validation middleware
@@ -32,7 +32,7 @@ const createToolValidation = [
       'communication',
       'utility',
       'llm',
-      'custom'
+      'custom',
     ])
     .withMessage('Invalid category'),
   body('parameters_schema')
@@ -52,7 +52,7 @@ const createToolValidation = [
     .withMessage('Invalid implementation type'),
   body('implementation.handler')
     .notEmpty()
-    .withMessage('Implementation handler is required')
+    .withMessage('Implementation handler is required'),
 ];
 
 const updateToolValidation = [
@@ -67,18 +67,18 @@ const updateToolValidation = [
       'communication',
       'utility',
       'llm',
-      'custom'
+      'custom',
     ]),
   body('parameters_schema').optional().isObject(),
   body('implementation').optional().isObject(),
-  body('is_active').optional().isBoolean()
+  body('is_active').optional().isBoolean(),
 ];
 
 const executeToolValidation = [
   body('parameters')
     .optional()
     .isObject()
-    .withMessage('Parameters must be an object')
+    .withMessage('Parameters must be an object'),
 ];
 
 // ===== PUBLIC TOOL ROUTES =====

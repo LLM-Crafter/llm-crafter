@@ -10,7 +10,7 @@ class CacheService {
       system_prompt: systemPrompt,
       variables,
       model: llmSettings.model,
-      parameters: llmSettings.parameters
+      parameters: llmSettings.parameters,
     });
 
     // Create SHA-256 hash
@@ -25,7 +25,7 @@ class CacheService {
         { _id: cached._id },
         {
           $inc: { hits: 1 },
-          $set: { last_accessed: new Date() }
+          $set: { last_accessed: new Date() },
         }
       );
       return cached;
@@ -39,7 +39,7 @@ class CacheService {
       prompt: promptId,
       result,
       usage,
-      metadata
+      metadata,
     });
     await cached.save();
     return cached;

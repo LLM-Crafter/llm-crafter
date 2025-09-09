@@ -6,12 +6,14 @@ const getTools = async (req, res) => {
     const { category, search } = req.query;
 
     const filter = { is_active: true };
-    if (category) {filter.category = category;}
+    if (category) {
+      filter.category = category;
+    }
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { display_name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { description: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -31,7 +33,7 @@ const getTool = async (req, res) => {
   try {
     const tool = await Tool.findOne({
       name: req.params.toolName,
-      is_active: true
+      is_active: true,
     });
 
     if (!tool) {
@@ -54,7 +56,7 @@ const createTool = async (req, res) => {
       parameters_schema: req.body.parameters_schema,
       return_schema: req.body.return_schema,
       implementation: req.body.implementation,
-      is_system_tool: false // Custom tools are not system tools
+      is_system_tool: false, // Custom tools are not system tools
     });
 
     await tool.save();
@@ -90,18 +92,27 @@ const updateTool = async (req, res) => {
     }
 
     // Update fields
-    if (req.body.display_name !== undefined)
-    {tool.display_name = req.body.display_name;}
-    if (req.body.description !== undefined)
-    {tool.description = req.body.description;}
-    if (req.body.category !== undefined) {tool.category = req.body.category;}
-    if (req.body.parameters_schema !== undefined)
-    {tool.parameters_schema = req.body.parameters_schema;}
-    if (req.body.return_schema !== undefined)
-    {tool.return_schema = req.body.return_schema;}
-    if (req.body.implementation !== undefined)
-    {tool.implementation = req.body.implementation;}
-    if (req.body.is_active !== undefined) {tool.is_active = req.body.is_active;}
+    if (req.body.display_name !== undefined) {
+      tool.display_name = req.body.display_name;
+    }
+    if (req.body.description !== undefined) {
+      tool.description = req.body.description;
+    }
+    if (req.body.category !== undefined) {
+      tool.category = req.body.category;
+    }
+    if (req.body.parameters_schema !== undefined) {
+      tool.parameters_schema = req.body.parameters_schema;
+    }
+    if (req.body.return_schema !== undefined) {
+      tool.return_schema = req.body.return_schema;
+    }
+    if (req.body.implementation !== undefined) {
+      tool.implementation = req.body.implementation;
+    }
+    if (req.body.is_active !== undefined) {
+      tool.is_active = req.body.is_active;
+    }
 
     await tool.save();
 
@@ -146,21 +157,21 @@ const executeTool = async (req, res) => {
         success: true,
         result: result.result,
         execution_time_ms: result.execution_time_ms,
-        tool_name: result.tool_name
+        tool_name: result.tool_name,
       });
     } else {
       res.status(400).json({
         success: false,
         error: result.error,
         execution_time_ms: result.execution_time_ms,
-        tool_name: result.tool_name
+        tool_name: result.tool_name,
       });
     }
   } catch (error) {
     res.status(500).json({
       success: false,
       error: 'Tool execution failed',
-      details: error.message
+      details: error.message,
     });
   }
 };
@@ -178,7 +189,7 @@ const getToolUsageStats = async (req, res) => {
   try {
     const tool = await Tool.findOne({
       name: req.params.toolName,
-      is_active: true
+      is_active: true,
     }).select('name usage_stats');
 
     if (!tool) {
@@ -187,7 +198,7 @@ const getToolUsageStats = async (req, res) => {
 
     res.json({
       tool_name: tool.name,
-      usage_stats: tool.usage_stats
+      usage_stats: tool.usage_stats,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch tool usage stats' });
@@ -202,5 +213,5 @@ module.exports = {
   deleteTool,
   executeTool,
   getToolCategories,
-  getToolUsageStats
+  getToolUsageStats,
 };

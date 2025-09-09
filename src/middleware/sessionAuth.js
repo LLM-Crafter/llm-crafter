@@ -17,7 +17,7 @@ const sessionAuth = async (req, res, next) => {
     if (!sessionToken) {
       return res.status(401).json({
         error: 'Session token required',
-        code: 'SESSION_TOKEN_REQUIRED'
+        code: 'SESSION_TOKEN_REQUIRED',
       });
     }
 
@@ -28,21 +28,21 @@ const sessionAuth = async (req, res, next) => {
     const session = await SessionToken.findOne({
       token_hash: tokenHash,
       is_revoked: false,
-      expires_at: { $gt: new Date() }
+      expires_at: { $gt: new Date() },
     }).populate([
       {
         path: 'user_api_key',
         populate: {
-          path: 'user organization'
-        }
+          path: 'user organization',
+        },
       },
-      'agent'
+      'agent',
     ]);
 
     if (!session) {
       return res.status(401).json({
         error: 'Invalid or expired session token',
-        code: 'INVALID_SESSION_TOKEN'
+        code: 'INVALID_SESSION_TOKEN',
       });
     }
 
@@ -50,7 +50,7 @@ const sessionAuth = async (req, res, next) => {
     if (!session.isValid()) {
       return res.status(401).json({
         error: 'Session token is no longer valid',
-        code: 'SESSION_INVALID'
+        code: 'SESSION_INVALID',
       });
     }
 
@@ -60,7 +60,7 @@ const sessionAuth = async (req, res, next) => {
         error: 'Session interaction limit exceeded',
         code: 'INTERACTION_LIMIT_EXCEEDED',
         max_interactions: session.max_interactions,
-        interactions_used: session.interactions_used
+        interactions_used: session.interactions_used,
       });
     }
 
@@ -68,7 +68,7 @@ const sessionAuth = async (req, res, next) => {
     if (!session.user_api_key.is_active) {
       return res.status(401).json({
         error: 'Associated API key is no longer active',
-        code: 'API_KEY_INACTIVE'
+        code: 'API_KEY_INACTIVE',
       });
     }
 
@@ -76,7 +76,7 @@ const sessionAuth = async (req, res, next) => {
     if (session.user_api_key.isExpired()) {
       return res.status(401).json({
         error: 'Associated API key has expired',
-        code: 'API_KEY_EXPIRED'
+        code: 'API_KEY_EXPIRED',
       });
     }
 
@@ -86,7 +86,7 @@ const sessionAuth = async (req, res, next) => {
       if (session.client_ip && session.client_ip !== currentIP) {
         return res.status(403).json({
           error: 'IP address mismatch',
-          code: 'IP_MISMATCH'
+          code: 'IP_MISMATCH',
         });
       }
     }
@@ -109,13 +109,13 @@ const sessionAuth = async (req, res, next) => {
     if (error.message === 'Session interaction limit exceeded') {
       return res.status(429).json({
         error: error.message,
-        code: 'INTERACTION_LIMIT_EXCEEDED'
+        code: 'INTERACTION_LIMIT_EXCEEDED',
       });
     }
 
     res.status(401).json({
       error: 'Session authentication failed',
-      code: 'SESSION_AUTH_FAILED'
+      code: 'SESSION_AUTH_FAILED',
     });
   }
 };
@@ -128,7 +128,7 @@ const flexibleSessionAuth = (options = {}) => {
   const {
     allowSessionToken = true,
     allowApiKey = true,
-    requiredScopes = []
+    requiredScopes = [],
   } = options;
 
   return async (req, res, next) => {
@@ -158,13 +158,13 @@ const flexibleSessionAuth = (options = {}) => {
       accepted_methods: [
         ...(allowSessionToken
           ? [
-            'Session Token (X-Session-Token: <token> or Authorization: Session <token>)'
-          ]
+              'Session Token (X-Session-Token: <token> or Authorization: Session <token>)',
+            ]
           : []),
         ...(allowApiKey
           ? ['API Key (X-API-Key: <key> or Authorization: Bearer <key>)']
-          : [])
-      ]
+          : []),
+      ],
     });
   };
 };
@@ -179,14 +179,14 @@ const validateSessionAgent = (req, res, next) => {
   if (!req.session) {
     return res.status(401).json({
       error: 'Session authentication required',
-      code: 'SESSION_REQUIRED'
+      code: 'SESSION_REQUIRED',
     });
   }
 
   if (req.session.agent._id.toString() !== agentIdFromUrl) {
     return res.status(403).json({
       error: 'Session is not authorized for this agent',
-      code: 'AGENT_MISMATCH'
+      code: 'AGENT_MISMATCH',
     });
   }
 
@@ -196,5 +196,5 @@ const validateSessionAgent = (req, res, next) => {
 module.exports = {
   sessionAuth,
   flexibleSessionAuth,
-  validateSessionAgent
+  validateSessionAgent,
 };

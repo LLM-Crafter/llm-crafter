@@ -58,7 +58,7 @@ class SuggestionService {
         userPrompt,
         {
           temperature: 1,
-          max_tokens: 1000
+          max_tokens: 1000,
         },
         systemPrompt
       );
@@ -84,8 +84,8 @@ class SuggestionService {
           total_tokens: response.usage.total_tokens,
           cost: response.usage.cost,
           model: agent.question_suggestions.model,
-          execution_time_ms: executionTime
-        }
+          execution_time_ms: executionTime,
+        },
       };
     } catch (error) {
       console.error('Error generating question suggestions:', error);
@@ -106,11 +106,11 @@ class SuggestionService {
     // Get last 5 messages, but only include role and content
     return messages
       .slice(-5)
-      .map((msg) => ({
+      .map(msg => ({
         role: msg.role,
-        content: msg.content
+        content: msg.content,
       }))
-      .filter((msg) => msg.content && msg.content.trim().length > 0);
+      .filter(msg => msg.content && msg.content.trim().length > 0);
   }
 
   /**
@@ -150,7 +150,7 @@ Generate ${count} relevant reply suggestions:`;
     }
 
     const conversationText = contextMessages
-      .map((msg) => `${msg.role}: ${msg.content}`)
+      .map(msg => `${msg.role}: ${msg.content}`)
       .join('\n');
 
     return `Based on this conversation context, generate relevant reply suggestions:
@@ -175,10 +175,10 @@ Generate reply suggestions that would naturally continue this conversation:`;
         // Validate and clean suggestions
         const validSuggestions = parsed.suggestions
           .filter(
-            (suggestion) =>
+            suggestion =>
               typeof suggestion === 'string' && suggestion.trim().length > 0
           )
-          .map((suggestion) => suggestion.trim())
+          .map(suggestion => suggestion.trim())
           .slice(0, expectedCount); // Ensure we don't exceed expected count
 
         return validSuggestions.length > 0 ? validSuggestions : null;
@@ -203,8 +203,8 @@ Generate reply suggestions that would naturally continue this conversation:`;
       // Look for lines that seem like replies
       const lines = text
         .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
 
       const replies = [];
 
@@ -232,7 +232,9 @@ Generate reply suggestions that would naturally continue this conversation:`;
 
           if (cleaned.length > 2 && cleaned.length < 100) {
             replies.push(cleaned);
-            if (replies.length >= expectedCount) {break;}
+            if (replies.length >= expectedCount) {
+              break;
+            }
           }
         }
       }

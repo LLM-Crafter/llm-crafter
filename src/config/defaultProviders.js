@@ -42,8 +42,8 @@ const defaultProviders = [
 
       // Open-weight models
       'gpt-oss-120b',
-      'gpt-oss-20b'
-    ]
+      'gpt-oss-20b',
+    ],
   },
   {
     name: 'anthropic',
@@ -61,8 +61,8 @@ const defaultProviders = [
       // Claude 3 baseline (still available in some API/cloud endpoints)
       'claude-3-opus-20240229', // Claude 3 Opus (now deprecated)
       'claude-3-sonnet-20240229', // Claude 3 Sonnet (now deprecated)
-      'claude-3-haiku-20240307' // Claude 3 Haiku (fast/low-cost; vision + text)
-    ]
+      'claude-3-haiku-20240307', // Claude 3 Haiku (fast/low-cost; vision + text)
+    ],
   },
   {
     name: 'google',
@@ -83,8 +83,8 @@ const defaultProviders = [
 
       // Gemini Vision models (if you need them)
       'gemini-1.0-pro-vision', // Vision model for multimodal input (retired/legacy)
-      'gemini-1.5-pro-vision' // 1.5 Pro vision model (active)
-    ]
+      'gemini-1.5-pro-vision', // 1.5 Pro vision model (active)
+    ],
   },
   {
     name: 'deepseek',
@@ -110,9 +110,9 @@ const defaultProviders = [
       // Other notable variants
       'DeepSeek-R1-Distill-Qwen-32B', // Distilled version of R1 model with competitive reasoning and code performance
       'JanusFlow', // Multimodal model with decoupled visual encoding for understanding and generation
-      'Janus-Pro' // Advanced multimodal generation model in the Janus series
-    ]
-  }
+      'Janus-Pro', // Advanced multimodal generation model in the Janus series
+    ],
+  },
 ];
 
 async function initializeDefaultProviders() {
@@ -122,18 +122,18 @@ async function initializeDefaultProviders() {
     try {
       // Check if provider already exists
       const existingProvider = await Provider.findOne({
-        name: providerData.name
+        name: providerData.name,
       });
 
       if (existingProvider) {
         // Update existing provider with new models if any
         const newModels = providerData.models.filter(
-          (model) => !existingProvider.models.includes(model)
+          model => !existingProvider.models.includes(model)
         );
 
         if (newModels.length > 0) {
           existingProvider.models = [
-            ...new Set([...existingProvider.models, ...newModels])
+            ...new Set([...existingProvider.models, ...newModels]),
           ];
           await existingProvider.save();
           console.log(
@@ -171,7 +171,7 @@ async function refreshDefaultProviders() {
         { name: providerData.name },
         {
           models: providerData.models,
-          updatedAt: new Date()
+          updatedAt: new Date(),
         },
         { upsert: true, new: true }
       );
@@ -190,5 +190,5 @@ async function refreshDefaultProviders() {
 module.exports = {
   initializeDefaultProviders,
   refreshDefaultProviders,
-  defaultProviders
+  defaultProviders,
 };

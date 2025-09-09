@@ -70,7 +70,7 @@ const LANGUAGE_ABBREVIATIONS = {
     signup: 'sign up',
     signin: 'sign in',
     logout: 'log out',
-    signout: 'sign out'
+    signout: 'sign out',
   },
   es: {
     // Spanish abbreviations
@@ -94,7 +94,7 @@ const LANGUAGE_ABBREVIATIONS = {
     mxa: 'mucha',
     ntp: 'no te preocupes',
     sldos: 'saludos',
-    tkm: 'te quiero mucho'
+    tkm: 'te quiero mucho',
   },
   pt: {
     // Portuguese abbreviations
@@ -121,7 +121,7 @@ const LANGUAGE_ABBREVIATIONS = {
     amanha: 'amanha',
     sla: 'sei la',
     rsrs: 'risos',
-    kk: 'risos'
+    kk: 'risos',
   },
   fr: {
     // French abbreviations
@@ -148,7 +148,7 @@ const LANGUAGE_ABBREVIATIONS = {
     dsl: 'desole',
     mdr: 'mort de rire',
     lol: 'mort de rire',
-    cc: 'coucou'
+    cc: 'coucou',
   },
   de: {
     // German abbreviations
@@ -173,7 +173,7 @@ const LANGUAGE_ABBREVIATIONS = {
     dass: 'dass',
     mfg: 'mit freundlichen gruessen',
     lg: 'liebe gruesse',
-    vg: 'viele gruesse'
+    vg: 'viele gruesse',
   },
   it: {
     // Italian abbreviations
@@ -190,8 +190,8 @@ const LANGUAGE_ABBREVIATIONS = {
     qlcn: 'qualcuno',
     tt: 'tutto',
     tvb: 'ti voglio bene',
-    tvtb: 'ti voglio tanto bene'
-  }
+    tvtb: 'ti voglio tanto bene',
+  },
 };
 
 class ToolService {
@@ -284,7 +284,7 @@ class ToolService {
       // Merge tool config with agent-specific config
       const mergedConfig = {
         ...baseConfig,
-        ...agentToolConfig
+        ...agentToolConfig,
       };
 
       // Execute tool
@@ -322,7 +322,7 @@ class ToolService {
         success: true,
         result: finalResult,
         execution_time_ms: executionTime,
-        tool_name: toolName
+        tool_name: toolName,
       };
     } catch (error) {
       const executionTime = Date.now() - startTime;
@@ -342,7 +342,7 @@ class ToolService {
         success: false,
         error: error.message,
         execution_time_ms: executionTime,
-        tool_name: toolName
+        tool_name: toolName,
       };
     }
   }
@@ -359,7 +359,7 @@ class ToolService {
 
     return await Tool.find({
       name: { $in: toolNames },
-      is_active: true
+      is_active: true,
     }).select('name display_name description parameters_schema');
   }
 
@@ -383,11 +383,11 @@ class ToolService {
         {
           title: 'Example Search Result',
           url: 'https://example.com',
-          snippet: `This is a placeholder search result for query: ${  query}`
-        }
+          snippet: `This is a placeholder search result for query: ${query}`,
+        },
       ],
       total_results: 1,
-      search_time_ms: 100
+      search_time_ms: 100,
     };
   }
 
@@ -409,7 +409,7 @@ class ToolService {
       return {
         expression,
         result,
-        type: typeof result
+        type: typeof result,
       };
     } catch (error) {
       throw new Error(`Calculator error: ${error.message}`);
@@ -426,7 +426,7 @@ class ToolService {
       model = 'gpt-4o-mini',
       temperature = 0.7,
       max_tokens = 1000,
-      api_key_id
+      api_key_id,
     } = parameters;
 
     if (!prompt) {
@@ -466,7 +466,7 @@ class ToolService {
       response: result.content,
       model,
       usage: result.usage,
-      finish_reason: result.finish_reason
+      finish_reason: result.finish_reason,
     };
   }
 
@@ -485,7 +485,7 @@ class ToolService {
       formattedTime = Math.floor(now.getTime() / 1000);
     } else if (format === 'human') {
       formattedTime = now.toLocaleString('en-US', {
-        timeZone: timezone === 'UTC' ? 'UTC' : timezone
+        timeZone: timezone === 'UTC' ? 'UTC' : timezone,
       });
     } else {
       formattedTime = now.toString();
@@ -496,7 +496,7 @@ class ToolService {
       timezone,
       format,
       unix_timestamp: Math.floor(now.getTime() / 1000),
-      iso_string: now.toISOString()
+      iso_string: now.toISOString(),
     };
   }
 
@@ -510,37 +510,37 @@ class ToolService {
       let result;
 
       switch (operation) {
-      case 'parse':
-        result = typeof data === 'string' ? JSON.parse(data) : data;
-        break;
+        case 'parse':
+          result = typeof data === 'string' ? JSON.parse(data) : data;
+          break;
 
-      case 'stringify':
-        result = JSON.stringify(data, null, 2);
-        break;
+        case 'stringify':
+          result = JSON.stringify(data, null, 2);
+          break;
 
-      case 'extract':
-        if (!path) {
-          throw new Error('Path parameter required for extract operation');
-        }
-        result = this.extractFromPath(data, path);
-        break;
+        case 'extract':
+          if (!path) {
+            throw new Error('Path parameter required for extract operation');
+          }
+          result = this.extractFromPath(data, path);
+          break;
 
-      case 'validate':
-        result = {
-          valid: true,
-          type: Array.isArray(data) ? 'array' : typeof data,
-          keys: typeof data === 'object' ? Object.keys(data) : null
-        };
-        break;
+        case 'validate':
+          result = {
+            valid: true,
+            type: Array.isArray(data) ? 'array' : typeof data,
+            keys: typeof data === 'object' ? Object.keys(data) : null,
+          };
+          break;
 
-      default:
-        throw new Error(`Unsupported operation: ${operation}`);
+        default:
+          throw new Error(`Unsupported operation: ${operation}`);
       }
 
       return {
         operation,
         result,
-        success: true
+        success: true,
       };
     } catch (error) {
       throw new Error(`JSON processing error: ${error.message}`);
@@ -558,7 +558,7 @@ class ToolService {
       query_params = {},
       path_params = {},
       body_data = null,
-      timeout = 30000
+      timeout = 30000,
     } = parameters;
 
     // Check if we have endpoint_name (new format) or url (legacy format)
@@ -608,26 +608,26 @@ class ToolService {
         const auth = config.authentication;
 
         switch (auth.type) {
-        case 'bearer_token':
-          if (auth.token) {
-            authHeaders['Authorization'] = `Bearer ${auth.token}`;
-          }
-          break;
-        case 'api_key':
-          if (auth.api_key) {
-            if (auth.header) {
-              authHeaders[auth.header] = auth.api_key;
-            } else {
-              // Default to X-API-Key if no header specified
-              authHeaders['X-API-Key'] = auth.api_key;
+          case 'bearer_token':
+            if (auth.token) {
+              authHeaders['Authorization'] = `Bearer ${auth.token}`;
             }
-          }
-          break;
-        case 'cookie':
-          if (auth.cookie) {
-            authHeaders['Cookie'] = auth.cookie;
-          }
-          break;
+            break;
+          case 'api_key':
+            if (auth.api_key) {
+              if (auth.header) {
+                authHeaders[auth.header] = auth.api_key;
+              } else {
+                // Default to X-API-Key if no header specified
+                authHeaders['X-API-Key'] = auth.api_key;
+              }
+            }
+            break;
+          case 'cookie':
+            if (auth.cookie) {
+              authHeaders['Cookie'] = auth.cookie;
+            }
+            break;
         }
       }
     } else {
@@ -643,7 +643,7 @@ class ToolService {
       const finalHeaders = {
         'Content-Type': 'application/json',
         ...authHeaders,
-        ...headers
+        ...headers,
       };
 
       // Prepare request options
@@ -653,7 +653,7 @@ class ToolService {
         path: finalUrl.pathname + finalUrl.search,
         method: method.toUpperCase(),
         headers: finalHeaders,
-        timeout
+        timeout,
       };
 
       // Add body if present
@@ -670,9 +670,9 @@ class ToolService {
       }
 
       return new Promise((resolve, reject) => {
-        const req = httpModule.request(options, (res) => {
+        const req = httpModule.request(options, res => {
           let data = '';
-          res.on('data', (chunk) => {
+          res.on('data', chunk => {
             data += chunk;
           });
 
@@ -684,7 +684,7 @@ class ToolService {
                 method: method.toUpperCase(),
                 status_code: res.statusCode,
                 headers: res.headers,
-                success: res.statusCode >= 200 && res.statusCode < 300
+                success: res.statusCode >= 200 && res.statusCode < 300,
               };
 
               // Try to parse JSON response
@@ -710,7 +710,7 @@ class ToolService {
           reject(new Error('Request timeout'));
         });
 
-        req.on('error', (error) => {
+        req.on('error', error => {
           reject(new Error(`Request error: ${error.message}`));
         });
 
@@ -748,7 +748,7 @@ class ToolService {
         matched_faq: null,
         success: false,
         error: 'No FAQ data configured',
-        execution_time_ms: Date.now() - startTime
+        execution_time_ms: Date.now() - startTime,
       };
     }
 
@@ -776,7 +776,7 @@ class ToolService {
         language === 'auto' ? this.detectLanguage(question) : language;
       const threshold = config.threshold || 0.3;
 
-      const matches = faqs.map((faq) => {
+      const matches = faqs.map(faq => {
         const confidence = this.calculateEnhancedTextSimilarity(
           question,
           faq.question,
@@ -787,7 +787,7 @@ class ToolService {
           answer: faq.answer,
           category: faq.category || 'general',
           confidence,
-          method: 'enhanced_text'
+          method: 'enhanced_text',
         };
       });
 
@@ -803,7 +803,7 @@ class ToolService {
         success: bestMatch !== null,
         execution_time_ms: Date.now() - startTime,
         fallback_used: true,
-        matching_method: 'enhanced_text'
+        matching_method: 'enhanced_text',
       };
     }
   }
@@ -859,8 +859,8 @@ class ToolService {
               debug: {
                 total_matches: semanticResult.matches.length,
                 matches_after_filtering: validMatches.length,
-                threshold_used: threshold
-              }
+                threshold_used: threshold,
+              },
             };
           }
         }
@@ -868,7 +868,7 @@ class ToolService {
 
       // Fallback to enhanced text similarity
       console.log('Falling back to enhanced text similarity...');
-      const matches = faqs.map((faq) => {
+      const matches = faqs.map(faq => {
         const confidence = this.calculateEnhancedTextSimilarity(
           question,
           faq.question,
@@ -879,7 +879,7 @@ class ToolService {
           answer: faq.answer,
           category: faq.category || 'general',
           confidence,
-          method: 'enhanced_text'
+          method: 'enhanced_text',
         };
       });
 
@@ -899,8 +899,8 @@ class ToolService {
         debug: {
           total_matches: matches.length,
           matches_after_filtering: validMatches.length,
-          threshold_used: threshold
-        }
+          threshold_used: threshold,
+        },
       };
     } catch (error) {
       console.error(
@@ -909,7 +909,7 @@ class ToolService {
       );
 
       // Final fallback to basic text similarity
-      const matches = faqs.map((faq) => {
+      const matches = faqs.map(faq => {
         const confidence = this.calculateBasicTextSimilarity(
           question,
           faq.question
@@ -919,7 +919,7 @@ class ToolService {
           answer: faq.answer,
           category: faq.category || 'general',
           confidence,
-          method: 'basic_text'
+          method: 'basic_text',
         };
       });
 
@@ -936,7 +936,7 @@ class ToolService {
         execution_time_ms: Date.now() - startTime,
         fallback_used: true,
         matching_method: 'basic_text',
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -1021,7 +1021,7 @@ class ToolService {
               answer: faq.answer,
               category: faq.category || 'general',
               confidence: similarity,
-              method: 'semantic'
+              method: 'semantic',
             };
           } catch (error) {
             console.error(
@@ -1034,7 +1034,7 @@ class ToolService {
       );
 
       // Filter out null results and sort by confidence
-      const validMatches = matches.filter((match) => match !== null);
+      const validMatches = matches.filter(match => match !== null);
       validMatches.sort((a, b) => b.confidence - a.confidence);
 
       console.log(
@@ -1072,7 +1072,7 @@ class ToolService {
       // Call the OpenAI service with proper parameter format
       const response = await openaiService.createEmbedding({
         input: cleanText,
-        model: 'text-embedding-3-small'
+        model: 'text-embedding-3-small',
       });
 
       if (
@@ -1119,7 +1119,7 @@ class ToolService {
 
     // Apply threshold filter
     const thresholdFiltered = matches.filter(
-      (match) => match.confidence >= threshold
+      match => match.confidence >= threshold
     );
     console.log(
       `After threshold filter (>= ${threshold}): ${thresholdFiltered.length} matches`
@@ -1149,7 +1149,7 @@ class ToolService {
     }
 
     const relevantMatches = thresholdFiltered.filter(
-      (match) => match.confidence >= minRelevantScore
+      match => match.confidence >= minRelevantScore
     );
     console.log(
       `After relevance filter (>= ${minRelevantScore.toFixed(3)}): ${relevantMatches.length} matches`
@@ -1204,7 +1204,7 @@ class ToolService {
       jaccard: 0.3,
       levenshtein: 0.2,
       wordOverlap: 0.3,
-      ngram: 0.2
+      ngram: 0.2,
     };
 
     const combinedScore =
@@ -1227,7 +1227,9 @@ class ToolService {
     const normalized1 = text1.toLowerCase().trim();
     const normalized2 = text2.toLowerCase().trim();
 
-    if (normalized1 === normalized2) {return 1.0;}
+    if (normalized1 === normalized2) {
+      return 1.0;
+    }
 
     return this.jaccardSimilarity(normalized1, normalized2);
   }
@@ -1258,7 +1260,7 @@ class ToolService {
       LANGUAGE_ABBREVIATIONS[language] || LANGUAGE_ABBREVIATIONS.en;
     const words = text.split(/\s+/);
 
-    const expanded = words.map((word) => {
+    const expanded = words.map(word => {
       const cleanWord = word.replace(/[^\w]/g, '');
       return abbreviations[cleanWord] || word;
     });
@@ -1278,7 +1280,7 @@ class ToolService {
       pt: /\b(que|como|onde|quando|por|para|com|uma|este|esta|muito|mais|todo|fazer|tempo|ano|sim|nao|ola|obrigado)\b/g,
       fr: /\b(que|comment|ou|quand|pour|avec|une|cette|tres|plus|tout|faire|temps|annee|oui|non|bonjour|merci)\b/g,
       de: /\b(was|wie|wo|wann|fur|mit|eine|diese|sehr|mehr|alle|machen|zeit|jahr|ja|nein|hallo|danke)\b/g,
-      it: /\b(che|come|dove|quando|per|con|una|questa|molto|piu|tutto|fare|tempo|anno|si|no|ciao|grazie)\b/g
+      it: /\b(che|come|dove|quando|per|con|una|questa|molto|piu|tutto|fare|tempo|anno|si|no|ciao|grazie)\b/g,
     };
 
     let maxMatches = 0;
@@ -1302,7 +1304,7 @@ class ToolService {
     const set1 = new Set(text1.split(/\s+/));
     const set2 = new Set(text2.split(/\s+/));
 
-    const intersection = new Set([...set1].filter((x) => set2.has(x)));
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
     const union = new Set([...set1, ...set2]);
 
     return intersection.size / union.size;
@@ -1354,7 +1356,7 @@ class ToolService {
     const words1 = text1.split(/\s+/);
     const words2 = text2.split(/\s+/);
 
-    const commonWords = words1.filter((word) => words2.includes(word));
+    const commonWords = words1.filter(word => words2.includes(word));
     const totalWords = Math.max(words1.length, words2.length);
 
     return totalWords > 0 ? commonWords.length / totalWords : 0;
@@ -1370,7 +1372,7 @@ class ToolService {
     const set1 = new Set(ngrams1);
     const set2 = new Set(ngrams2);
 
-    const intersection = new Set([...set1].filter((x) => set2.has(x)));
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
     const union = new Set([...set1, ...set2]);
 
     return union.size > 0 ? intersection.size / union.size : 0;
@@ -1398,7 +1400,7 @@ class ToolService {
 
     try {
       // Use Function constructor for safer evaluation than eval
-      return Function(`"use strict"; return (${  expression  })`)();
+      return Function(`"use strict"; return (${expression})`)();
     } catch (error) {
       throw new Error('Invalid mathematical expression');
     }
@@ -1443,7 +1445,7 @@ class ToolService {
         ...result,
         _summarized: true,
         _original_length: resultStr.length,
-        summary
+        summary,
       };
     } catch (error) {
       console.error('Failed to summarize API result:', error.message);
@@ -1508,17 +1510,17 @@ class ToolService {
       ['grant', 'revoke'],
       ['install', 'uninstall'],
       ['freeze', 'unfreeze'],
-      ['subscribe', 'unsubscribe']
+      ['subscribe', 'unsubscribe'],
     ];
 
     const words1 = text1.toLowerCase().split(/\s+/);
     const words2 = text2.toLowerCase().split(/\s+/);
 
     for (const [word1, word2] of opposites) {
-      const hasWord1InText1 = words1.some((w) => w.includes(word1));
-      const hasWord2InText1 = words1.some((w) => w.includes(word2));
-      const hasWord1InText2 = words2.some((w) => w.includes(word1));
-      const hasWord2InText2 = words2.some((w) => w.includes(word2));
+      const hasWord1InText1 = words1.some(w => w.includes(word1));
+      const hasWord2InText1 = words1.some(w => w.includes(word2));
+      const hasWord1InText2 = words2.some(w => w.includes(word1));
+      const hasWord2InText2 = words2.some(w => w.includes(word2));
 
       // If one text contains word1 and the other contains word2 (opposites)
       if (
@@ -1554,22 +1556,22 @@ class ToolService {
       ['database', 'query', 'table', 'record', 'sql'],
       ['authentication', 'login', 'password', 'user', 'account'],
       ['error', 'bug', 'issue', 'problem', 'fix', 'solve'],
-      ['file', 'upload', 'download', 'document', 'attachment']
+      ['file', 'upload', 'download', 'document', 'attachment'],
     ];
 
     const words1 = text1.toLowerCase().split(/\s+/);
     const words2 = text2.toLowerCase().split(/\s+/);
 
     for (const group of contextGroups) {
-      const matches1 = words1.filter((word) =>
+      const matches1 = words1.filter(word =>
         group.some(
-          (contextWord) =>
+          contextWord =>
             word.includes(contextWord) || contextWord.includes(word)
         )
       ).length;
-      const matches2 = words2.filter((word) =>
+      const matches2 = words2.filter(word =>
         group.some(
-          (contextWord) =>
+          contextWord =>
             word.includes(contextWord) || contextWord.includes(word)
         )
       ).length;

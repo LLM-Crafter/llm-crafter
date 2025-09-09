@@ -5,23 +5,23 @@ const toolSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     name: {
       type: String,
       required: true,
       unique: true,
-      trim: true
+      trim: true,
     },
     display_name: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     description: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     category: {
       type: String,
@@ -33,86 +33,86 @@ const toolSchema = new mongoose.Schema(
         'utility',
         'llm',
         'knowledge',
-        'custom'
+        'custom',
       ],
-      required: true
+      required: true,
     },
     parameters_schema: {
       type: {
         type: String,
-        default: 'object'
+        default: 'object',
       },
       properties: {
         type: mongoose.Schema.Types.Mixed,
-        required: true
+        required: true,
       },
       required: [
         {
-          type: String
-        }
+          type: String,
+        },
       ],
       additionalProperties: {
         type: Boolean,
-        default: false
-      }
+        default: false,
+      },
     },
     return_schema: {
       type: {
         type: String,
-        default: 'object'
+        default: 'object',
       },
       properties: {
-        type: mongoose.Schema.Types.Mixed
-      }
+        type: mongoose.Schema.Types.Mixed,
+      },
     },
     implementation: {
       type: {
         type: String,
         enum: ['internal', 'external_api', 'webhook', 'code'],
-        required: true
+        required: true,
       },
       handler: {
         type: String,
-        required: true
+        required: true,
       },
       config: {
         type: mongoose.Schema.Types.Mixed,
-        default: {}
-      }
+        default: {},
+      },
     },
     is_system_tool: {
       type: Boolean,
-      default: false
+      default: false,
     },
     is_active: {
       type: Boolean,
-      default: true
+      default: true,
     },
     usage_stats: {
       total_calls: {
         type: Number,
-        default: 0
+        default: 0,
       },
       success_calls: {
         type: Number,
-        default: 0
+        default: 0,
       },
       failed_calls: {
         type: Number,
-        default: 0
+        default: 0,
       },
       avg_execution_time_ms: {
         type: Number,
-        default: 0
-      }
+        default: 0,
+      },
     },
     version: {
       type: String,
-      default: '1.0.0'
-    }
+      default: '1.0.0',
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 

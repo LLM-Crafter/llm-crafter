@@ -18,17 +18,17 @@ const createApiKeyValidation = [
   body('scopes')
     .isArray({ min: 1 })
     .withMessage('At least one scope is required')
-    .custom((scopes) => {
+    .custom(scopes => {
       const validScopes = [
         'prompts:execute',
         'agents:read',
         'agents:execute',
         'agents:chat',
         'projects:read',
-        'statistics:read'
+        'statistics:read',
       ];
       const invalidScopes = scopes.filter(
-        (scope) => !validScopes.includes(scope)
+        scope => !validScopes.includes(scope)
       );
       if (invalidScopes.length > 0) {
         throw new Error(`Invalid scopes: ${invalidScopes.join(', ')}`);
@@ -62,7 +62,7 @@ const createApiKeyValidation = [
   body('allowed_projects')
     .optional()
     .isArray()
-    .withMessage('Allowed projects must be an array')
+    .withMessage('Allowed projects must be an array'),
 ];
 
 const updateApiKeyValidation = [
@@ -77,17 +77,17 @@ const updateApiKeyValidation = [
     .optional()
     .isArray({ min: 1 })
     .withMessage('At least one scope is required')
-    .custom((scopes) => {
+    .custom(scopes => {
       const validScopes = [
         'prompts:execute',
         'agents:read',
         'agents:execute',
         'agents:chat',
         'projects:read',
-        'statistics:read'
+        'statistics:read',
       ];
       const invalidScopes = scopes.filter(
-        (scope) => !validScopes.includes(scope)
+        scope => !validScopes.includes(scope)
       );
       if (invalidScopes.length > 0) {
         throw new Error(`Invalid scopes: ${invalidScopes.join(', ')}`);
@@ -116,9 +116,13 @@ const updateApiKeyValidation = [
     .withMessage('Max executions per day must be at least 1'),
   body('expires_at')
     .optional()
-    .custom((value) => {
-      if (value === null) {return true;} // Allow null to remove expiration
-      if (!value) {return true;} // Allow undefined/empty
+    .custom(value => {
+      if (value === null) {
+        return true;
+      } // Allow null to remove expiration
+      if (!value) {
+        return true;
+      } // Allow undefined/empty
 
       const date = new Date(value);
       if (isNaN(date.getTime())) {
@@ -129,7 +133,7 @@ const updateApiKeyValidation = [
   body('allowed_projects')
     .optional()
     .isArray()
-    .withMessage('Allowed projects must be an array')
+    .withMessage('Allowed projects must be an array'),
 ];
 
 // ===== API KEY MANAGEMENT ROUTES =====

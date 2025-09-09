@@ -6,27 +6,27 @@ const userApiKeySchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     name: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     key_hash: {
       type: String,
       required: true,
-      unique: true
+      unique: true,
     },
     user: {
       type: String,
       ref: 'User',
-      required: true
+      required: true,
     },
     organization: {
       type: String,
       ref: 'Organization',
-      required: true
+      required: true,
     },
 
     // Scopes define what this key can access
@@ -39,9 +39,9 @@ const userApiKeySchema = new mongoose.Schema(
           'agents:execute', // Execute agents (generates session tokens)
           'agents:chat', // Direct agent chat (restricted)
           'projects:read', // Read project info
-          'statistics:read' // Read usage statistics
-        ]
-      }
+          'statistics:read', // Read usage statistics
+        ],
+      },
     ],
 
     // Security restrictions
@@ -49,7 +49,7 @@ const userApiKeySchema = new mongoose.Schema(
       ip_whitelist: [String], // Allowed IP addresses
       domain_whitelist: [String], // Allowed referring domains
       rate_limit_override: Number, // Custom rate limit (requests/minute)
-      max_executions_per_day: Number // Daily execution limit
+      max_executions_per_day: Number, // Daily execution limit
     },
 
     // Usage tracking
@@ -57,7 +57,7 @@ const userApiKeySchema = new mongoose.Schema(
       total_requests: { type: Number, default: 0 },
       last_used_at: Date,
       executions_today: { type: Number, default: 0 },
-      last_reset_date: { type: Date, default: Date.now }
+      last_reset_date: { type: Date, default: Date.now },
     },
 
     // Metadata
@@ -67,19 +67,19 @@ const userApiKeySchema = new mongoose.Schema(
     last_rotated_at: Date,
 
     // Projects this key can access (if empty, can access all projects in org)
-    allowed_projects: [{ type: String, ref: 'Project' }]
+    allowed_projects: [{ type: String, ref: 'Project' }],
   },
   {
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform (doc, ret) {
+      transform(doc, ret) {
         // Never expose the actual key hash
         delete ret.key_hash;
         return ret;
-      }
+      },
     },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 

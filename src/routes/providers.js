@@ -12,7 +12,7 @@ const providerValidation = [
     .isArray()
     .withMessage('Models must be an array')
     .notEmpty()
-    .withMessage('At least one model is required')
+    .withMessage('At least one model is required'),
 ];
 
 // Public route to get all providers

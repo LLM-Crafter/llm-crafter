@@ -12,7 +12,7 @@ const createAgent = async (req, res) => {
     // Verify project exists and belongs to the organization
     const project = await Project.findOne({
       _id: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!project) {
@@ -24,7 +24,7 @@ const createAgent = async (req, res) => {
     // Verify API key exists and belongs to the project
     const apiKey = await ApiKey.findOne({
       _id: req.body.api_key,
-      project: req.params.projectId
+      project: req.params.projectId,
     }).populate('provider');
 
     if (!apiKey) {
@@ -45,25 +45,25 @@ const createAgent = async (req, res) => {
     const requestedTools = req.body.tools || [];
 
     // Validate requested tools exist
-    const toolNames = availableTools.map((tool) => tool.name);
+    const toolNames = availableTools.map(tool => tool.name);
     const invalidTools = requestedTools.filter(
-      (toolName) => !toolNames.includes(toolName)
+      toolName => !toolNames.includes(toolName)
     );
 
     if (invalidTools.length > 0) {
       return res.status(400).json({
-        error: `Invalid tools: ${invalidTools.join(', ')}`
+        error: `Invalid tools: ${invalidTools.join(', ')}`,
       });
     }
 
     // Build tools array with full tool information
-    const agentTools = requestedTools.map((toolName) => {
-      const tool = availableTools.find((t) => t.name === toolName);
+    const agentTools = requestedTools.map(toolName => {
+      const tool = availableTools.find(t => t.name === toolName);
       return {
         name: tool.name,
         description: tool.description,
         parameters: tool.parameters_schema, // For new agents, use schema defaults
-        enabled: true
+        enabled: true,
       };
     });
 
@@ -78,14 +78,14 @@ const createAgent = async (req, res) => {
         if (!api_key || !model) {
           return res.status(400).json({
             error:
-              'API key and model are required when enabling question suggestions'
+              'API key and model are required when enabling question suggestions',
           });
         }
 
         // Validate suggestion API key exists and belongs to the project
         const suggestionApiKey = await ApiKey.findOne({
           _id: api_key,
-          project: req.params.projectId
+          project: req.params.projectId,
         }).populate('provider');
 
         if (!suggestionApiKey) {
@@ -104,7 +104,7 @@ const createAgent = async (req, res) => {
         // Validate count if provided
         if (count && (count < 1 || count > 5)) {
           return res.status(400).json({
-            error: 'Question count must be between 1 and 5'
+            error: 'Question count must be between 1 and 5',
           });
         }
 
@@ -113,7 +113,7 @@ const createAgent = async (req, res) => {
           count: count || 3,
           api_key,
           model,
-          custom_prompt: custom_prompt || null
+          custom_prompt: custom_prompt || null,
         };
       } else {
         questionSuggestions = {
@@ -121,7 +121,7 @@ const createAgent = async (req, res) => {
           count: count || 3,
           api_key: api_key || null,
           model: model || null,
-          custom_prompt: custom_prompt || null
+          custom_prompt: custom_prompt || null,
         };
       }
     }
@@ -137,7 +137,7 @@ const createAgent = async (req, res) => {
       llm_settings: req.body.llm_settings,
       tools: agentTools,
       config: req.body.config || {},
-      question_suggestions: questionSuggestions
+      question_suggestions: questionSuggestions,
     });
 
     await agent.save();
@@ -158,15 +158,15 @@ const getAgents = async (req, res) => {
   try {
     const agents = await Agent.find({
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     })
       .populate('api_key', 'name provider')
       .populate({
         path: 'api_key',
         populate: {
           path: 'provider',
-          select: 'name'
-        }
+          select: 'name',
+        },
       });
 
     res.json(agents);
@@ -180,14 +180,14 @@ const getAgent = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     })
       .populate('api_key')
       .populate({
         path: 'api_key',
         populate: {
-          path: 'provider'
-        }
+          path: 'provider',
+        },
       });
 
     if (!agent) {
@@ -205,7 +205,7 @@ const updateAgent = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -216,7 +216,7 @@ const updateAgent = async (req, res) => {
     if (req.body.api_key) {
       const apiKey = await ApiKey.findOne({
         _id: req.body.api_key,
-        project: req.params.projectId
+        project: req.params.projectId,
       }).populate('provider');
 
       if (!apiKey) {
@@ -241,23 +241,23 @@ const updateAgent = async (req, res) => {
     // Update tools if provided
     if (req.body.tools) {
       const availableTools = await toolService.getAvailableTools();
-      const toolNames = availableTools.map((tool) => tool.name);
+      const toolNames = availableTools.map(tool => tool.name);
       const invalidTools = req.body.tools.filter(
-        (toolName) => !toolNames.includes(toolName)
+        toolName => !toolNames.includes(toolName)
       );
 
       if (invalidTools.length > 0) {
         return res.status(400).json({
-          error: `Invalid tools: ${invalidTools.join(', ')}`
+          error: `Invalid tools: ${invalidTools.join(', ')}`,
         });
       }
 
-      const agentTools = req.body.tools.map((toolName) => {
-        const tool = availableTools.find((t) => t.name === toolName);
+      const agentTools = req.body.tools.map(toolName => {
+        const tool = availableTools.find(t => t.name === toolName);
 
         // Check if this tool already exists in the agent and preserve its parameters
         const existingTool = agent.tools.find(
-          (existingTool) => existingTool.name === toolName
+          existingTool => existingTool.name === toolName
         );
 
         return {
@@ -267,7 +267,7 @@ const updateAgent = async (req, res) => {
           parameters: existingTool
             ? existingTool.parameters
             : tool.parameters_schema,
-          enabled: existingTool ? existingTool.enabled : true
+          enabled: existingTool ? existingTool.enabled : true,
         };
       });
 
@@ -275,18 +275,24 @@ const updateAgent = async (req, res) => {
     }
 
     // Update other fields
-    if (req.body.name !== undefined) {agent.name = req.body.name;}
-    if (req.body.description !== undefined)
-    {agent.description = req.body.description;}
-    if (req.body.system_prompt !== undefined)
-    {agent.system_prompt = req.body.system_prompt;}
+    if (req.body.name !== undefined) {
+      agent.name = req.body.name;
+    }
+    if (req.body.description !== undefined) {
+      agent.description = req.body.description;
+    }
+    if (req.body.system_prompt !== undefined) {
+      agent.system_prompt = req.body.system_prompt;
+    }
     if (req.body.llm_settings) {
       agent.llm_settings = { ...agent.llm_settings, ...req.body.llm_settings };
     }
     if (req.body.config) {
       agent.config = { ...agent.config, ...req.body.config };
     }
-    if (req.body.is_active !== undefined) {agent.is_active = req.body.is_active;}
+    if (req.body.is_active !== undefined) {
+      agent.is_active = req.body.is_active;
+    }
 
     // Update question suggestions if provided
     if (req.body.question_suggestions !== undefined) {
@@ -298,14 +304,14 @@ const updateAgent = async (req, res) => {
         if (!api_key || !model) {
           return res.status(400).json({
             error:
-              'API key and model are required when enabling question suggestions'
+              'API key and model are required when enabling question suggestions',
           });
         }
 
         // Validate suggestion API key exists and belongs to the project
         const suggestionApiKey = await ApiKey.findOne({
           _id: api_key,
-          project: req.params.projectId
+          project: req.params.projectId,
         }).populate('provider');
 
         if (!suggestionApiKey) {
@@ -325,7 +331,7 @@ const updateAgent = async (req, res) => {
       // Validate count if provided
       if (count !== undefined && (count < 1 || count > 5)) {
         return res.status(400).json({
-          error: 'Question count must be between 1 and 5'
+          error: 'Question count must be between 1 and 5',
         });
       }
 
@@ -340,7 +346,7 @@ const updateAgent = async (req, res) => {
         custom_prompt:
           custom_prompt !== undefined
             ? custom_prompt
-            : agent.question_suggestions.custom_prompt
+            : agent.question_suggestions.custom_prompt,
       };
     }
 
@@ -355,8 +361,8 @@ const updateAgent = async (req, res) => {
       .populate({
         path: 'api_key',
         populate: {
-          path: 'provider'
-        }
+          path: 'provider',
+        },
       });
 
     res.json(updatedAgent);
@@ -375,7 +381,7 @@ const deleteAgent = async (req, res) => {
     const agent = await Agent.findOneAndDelete({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -451,8 +457,12 @@ const getConversations = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = { agent: req.params.agentId };
-    if (user_identifier) {filter.user_identifier = user_identifier;}
-    if (status) {filter.status = status;}
+    if (user_identifier) {
+      filter.user_identifier = user_identifier;
+    }
+    if (status) {
+      filter.status = status;
+    }
 
     const [conversations, total] = await Promise.all([
       Conversation.find(filter)
@@ -463,14 +473,14 @@ const getConversations = async (req, res) => {
           '_id user_identifier title status metadata createdAt updatedAt'
         ),
 
-      Conversation.countDocuments(filter)
+      Conversation.countDocuments(filter),
     ]);
 
     res.json({
       total,
       page: parseInt(page),
       limit: parseInt(limit),
-      conversations
+      conversations,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch conversations' });
@@ -481,7 +491,7 @@ const getConversation = async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.conversationId,
-      agent: req.params.agentId
+      agent: req.params.agentId,
     });
 
     if (!conversation) {
@@ -502,8 +512,12 @@ const getAgentExecutions = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = { agent: req.params.agentId };
-    if (status) {filter.status = status;}
-    if (type) {filter.type = type;}
+    if (status) {
+      filter.status = status;
+    }
+    if (type) {
+      filter.type = type;
+    }
 
     const [executions, total] = await Promise.all([
       AgentExecution.find(filter)
@@ -512,14 +526,14 @@ const getAgentExecutions = async (req, res) => {
         .limit(parseInt(limit))
         .select('_id type status usage execution_time_ms createdAt metadata'),
 
-      AgentExecution.countDocuments(filter)
+      AgentExecution.countDocuments(filter),
     ]);
 
     res.json({
       total,
       page: parseInt(page),
       limit: parseInt(limit),
-      executions
+      executions,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch agent executions' });
@@ -530,7 +544,7 @@ const getAgentExecution = async (req, res) => {
   try {
     const execution = await AgentExecution.findOne({
       _id: req.params.executionId,
-      agent: req.params.agentId
+      agent: req.params.agentId,
     });
 
     if (!execution) {
@@ -550,7 +564,7 @@ const configureApiEndpoints = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -559,7 +573,7 @@ const configureApiEndpoints = async (req, res) => {
 
     // Check if agent has api_caller tool
     const hasApiCallerTool = agent.tools.some(
-      (tool) => tool.name === 'api_caller'
+      tool => tool.name === 'api_caller'
     );
     if (!hasApiCallerTool) {
       return res
@@ -574,14 +588,14 @@ const configureApiEndpoints = async (req, res) => {
       for (const [endpointName, config] of Object.entries(endpoints)) {
         if (!config.base_url || !config.path) {
           return res.status(400).json({
-            error: `Endpoint '${endpointName}' must have base_url and path`
+            error: `Endpoint '${endpointName}' must have base_url and path`,
           });
         }
 
         // Validate methods array
         if (config.methods && !Array.isArray(config.methods)) {
           return res.status(400).json({
-            error: `Endpoint '${endpointName}' methods must be an array`
+            error: `Endpoint '${endpointName}' methods must be an array`,
           });
         }
       }
@@ -592,7 +606,7 @@ const configureApiEndpoints = async (req, res) => {
       const validAuthTypes = ['bearer_token', 'api_key', 'cookie'];
       if (!validAuthTypes.includes(authentication.type)) {
         return res.status(400).json({
-          error: `Invalid authentication type. Must be one of: ${validAuthTypes.join(', ')}`
+          error: `Invalid authentication type. Must be one of: ${validAuthTypes.join(', ')}`,
         });
       }
     }
@@ -604,7 +618,7 @@ const configureApiEndpoints = async (req, res) => {
         typeof summarization.enabled !== 'boolean'
       ) {
         return res.status(400).json({
-          error: 'Summarization \'enabled\' field must be a boolean'
+          error: "Summarization 'enabled' field must be a boolean",
         });
       }
 
@@ -616,7 +630,7 @@ const configureApiEndpoints = async (req, res) => {
       ) {
         return res.status(400).json({
           error:
-            'Summarization \'max_tokens\' must be a number between 10 and 72000'
+            "Summarization 'max_tokens' must be a number between 10 and 72000",
         });
       }
 
@@ -626,13 +640,13 @@ const configureApiEndpoints = async (req, res) => {
           summarization.min_size < 100)
       ) {
         return res.status(400).json({
-          error: 'Summarization \'min_size\' must be a number >= 100'
+          error: "Summarization 'min_size' must be a number >= 100",
         });
       }
 
       if (summarization.model && typeof summarization.model !== 'string') {
         return res.status(400).json({
-          error: 'Summarization \'model\' must be a string'
+          error: "Summarization 'model' must be a string",
         });
       }
 
@@ -641,7 +655,7 @@ const configureApiEndpoints = async (req, res) => {
         typeof summarization.endpoint_rules !== 'object'
       ) {
         return res.status(400).json({
-          error: 'Summarization \'endpoint_rules\' must be an object'
+          error: "Summarization 'endpoint_rules' must be an object",
         });
       }
 
@@ -657,12 +671,12 @@ const configureApiEndpoints = async (req, res) => {
               rules.max_tokens > 1000)
           ) {
             return res.status(400).json({
-              error: `Endpoint rule '${endpointName}' max_tokens must be a number between 10 and 1000`
+              error: `Endpoint rule '${endpointName}' max_tokens must be a number between 10 and 1000`,
             });
           }
           if (rules.focus && typeof rules.focus !== 'string') {
             return res.status(400).json({
-              error: `Endpoint rule '${endpointName}' focus must be a string`
+              error: `Endpoint rule '${endpointName}' focus must be a string`,
             });
           }
         }
@@ -678,7 +692,7 @@ const configureApiEndpoints = async (req, res) => {
     const responseData = {
       message: 'API configuration updated successfully',
       endpoints: endpoints || {},
-      authentication: authentication ? { type: authentication.type } : {}
+      authentication: authentication ? { type: authentication.type } : {},
     };
 
     // Include summarization in response if provided
@@ -698,7 +712,7 @@ const getApiEndpoints = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -715,19 +729,19 @@ const getApiEndpoints = async (req, res) => {
     // Don't expose sensitive authentication details
     const sanitizedAuth = apiConfig.authentication
       ? {
-        type: apiConfig.authentication.type,
-        configured: !!(
-          apiConfig.authentication.token ||
+          type: apiConfig.authentication.type,
+          configured: !!(
+            apiConfig.authentication.token ||
             apiConfig.authentication.api_key ||
             apiConfig.authentication.cookie
-        )
-      }
+          ),
+        }
       : {};
 
     res.json({
       endpoints: apiConfig.endpoints,
       authentication: sanitizedAuth,
-      summarization: apiConfig.summarization || {}
+      summarization: apiConfig.summarization || {},
     });
   } catch (error) {
     console.error('Get API endpoints error:', error);
@@ -742,7 +756,7 @@ const configureFAQs = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -750,7 +764,7 @@ const configureFAQs = async (req, res) => {
     }
 
     // Check if agent has FAQ tool
-    const hasFAQTool = agent.tools.some((tool) => tool.name === 'faq');
+    const hasFAQTool = agent.tools.some(tool => tool.name === 'faq');
     if (!hasFAQTool) {
       return res
         .status(400)
@@ -762,7 +776,7 @@ const configureFAQs = async (req, res) => {
     // Validate FAQs configuration
     if (faqs && !Array.isArray(faqs)) {
       return res.status(400).json({
-        error: 'FAQs must be an array'
+        error: 'FAQs must be an array',
       });
     }
 
@@ -771,7 +785,7 @@ const configureFAQs = async (req, res) => {
         const faq = faqs[i];
         if (!faq.question || !faq.answer) {
           return res.status(400).json({
-            error: `FAQ at index ${i} must have both question and answer`
+            error: `FAQ at index ${i} must have both question and answer`,
           });
         }
         if (
@@ -779,12 +793,12 @@ const configureFAQs = async (req, res) => {
           typeof faq.answer !== 'string'
         ) {
           return res.status(400).json({
-            error: `FAQ at index ${i} question and answer must be strings`
+            error: `FAQ at index ${i} question and answer must be strings`,
           });
         }
         if (faq.category && typeof faq.category !== 'string') {
           return res.status(400).json({
-            error: `FAQ at index ${i} category must be a string`
+            error: `FAQ at index ${i} category must be a string`,
           });
         }
       }
@@ -795,7 +809,7 @@ const configureFAQs = async (req, res) => {
     res.json({
       message: 'FAQ configuration updated successfully',
       faqs: faqs || [],
-      count: (faqs || []).length
+      count: (faqs || []).length,
     });
   } catch (error) {
     console.error('Configure FAQs error:', error);
@@ -808,7 +822,7 @@ const getFAQs = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -826,7 +840,7 @@ const getFAQs = async (req, res) => {
       faqs: faqConfig.faqs,
       enable_partial_matching: faqConfig.enable_partial_matching,
       default_threshold: faqConfig.default_threshold,
-      count: faqConfig.faqs.length
+      count: faqConfig.faqs.length,
     });
   } catch (error) {
     console.error('Get FAQs error:', error);
@@ -840,7 +854,7 @@ const summarizeConversation = async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.conversationId,
-      agent: req.params.agentId
+      agent: req.params.agentId,
     });
 
     if (!conversation) {
@@ -860,8 +874,8 @@ const summarizeConversation = async (req, res) => {
           has_summary: !!conversation.conversation_summary,
           messages_count: conversation.messages.length,
           last_summary_index: conversation.metadata.last_summary_index,
-          requires_summarization: conversation.metadata.requires_summarization
-        }
+          requires_summarization: conversation.metadata.requires_summarization,
+        },
       });
     }
 
@@ -879,8 +893,8 @@ const summarizeConversation = async (req, res) => {
         messages_count: updatedConversation.messages.length,
         last_summary_index: updatedConversation.metadata.last_summary_index,
         summary_version: updatedConversation.metadata.summary_version,
-        requires_summarization: false
-      }
+        requires_summarization: false,
+      },
     });
   } catch (error) {
     console.error('Manual summarization error:', error);
@@ -892,7 +906,7 @@ const getConversationSummary = async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.conversationId,
-      agent: req.params.agentId
+      agent: req.params.agentId,
     }).select(
       'conversation_summary metadata.last_summary_index metadata.summary_version metadata.requires_summarization messages'
     );
@@ -906,11 +920,11 @@ const getConversationSummary = async (req, res) => {
       (conversation.metadata.last_summary_index + 1);
     const estimatedTokenSavings = conversation.conversation_summary
       ? summarizationService.estimateTokenSavings(
-        conversation.messages.slice(
-          0,
-          conversation.metadata.last_summary_index + 1
+          conversation.messages.slice(
+            0,
+            conversation.metadata.last_summary_index + 1
+          )
         )
-      )
       : 0;
 
     res.json({
@@ -922,8 +936,8 @@ const getConversationSummary = async (req, res) => {
         last_summary_index: conversation.metadata.last_summary_index,
         summary_version: conversation.metadata.summary_version || 0,
         requires_summarization: conversation.metadata.requires_summarization,
-        estimated_token_savings: estimatedTokenSavings
-      }
+        estimated_token_savings: estimatedTokenSavings,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch conversation summary' });
@@ -937,7 +951,7 @@ const configureQuestionSuggestions = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -950,13 +964,13 @@ const configureQuestionSuggestions = async (req, res) => {
     if (enabled && (!api_key || !model)) {
       return res.status(400).json({
         error:
-          'API key and model are required when enabling question suggestions'
+          'API key and model are required when enabling question suggestions',
       });
     }
 
     if (count && (count < 1 || count > 5)) {
       return res.status(400).json({
-        error: 'Question count must be between 1 and 5'
+        error: 'Question count must be between 1 and 5',
       });
     }
 
@@ -964,7 +978,7 @@ const configureQuestionSuggestions = async (req, res) => {
     if (api_key) {
       const apiKeyObj = await ApiKey.findOne({
         _id: api_key,
-        project: req.params.projectId
+        project: req.params.projectId,
       }).populate('provider');
 
       if (!apiKeyObj) {
@@ -982,17 +996,27 @@ const configureQuestionSuggestions = async (req, res) => {
     }
 
     const config = {};
-    if (enabled !== undefined) {config.enabled = enabled;}
-    if (count !== undefined) {config.count = count;}
-    if (api_key !== undefined) {config.api_key = api_key;}
-    if (model !== undefined) {config.model = model;}
-    if (custom_prompt !== undefined) {config.custom_prompt = custom_prompt;}
+    if (enabled !== undefined) {
+      config.enabled = enabled;
+    }
+    if (count !== undefined) {
+      config.count = count;
+    }
+    if (api_key !== undefined) {
+      config.api_key = api_key;
+    }
+    if (model !== undefined) {
+      config.model = model;
+    }
+    if (custom_prompt !== undefined) {
+      config.custom_prompt = custom_prompt;
+    }
 
     await agent.configureQuestionSuggestions(config);
 
     res.json({
       message: 'Question suggestions configuration updated successfully',
-      configuration: agent.getQuestionSuggestions()
+      configuration: agent.getQuestionSuggestions(),
     });
   } catch (error) {
     console.error('Configure question suggestions error:', error);
@@ -1005,7 +1029,7 @@ const getQuestionSuggestions = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -1020,7 +1044,7 @@ const getQuestionSuggestions = async (req, res) => {
       count: config.count,
       model: config.model,
       custom_prompt: config.custom_prompt,
-      api_key_configured: !!config.api_key
+      api_key_configured: !!config.api_key,
     };
 
     res.json(sanitizedConfig);
@@ -1060,14 +1084,14 @@ const executeChatbotAgentWithSession = async (req, res) => {
       session_info: {
         session_id: req.session._id,
         remaining_interactions: req.remainingInteractions,
-        expires_at: req.session.expires_at
-      }
+        expires_at: req.session.expires_at,
+      },
     });
   } catch (error) {
     console.error('Session-based chatbot execution error:', error);
     res.status(500).json({
       error: error.message || 'Failed to execute chatbot agent',
-      code: 'EXECUTION_FAILED'
+      code: 'EXECUTION_FAILED',
     });
   }
 };
@@ -1095,14 +1119,14 @@ const executeTaskAgentWithSession = async (req, res) => {
       session_info: {
         session_id: req.session._id,
         remaining_interactions: req.remainingInteractions,
-        expires_at: req.session.expires_at
-      }
+        expires_at: req.session.expires_at,
+      },
     });
   } catch (error) {
     console.error('Session-based task execution error:', error);
     res.status(500).json({
       error: error.message || 'Failed to execute task agent',
-      code: 'EXECUTION_FAILED'
+      code: 'EXECUTION_FAILED',
     });
   }
 };
@@ -1121,7 +1145,7 @@ const executeChatbotAgentWithApiKey = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!agent) {
@@ -1143,18 +1167,18 @@ const executeChatbotAgentWithApiKey = async (req, res) => {
         api_key_id: req.apiKey._id,
         daily_limit_remaining: req.apiKey.restrictions.max_executions_per_day
           ? Math.max(
-            0,
-            req.apiKey.restrictions.max_executions_per_day -
+              0,
+              req.apiKey.restrictions.max_executions_per_day -
                 req.apiKey.usage.executions_today
-          )
-          : null
-      }
+            )
+          : null,
+      },
     });
   } catch (error) {
     console.error('API key-based chatbot execution error:', error);
     res.status(500).json({
       error: error.message || 'Failed to execute chatbot agent',
-      code: 'EXECUTION_FAILED'
+      code: 'EXECUTION_FAILED',
     });
   }
 };
@@ -1167,7 +1191,7 @@ const getAgentForApiKey = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     })
       .select(
         'name description type system_prompt tools config version is_active'
@@ -1177,8 +1201,8 @@ const getAgentForApiKey = async (req, res) => {
         path: 'api_key',
         populate: {
           path: 'provider',
-          select: 'name'
-        }
+          select: 'name',
+        },
       });
 
     if (!agent) {
@@ -1193,23 +1217,23 @@ const getAgentForApiKey = async (req, res) => {
       type: agent.type,
       version: agent.version,
       is_active: agent.is_active,
-      tools: agent.tools.map((tool) => ({
+      tools: agent.tools.map(tool => ({
         name: tool.name,
         description: tool.description,
-        enabled: tool.enabled
+        enabled: tool.enabled,
       })),
       // Don't expose system_prompt or detailed config
       api_key: agent.api_key
         ? {
-          name: agent.api_key.name,
-          provider: agent.api_key.provider?.name
-        }
-        : null
+            name: agent.api_key.name,
+            provider: agent.api_key.provider?.name,
+          }
+        : null,
     };
 
     res.json({
       success: true,
-      data: sanitizedAgent
+      data: sanitizedAgent,
     });
   } catch (error) {
     console.error('Get agent for API key error:', error);
@@ -1225,23 +1249,23 @@ const getAgentsForApiKey = async (req, res) => {
     const agents = await Agent.find({
       project: req.params.projectId,
       organization: req.params.orgId,
-      is_active: true
+      is_active: true,
     })
       .select('name description type version is_active')
       .sort({ name: 1 });
 
-    const sanitizedAgents = agents.map((agent) => ({
+    const sanitizedAgents = agents.map(agent => ({
       id: agent._id,
       name: agent.name,
       description: agent.description,
       type: agent.type,
       version: agent.version,
-      is_active: agent.is_active
+      is_active: agent.is_active,
     }));
 
     res.json({
       success: true,
-      data: sanitizedAgents
+      data: sanitizedAgents,
     });
   } catch (error) {
     console.error('Get agents for API key error:', error);
@@ -1274,5 +1298,5 @@ module.exports = {
   executeTaskAgentWithSession,
   executeChatbotAgentWithApiKey,
   getAgentForApiKey,
-  getAgentsForApiKey
+  getAgentsForApiKey,
 };

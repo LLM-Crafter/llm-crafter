@@ -5,15 +5,15 @@ const messageSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: ['user', 'assistant', 'system', 'tool'],
-    required: true
+    required: true,
   },
   content: {
     type: String,
-    required: true
+    required: true,
   },
   timestamp: {
     type: Date,
-    default: Date.now
+    default: Date.now,
   },
   // Agent thinking process (only for assistant messages)
   thinking_process: [
@@ -22,9 +22,9 @@ const messageSchema = new mongoose.Schema({
       reasoning: String,
       timestamp: {
         type: Date,
-        default: Date.now
-      }
-    }
+        default: Date.now,
+      },
+    },
   ],
   // Tools used in this message
   tools_used: [
@@ -35,86 +35,86 @@ const messageSchema = new mongoose.Schema({
       execution_time_ms: Number,
       timestamp: {
         type: Date,
-        default: Date.now
-      }
-    }
+        default: Date.now,
+      },
+    },
   ],
   // Token usage for this message
   token_usage: {
     prompt_tokens: Number,
     completion_tokens: Number,
     total_tokens: Number,
-    cost: Number
+    cost: Number,
   },
   // Mark if message is part of a summary
   is_summarized: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
 const conversationSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     agent: {
       type: String,
       ref: 'Agent',
-      required: true
+      required: true,
     },
     user_identifier: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     title: {
       type: String,
-      trim: true
+      trim: true,
     },
     messages: [messageSchema],
     status: {
       type: String,
       enum: ['active', 'ended', 'timeout', 'error'],
-      default: 'active'
+      default: 'active',
     },
     metadata: {
       total_tokens_used: {
         type: Number,
-        default: 0
+        default: 0,
       },
       total_cost: {
         type: Number,
-        default: 0
+        default: 0,
       },
       tools_executed_count: {
         type: Number,
-        default: 0
+        default: 0,
       },
       last_activity: {
         type: Date,
-        default: Date.now
+        default: Date.now,
       },
       user_agent: String,
       ip_address: String,
       // Summarization metadata
       last_summary_index: {
         type: Number,
-        default: -1 // Index of last message included in summary
+        default: -1, // Index of last message included in summary
       },
       summary_version: {
         type: Number,
-        default: 0
+        default: 0,
       },
       requires_summarization: {
         type: Boolean,
-        default: false
-      }
+        default: false,
+      },
     },
     summary: {
       type: String,
-      trim: true
+      trim: true,
     },
     // Detailed conversation summary for better context preservation
     conversation_summary: {
@@ -125,16 +125,16 @@ const conversationSchema = new mongoose.Schema(
       context_data: mongoose.Schema.Types.Mixed,
       created_at: {
         type: Date,
-        default: Date.now
+        default: Date.now,
       },
       message_count_when_summarized: {
         type: Number,
-        default: 0
-      }
-    }
+        default: 0,
+      },
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
@@ -188,7 +188,7 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
   const messages = [];
 
   // Always include system messages
-  const systemMessages = this.messages.filter((m) => m.role === 'system');
+  const systemMessages = this.messages.filter(m => m.role === 'system');
   messages.push(...systemMessages);
 
   // If we have a summary, include it as context
@@ -198,7 +198,7 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
       role: 'system',
       content: summaryContext,
       timestamp: this.conversation_summary.created_at,
-      is_summarized: true
+      is_summarized: true,
     });
 
     // Include only recent messages after the last summary
@@ -232,8 +232,8 @@ conversationSchema.methods.getSmartTruncatedMessages = function (
   maxTokens = 4000
 ) {
   const allMessages = this.messages;
-  const systemMessages = allMessages.filter((m) => m.role === 'system');
-  const conversationMessages = allMessages.filter((m) => m.role !== 'system');
+  const systemMessages = allMessages.filter(m => m.role === 'system');
+  const conversationMessages = allMessages.filter(m => m.role !== 'system');
 
   // Reserve tokens for system messages
   const systemTokens = this.estimateTokenCount(systemMessages);
@@ -260,7 +260,9 @@ conversationSchema.methods.getSmartTruncatedMessages = function (
 
 // Method to build summary context string
 conversationSchema.methods.buildSummaryContext = function () {
-  if (!this.conversation_summary) {return '';}
+  if (!this.conversation_summary) {
+    return '';
+  }
 
   const summary = this.conversation_summary;
   let context = '=== CONVERSATION SUMMARY ===\n';
@@ -303,7 +305,7 @@ conversationSchema.methods.updateSummary = function (summaryData) {
     unresolved_issues: summaryData.unresolved_issues || [],
     context_data: summaryData.context_data || {},
     created_at: new Date(),
-    message_count_when_summarized: this.messages.length
+    message_count_when_summarized: this.messages.length,
   };
 
   this.metadata.last_summary_index = this.messages.length - 1;
@@ -343,7 +345,7 @@ conversationSchema.methods.needsSummarization = function () {
 conversationSchema.methods.summarizeConversation = function () {
   // Simple summary logic - to be enhanced
   const assistantMessages = this.messages.filter(
-    (m) => m.role === 'assistant' && !m.is_summarized
+    m => m.role === 'assistant' && !m.is_summarized
   );
 
   if (assistantMessages.length === 0) {
@@ -352,7 +354,7 @@ conversationSchema.methods.summarizeConversation = function () {
 
   // Create a summary from the content of assistant messages
   const summaryContent = assistantMessages
-    .map((m) => m.content)
+    .map(m => m.content)
     .join(' ')
     .trim();
 
@@ -363,7 +365,7 @@ conversationSchema.methods.summarizeConversation = function () {
   this.metadata.requires_summarization = false;
 
   // Mark messages as summarized
-  assistantMessages.forEach((m) => {
+  assistantMessages.forEach(m => {
     m.is_summarized = true;
   });
 

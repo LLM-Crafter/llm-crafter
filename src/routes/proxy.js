@@ -5,7 +5,7 @@ const auth = require('../middleware/auth');
 const {
   proxyLimiter,
   generalLimiter,
-  generalSlowDown
+  generalSlowDown,
 } = require('../middleware/rateLimiting');
 
 router.post(

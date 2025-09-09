@@ -11,16 +11,16 @@ const systemTools = [
       properties: {
         query: {
           type: 'string',
-          description: 'The search query'
+          description: 'The search query',
         },
         max_results: {
           type: 'number',
           description: 'Maximum number of results to return',
-          default: 5
-        }
+          default: 5,
+        },
       },
       required: ['query'],
-      additionalProperties: false
+      additionalProperties: false,
     },
     return_schema: {
       type: 'object',
@@ -33,20 +33,20 @@ const systemTools = [
             properties: {
               title: { type: 'string' },
               url: { type: 'string' },
-              snippet: { type: 'string' }
-            }
-          }
+              snippet: { type: 'string' },
+            },
+          },
         },
         total_results: { type: 'number' },
-        search_time_ms: { type: 'number' }
-      }
+        search_time_ms: { type: 'number' },
+      },
     },
     implementation: {
       type: 'internal',
       handler: 'webSearchHandler',
-      config: {}
+      config: {},
     },
-    is_system_tool: true
+    is_system_tool: true,
   },
   {
     name: 'calculator',
@@ -59,26 +59,26 @@ const systemTools = [
         expression: {
           type: 'string',
           description:
-            'Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)", "sin(30)")'
-        }
+            'Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)", "sin(30)")',
+        },
       },
       required: ['expression'],
-      additionalProperties: false
+      additionalProperties: false,
     },
     return_schema: {
       type: 'object',
       properties: {
         expression: { type: 'string' },
         result: { type: 'number' },
-        type: { type: 'string' }
-      }
+        type: { type: 'string' },
+      },
     },
     implementation: {
       type: 'internal',
       handler: 'calculatorHandler',
-      config: {}
+      config: {},
     },
-    is_system_tool: true
+    is_system_tool: true,
   },
   {
     name: 'llm_prompt',
@@ -91,37 +91,37 @@ const systemTools = [
       properties: {
         prompt: {
           type: 'string',
-          description: 'The prompt to send to the LLM'
+          description: 'The prompt to send to the LLM',
         },
         system_prompt: {
           type: 'string',
-          description: 'Optional system prompt'
+          description: 'Optional system prompt',
         },
         model: {
           type: 'string',
           description: 'Model to use',
-          default: 'gpt-4o-mini'
+          default: 'gpt-4o-mini',
         },
         temperature: {
           type: 'number',
           description: 'Temperature for response generation',
           default: 0.7,
           minimum: 0,
-          maximum: 2
+          maximum: 2,
         },
         max_tokens: {
           type: 'number',
           description: 'Maximum tokens in response',
           default: 1000,
-          minimum: 1
+          minimum: 1,
         },
         api_key_id: {
           type: 'string',
-          description: 'API key ID to use for the request'
-        }
+          description: 'API key ID to use for the request',
+        },
       },
       required: ['prompt', 'api_key_id'],
-      additionalProperties: false
+      additionalProperties: false,
     },
     return_schema: {
       type: 'object',
@@ -135,18 +135,18 @@ const systemTools = [
             prompt_tokens: { type: 'number' },
             completion_tokens: { type: 'number' },
             total_tokens: { type: 'number' },
-            cost: { type: 'number' }
-          }
+            cost: { type: 'number' },
+          },
         },
-        finish_reason: { type: 'string' }
-      }
+        finish_reason: { type: 'string' },
+      },
     },
     implementation: {
       type: 'internal',
       handler: 'llmPromptHandler',
-      config: {}
+      config: {},
     },
-    is_system_tool: true
+    is_system_tool: true,
   },
   {
     name: 'current_time',
@@ -159,16 +159,16 @@ const systemTools = [
         timezone: {
           type: 'string',
           description: 'Timezone (e.g., "UTC", "America/New_York")',
-          default: 'UTC'
+          default: 'UTC',
         },
         format: {
           type: 'string',
           description: 'Output format: iso, unix, human',
           enum: ['iso', 'unix', 'human'],
-          default: 'iso'
-        }
+          default: 'iso',
+        },
       },
-      additionalProperties: false
+      additionalProperties: false,
     },
     return_schema: {
       type: 'object',
@@ -177,15 +177,15 @@ const systemTools = [
         timezone: { type: 'string' },
         format: { type: 'string' },
         unix_timestamp: { type: 'number' },
-        iso_string: { type: 'string' }
-      }
+        iso_string: { type: 'string' },
+      },
     },
     implementation: {
       type: 'internal',
       handler: 'currentTimeHandler',
-      config: {}
+      config: {},
     },
-    is_system_tool: true
+    is_system_tool: true,
   },
   {
     name: 'json_processor',
@@ -196,37 +196,37 @@ const systemTools = [
       type: 'object',
       properties: {
         data: {
-          description: 'The JSON data to process (string or object)'
+          description: 'The JSON data to process (string or object)',
         },
         operation: {
           type: 'string',
           description: 'Operation to perform',
           enum: ['parse', 'stringify', 'extract', 'validate'],
-          default: 'parse'
+          default: 'parse',
         },
         path: {
           type: 'string',
           description:
-            'Dot notation path for extract operation (e.g., "user.name")'
-        }
+            'Dot notation path for extract operation (e.g., "user.name")',
+        },
       },
       required: ['data'],
-      additionalProperties: false
+      additionalProperties: false,
     },
     return_schema: {
       type: 'object',
       properties: {
         operation: { type: 'string' },
         result: {},
-        success: { type: 'boolean' }
-      }
+        success: { type: 'boolean' },
+      },
     },
     implementation: {
       type: 'internal',
       handler: 'jsonProcessorHandler',
-      config: {}
+      config: {},
     },
-    is_system_tool: true
+    is_system_tool: true,
   },
   {
     name: 'api_caller',
@@ -239,36 +239,36 @@ const systemTools = [
       properties: {
         endpoint_name: {
           type: 'string',
-          description: 'Name of the pre-configured endpoint to call'
+          description: 'Name of the pre-configured endpoint to call',
         },
         method: {
           type: 'string',
           description: 'HTTP method to use',
           enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-          default: 'GET'
+          default: 'GET',
         },
         path_params: {
           type: 'object',
           description:
-            'Path parameters to replace in URL (e.g., {id} -> path_params: {id: \'123\'})',
-          default: {}
+            "Path parameters to replace in URL (e.g., {id} -> path_params: {id: '123'})",
+          default: {},
         },
         query_params: {
           type: 'object',
           description: 'Query parameters to append to URL',
-          default: {}
+          default: {},
         },
         body_data: {
-          description: 'Request body data (for POST/PUT/PATCH requests)'
+          description: 'Request body data (for POST/PUT/PATCH requests)',
         },
         headers: {
           type: 'object',
           description: 'Additional headers to include in request',
-          default: {}
-        }
+          default: {},
+        },
       },
       required: ['endpoint_name'],
-      additionalProperties: false
+      additionalProperties: false,
     },
     return_schema: {
       type: 'object',
@@ -281,8 +281,8 @@ const systemTools = [
         success: { type: 'boolean' },
         headers: { type: 'object' },
         data: {},
-        execution_time_ms: { type: 'number' }
-      }
+        execution_time_ms: { type: 'number' },
+      },
     },
     implementation: {
       type: 'internal',
@@ -290,10 +290,10 @@ const systemTools = [
       config: {
         endpoints: {},
         authentication: {},
-        timeout: 30000
-      }
+        timeout: 30000,
+      },
     },
-    is_system_tool: true
+    is_system_tool: true,
   },
   {
     name: 'faq',
@@ -306,14 +306,14 @@ const systemTools = [
       properties: {
         question: {
           type: 'string',
-          description: 'The user\'s question to search for in the FAQ'
+          description: "The user's question to search for in the FAQ",
         },
         search_threshold: {
           type: 'number',
           description: 'Minimum similarity threshold for FAQ matching (0-1)',
           default: 0.7,
           minimum: 0,
-          maximum: 1
+          maximum: 1,
         },
         language: {
           type: 'string',
@@ -331,13 +331,13 @@ const systemTools = [
             'ar',
             'ru',
             'ja',
-            'he'
+            'he',
           ],
-          default: 'auto'
-        }
+          default: 'auto',
+        },
       },
       required: ['question'],
-      additionalProperties: false
+      additionalProperties: false,
     },
     return_schema: {
       type: 'object',
@@ -350,8 +350,8 @@ const systemTools = [
             question: { type: 'string' },
             answer: { type: 'string' },
             category: { type: 'string' },
-            confidence: { type: 'number' }
-          }
+            confidence: { type: 'number' },
+          },
         },
         all_matches: {
           type: 'array',
@@ -361,13 +361,13 @@ const systemTools = [
               question: { type: 'string' },
               answer: { type: 'string' },
               category: { type: 'string' },
-              confidence: { type: 'number' }
-            }
-          }
+              confidence: { type: 'number' },
+            },
+          },
         },
         success: { type: 'boolean' },
-        execution_time_ms: { type: 'number' }
-      }
+        execution_time_ms: { type: 'number' },
+      },
     },
     implementation: {
       type: 'internal',
@@ -375,11 +375,11 @@ const systemTools = [
       config: {
         faqs: [],
         enable_partial_matching: true,
-        default_threshold: 0.7
-      }
+        default_threshold: 0.7,
+      },
     },
-    is_system_tool: true
-  }
+    is_system_tool: true,
+  },
 ];
 
 async function initializeSystemTools() {
@@ -418,5 +418,5 @@ async function initializeSystemTools() {
 
 module.exports = {
   initializeSystemTools,
-  systemTools
+  systemTools,
 };

@@ -9,22 +9,22 @@ const Project = require('../models/Project');
  * @param {string} period - '1d', '1w', '1m'
  * @returns {Date} Start date for filtering
  */
-const getTimeFilter = (period) => {
+const getTimeFilter = period => {
   const now = new Date();
   let startDate;
 
   switch (period) {
-  case '1d':
-    startDate = new Date(now - 24 * 60 * 60 * 1000); // 1 day ago
-    break;
-  case '1w':
-    startDate = new Date(now - 7 * 24 * 60 * 60 * 1000); // 1 week ago
-    break;
-  case '1m':
-    startDate = new Date(now - 30 * 24 * 60 * 60 * 1000); // 1 month ago
-    break;
-  default:
-    startDate = new Date(now - 24 * 60 * 60 * 1000); // Default to 1 day
+    case '1d':
+      startDate = new Date(now - 24 * 60 * 60 * 1000); // 1 day ago
+      break;
+    case '1w':
+      startDate = new Date(now - 7 * 24 * 60 * 60 * 1000); // 1 week ago
+      break;
+    case '1m':
+      startDate = new Date(now - 30 * 24 * 60 * 60 * 1000); // 1 month ago
+      break;
+    default:
+      startDate = new Date(now - 24 * 60 * 60 * 1000); // Default to 1 day
   }
 
   return startDate;
@@ -45,8 +45,8 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
@@ -54,14 +54,14 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$createdAt',
-                timezone: 'UTC'
-              }
+                timezone: 'UTC',
+              },
             },
             agentExecutions: { $sum: 1 },
             agentTokens: { $sum: { $ifNull: ['$usage.total_tokens', 0] } },
-            agentCost: { $sum: { $ifNull: ['$usage.cost', 0] } }
-          }
-        }
+            agentCost: { $sum: { $ifNull: ['$usage.cost', 0] } },
+          },
+        },
       ]),
 
       // Daily usage from Prompt Executions
@@ -69,8 +69,8 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
         {
           $match: {
             project: { $in: projectIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
@@ -78,14 +78,14 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$createdAt',
-                timezone: 'UTC'
-              }
+                timezone: 'UTC',
+              },
             },
             promptExecutions: { $sum: 1 },
             promptTokens: { $sum: { $ifNull: ['$usage.total_tokens', 0] } },
-            promptCost: { $sum: { $ifNull: ['$usage.cost', 0] } }
-          }
-        }
+            promptCost: { $sum: { $ifNull: ['$usage.cost', 0] } },
+          },
+        },
       ]),
 
       // Daily usage from Conversations
@@ -93,8 +93,8 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
@@ -102,26 +102,26 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$createdAt',
-                timezone: 'UTC'
-              }
+                timezone: 'UTC',
+              },
             },
             conversations: { $sum: 1 },
             conversationTokens: {
-              $sum: { $ifNull: ['$metadata.total_tokens_used', 0] }
+              $sum: { $ifNull: ['$metadata.total_tokens_used', 0] },
             },
             conversationCost: {
-              $sum: { $ifNull: ['$metadata.total_cost', 0] }
-            }
-          }
-        }
-      ])
+              $sum: { $ifNull: ['$metadata.total_cost', 0] },
+            },
+          },
+        },
+      ]),
     ]);
 
     // Combine all daily data into a single structure
     const dailyMap = new Map();
 
     // Process agent executions
-    agentDaily.forEach((day) => {
+    agentDaily.forEach(day => {
       const date = day._id;
       if (!dailyMap.has(date)) {
         dailyMap.set(date, {
@@ -131,7 +131,7 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
           costSum: 0,
           agentExecutions: 0,
           promptExecutions: 0,
-          conversations: 0
+          conversations: 0,
         });
       }
       const dayData = dailyMap.get(date);
@@ -142,7 +142,7 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
     });
 
     // Process prompt executions
-    promptDaily.forEach((day) => {
+    promptDaily.forEach(day => {
       const date = day._id;
       if (!dailyMap.has(date)) {
         dailyMap.set(date, {
@@ -152,7 +152,7 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
           costSum: 0,
           agentExecutions: 0,
           promptExecutions: 0,
-          conversations: 0
+          conversations: 0,
         });
       }
       const dayData = dailyMap.get(date);
@@ -163,7 +163,7 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
     });
 
     // Process conversations
-    conversationDaily.forEach((day) => {
+    conversationDaily.forEach(day => {
       const date = day._id;
       if (!dailyMap.has(date)) {
         dailyMap.set(date, {
@@ -173,7 +173,7 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
           costSum: 0,
           agentExecutions: 0,
           promptExecutions: 0,
-          conversations: 0
+          conversations: 0,
         });
       }
       const dayData = dailyMap.get(date);
@@ -207,18 +207,18 @@ const getDashboardStats = async (req, res) => {
     if (!['1d', '1w', '1m'].includes(period)) {
       return res
         .status(400)
-        .json({ error: 'Invalid period. Use \'1d\', \'1w\', or \'1m\'' });
+        .json({ error: "Invalid period. Use '1d', '1w', or '1m'" });
     }
 
     const startDate = getTimeFilter(period);
 
     // Get all projects for this organization
     const projects = await Project.find({ organization: orgId }).select('_id');
-    const projectIds = projects.map((p) => p._id);
+    const projectIds = projects.map(p => p._id);
 
     // Get all agents for this organization
     const agents = await Agent.find({ organization: orgId }).select('_id');
-    const agentIds = agents.map((a) => a._id);
+    const agentIds = agents.map(a => a._id);
 
     // Parallel execution of all queries for better performance
     const [
@@ -229,15 +229,15 @@ const getDashboardStats = async (req, res) => {
       totalProjects,
       recentExecutions,
       topAgents,
-      dailyUsage
+      dailyUsage,
     ] = await Promise.all([
       // Prompt execution statistics
       PromptExecution.aggregate([
         {
           $match: {
             project: { $in: projectIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
@@ -247,16 +247,16 @@ const getDashboardStats = async (req, res) => {
             totalCost: { $sum: '$usage.cost' },
             avgTokensPerCall: { $avg: '$usage.total_tokens' },
             successfulCalls: {
-              $sum: { $cond: [{ $eq: ['$status', 'success'] }, 1, 0] }
+              $sum: { $cond: [{ $eq: ['$status', 'success'] }, 1, 0] },
             },
             errorCalls: {
-              $sum: { $cond: [{ $eq: ['$status', 'error'] }, 1, 0] }
+              $sum: { $cond: [{ $eq: ['$status', 'error'] }, 1, 0] },
             },
             cachedCalls: {
-              $sum: { $cond: [{ $eq: ['$status', 'cached'] }, 1, 0] }
-            }
-          }
-        }
+              $sum: { $cond: [{ $eq: ['$status', 'cached'] }, 1, 0] },
+            },
+          },
+        },
       ]),
 
       // Agent execution statistics
@@ -264,8 +264,8 @@ const getDashboardStats = async (req, res) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
@@ -276,13 +276,13 @@ const getDashboardStats = async (req, res) => {
             totalToolCalls: { $sum: '$usage.tool_calls_count' },
             avgExecutionTime: { $avg: '$execution_time_ms' },
             completedExecutions: {
-              $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+              $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] },
             },
             failedExecutions: {
-              $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
-            }
-          }
-        }
+              $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] },
+            },
+          },
+        },
       ]),
 
       // Conversation statistics
@@ -290,8 +290,8 @@ const getDashboardStats = async (req, res) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
@@ -302,13 +302,13 @@ const getDashboardStats = async (req, res) => {
             totalCost: { $sum: '$metadata.total_cost' },
             totalToolsExecuted: { $sum: '$metadata.tools_executed_count' },
             activeConversations: {
-              $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+              $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] },
             },
             endedConversations: {
-              $sum: { $cond: [{ $eq: ['$status', 'ended'] }, 1, 0] }
-            }
-          }
-        }
+              $sum: { $cond: [{ $eq: ['$status', 'ended'] }, 1, 0] },
+            },
+          },
+        },
       ]),
 
       // Total counts
@@ -327,42 +327,42 @@ const getDashboardStats = async (req, res) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
             _id: '$agent',
             totalExecutions: { $sum: 1 },
             totalTokens: { $sum: '$usage.total_tokens' },
-            totalCost: { $sum: '$usage.cost' }
-          }
+            totalCost: { $sum: '$usage.cost' },
+          },
         },
         {
           $lookup: {
             from: 'agents',
             localField: '_id',
             foreignField: '_id',
-            as: 'agentInfo'
-          }
+            as: 'agentInfo',
+          },
         },
         {
-          $unwind: '$agentInfo'
+          $unwind: '$agentInfo',
         },
         {
           $project: {
             name: '$agentInfo.name',
             totalExecutions: 1,
             totalTokens: 1,
-            totalCost: 1
-          }
+            totalCost: 1,
+          },
         },
         {
-          $sort: { totalExecutions: -1 }
+          $sort: { totalExecutions: -1 },
         },
         {
-          $limit: 5
-        }
+          $limit: 5,
+        },
       ]),
 
       // Daily usage over the period - Agent Executions only for now
@@ -370,8 +370,8 @@ const getDashboardStats = async (req, res) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate }
-          }
+            createdAt: { $gte: startDate },
+          },
         },
         {
           $group: {
@@ -379,18 +379,18 @@ const getDashboardStats = async (req, res) => {
               $dateToString: {
                 format: '%Y-%m-%d',
                 date: '$createdAt',
-                timezone: 'UTC'
-              }
+                timezone: 'UTC',
+              },
             },
             executionCount: { $sum: 1 },
             tokenCount: { $sum: { $ifNull: ['$usage.total_tokens', 0] } },
-            costSum: { $sum: { $ifNull: ['$usage.cost', 0] } }
-          }
+            costSum: { $sum: { $ifNull: ['$usage.cost', 0] } },
+          },
         },
         {
-          $sort: { _id: 1 }
-        }
-      ])
+          $sort: { _id: 1 },
+        },
+      ]),
     ]);
 
     // Combine all statistics
@@ -401,7 +401,7 @@ const getDashboardStats = async (req, res) => {
       avgTokensPerCall: 0,
       successfulCalls: 0,
       errorCalls: 0,
-      cachedCalls: 0
+      cachedCalls: 0,
     };
 
     const agentStats = agentExecutionStats[0] || {
@@ -411,7 +411,7 @@ const getDashboardStats = async (req, res) => {
       totalToolCalls: 0,
       avgExecutionTime: 0,
       completedExecutions: 0,
-      failedExecutions: 0
+      failedExecutions: 0,
     };
 
     const convStats = conversationStats[0] || {
@@ -421,7 +421,7 @@ const getDashboardStats = async (req, res) => {
       totalCost: 0,
       totalToolsExecuted: 0,
       activeConversations: 0,
-      endedConversations: 0
+      endedConversations: 0,
     };
 
     // Calculate combined totals
@@ -443,7 +443,7 @@ const getDashboardStats = async (req, res) => {
       period,
       timeRange: {
         start: startDate,
-        end: new Date()
+        end: new Date(),
       },
       overview: {
         totalTokensUsed: combinedTotalTokens,
@@ -451,7 +451,7 @@ const getDashboardStats = async (req, res) => {
         totalApiCalls: combinedTotalCalls,
         totalConversations: convStats.totalConversations,
         totalAgents,
-        totalProjects
+        totalProjects,
       },
       promptExecutions: {
         totalCalls: promptStats.totalCalls,
@@ -461,15 +461,15 @@ const getDashboardStats = async (req, res) => {
         successRate:
           promptStats.totalCalls > 0
             ? (
-              (promptStats.successfulCalls / promptStats.totalCalls) *
+                (promptStats.successfulCalls / promptStats.totalCalls) *
                 100
-            ).toFixed(2)
+              ).toFixed(2)
             : 0,
         breakdown: {
           successful: promptStats.successfulCalls,
           errors: promptStats.errorCalls,
-          cached: promptStats.cachedCalls
-        }
+          cached: promptStats.cachedCalls,
+        },
       },
       agentExecutions: {
         totalExecutions: agentStats.totalExecutions,
@@ -480,9 +480,9 @@ const getDashboardStats = async (req, res) => {
         successRate:
           agentStats.totalExecutions > 0
             ? (
-              (agentStats.completedExecutions / agentStats.totalExecutions) *
+                (agentStats.completedExecutions / agentStats.totalExecutions) *
                 100
-            ).toFixed(2)
+              ).toFixed(2)
             : 0,
         breakdown: {
           completed: agentStats.completedExecutions,
@@ -490,8 +490,8 @@ const getDashboardStats = async (req, res) => {
           pending:
             agentStats.totalExecutions -
             agentStats.completedExecutions -
-            agentStats.failedExecutions
-        }
+            agentStats.failedExecutions,
+        },
       },
       conversations: {
         total: convStats.totalConversations,
@@ -502,17 +502,17 @@ const getDashboardStats = async (req, res) => {
         avgMessagesPerConversation:
           convStats.totalConversations > 0
             ? (convStats.totalMessages / convStats.totalConversations).toFixed(
-              2
-            )
+                2
+              )
             : 0,
         breakdown: {
           active: convStats.activeConversations,
-          ended: convStats.endedConversations
-        }
+          ended: convStats.endedConversations,
+        },
       },
       recentActivity: recentExecutions,
       topAgents,
-      dailyUsage: comprehensiveDailyUsage
+      dailyUsage: comprehensiveDailyUsage,
     };
 
     res.json(response);
@@ -534,7 +534,7 @@ const getAgentStats = async (req, res) => {
     if (!['1d', '1w', '1m'].includes(period)) {
       return res
         .status(400)
-        .json({ error: 'Invalid period. Use \'1d\', \'1w\', or \'1m\'' });
+        .json({ error: "Invalid period. Use '1d', '1w', or '1m'" });
     }
 
     const startDate = getTimeFilter(period);
@@ -554,8 +554,8 @@ const getAgentStats = async (req, res) => {
           {
             $match: {
               agent: agentId,
-              createdAt: { $gte: startDate }
-            }
+              createdAt: { $gte: startDate },
+            },
           },
           {
             $group: {
@@ -566,13 +566,13 @@ const getAgentStats = async (req, res) => {
               totalToolCalls: { $sum: '$usage.tool_calls_count' },
               avgExecutionTime: { $avg: '$execution_time_ms' },
               completedExecutions: {
-                $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+                $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] },
               },
               failedExecutions: {
-                $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
-              }
-            }
-          }
+                $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] },
+              },
+            },
+          },
         ]),
 
         // Conversation statistics for this agent
@@ -580,8 +580,8 @@ const getAgentStats = async (req, res) => {
           {
             $match: {
               agent: agentId,
-              createdAt: { $gte: startDate }
-            }
+              createdAt: { $gte: startDate },
+            },
           },
           {
             $group: {
@@ -591,17 +591,17 @@ const getAgentStats = async (req, res) => {
               totalTokens: { $sum: '$metadata.total_tokens_used' },
               totalCost: { $sum: '$metadata.total_cost' },
               activeConversations: {
-                $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
-              }
-            }
-          }
+                $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] },
+              },
+            },
+          },
         ]),
 
         // Recent executions for this agent
         AgentExecution.find({ agent: agentId })
           .sort({ createdAt: -1 })
           .limit(20)
-          .select('status createdAt execution_time_ms usage.total_tokens type')
+          .select('status createdAt execution_time_ms usage.total_tokens type'),
       ]);
 
     const execStats = executionStats[0] || {
@@ -611,7 +611,7 @@ const getAgentStats = async (req, res) => {
       totalToolCalls: 0,
       avgExecutionTime: 0,
       completedExecutions: 0,
-      failedExecutions: 0
+      failedExecutions: 0,
     };
 
     const convStats = conversationStats[0] || {
@@ -619,19 +619,19 @@ const getAgentStats = async (req, res) => {
       totalMessages: 0,
       totalTokens: 0,
       totalCost: 0,
-      activeConversations: 0
+      activeConversations: 0,
     };
 
     const response = {
       agent: {
         id: agent._id,
         name: agent.name,
-        type: agent.type
+        type: agent.type,
       },
       period,
       timeRange: {
         start: startDate,
-        end: new Date()
+        end: new Date(),
       },
       executions: {
         total: execStats.totalExecutions,
@@ -640,14 +640,14 @@ const getAgentStats = async (req, res) => {
         successRate:
           execStats.totalExecutions > 0
             ? (
-              (execStats.completedExecutions / execStats.totalExecutions) *
+                (execStats.completedExecutions / execStats.totalExecutions) *
                 100
-            ).toFixed(2)
+              ).toFixed(2)
             : 0,
         avgExecutionTime: Math.round(execStats.avgExecutionTime || 0),
         totalTokens: execStats.totalTokens,
         totalCost: execStats.totalCost,
-        totalToolCalls: execStats.totalToolCalls
+        totalToolCalls: execStats.totalToolCalls,
       },
       conversations: {
         total: convStats.totalConversations,
@@ -656,13 +656,13 @@ const getAgentStats = async (req, res) => {
         avgMessagesPerConversation:
           convStats.totalConversations > 0
             ? (convStats.totalMessages / convStats.totalConversations).toFixed(
-              2
-            )
+                2
+              )
             : 0,
         totalTokens: convStats.totalTokens,
-        totalCost: convStats.totalCost
+        totalCost: convStats.totalCost,
       },
-      recentActivity: recentExecutions
+      recentActivity: recentExecutions,
     };
 
     res.json(response);
@@ -674,5 +674,5 @@ const getAgentStats = async (req, res) => {
 
 module.exports = {
   getDashboardStats,
-  getAgentStats
+  getAgentStats,
 };

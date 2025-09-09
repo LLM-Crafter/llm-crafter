@@ -22,7 +22,7 @@ const generateSessionValidation = [
     .isInt({ min: 60, max: 86400 })
     .withMessage(
       'Expires in must be between 60 and 86400 seconds (1 minute to 24 hours)'
-    )
+    ),
 ];
 
 // ===== SESSION TOKEN ROUTES =====

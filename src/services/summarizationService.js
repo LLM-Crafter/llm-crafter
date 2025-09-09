@@ -22,7 +22,7 @@ class SummarizationService {
       const summaryParams = {
         temperature: 0.3,
         max_tokens: 800, // Limit summary length
-        top_p: 0.9
+        top_p: 0.9,
       };
 
       const response = await openai.generateCompletion(
@@ -38,7 +38,7 @@ class SummarizationService {
       return {
         summary: summaryData,
         token_usage: response.usage,
-        model_used: summaryModel
+        model_used: summaryModel,
       };
     } catch (error) {
       console.error('Summarization error:', error);
@@ -60,7 +60,7 @@ class SummarizationService {
       'o3-pro': 'o3-mini',
       o1: 'o1-mini',
       'deepseek-chat': 'deepseek-chat', // Already efficient
-      'deepseek-reasoner': 'deepseek-chat'
+      'deepseek-reasoner': 'deepseek-chat',
     };
 
     return summaryModelMap[agentModel] || 'gpt-4o-mini'; // Default to efficient model
@@ -72,7 +72,7 @@ class SummarizationService {
   buildSummarizationPrompt(messages, existingSummary = null) {
     // Filter out system messages and focus on user-assistant exchanges
     const conversationMessages = messages.filter(
-      (m) => m.role === 'user' || m.role === 'assistant'
+      m => m.role === 'user' || m.role === 'assistant'
     );
 
     let prompt =
@@ -95,14 +95,14 @@ class SummarizationService {
 
       // Truncate very long messages
       if (content.length > 500) {
-        content = `${content.substring(0, 497)  }...`;
+        content = `${content.substring(0, 497)}...`;
       }
 
       prompt += `${role}: ${content}\n\n`;
 
       // Include key tool usage information
       if (msg.tools_used && msg.tools_used.length > 0) {
-        const toolNames = msg.tools_used.map((t) => t.tool_name).join(', ');
+        const toolNames = msg.tools_used.map(t => t.tool_name).join(', ');
         prompt += `[Tools used: ${toolNames}]\n\n`;
       }
     });
@@ -172,7 +172,7 @@ Guidelines:
         context_data:
           typeof summaryData.context_data === 'object'
             ? summaryData.context_data
-            : {}
+            : {},
       };
     } catch (error) {
       console.error('Failed to parse summary response:', error);
@@ -184,7 +184,7 @@ Guidelines:
         important_decisions: [],
         unresolved_issues: [],
         user_preferences: {},
-        context_data: {}
+        context_data: {},
       };
     }
   }

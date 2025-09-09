@@ -6,7 +6,7 @@ const createProject = async (req, res) => {
     // Check if user is member of organization
     const organization = await Organization.findOne({
       _id: req.params.orgId,
-      'members.user': req.user._id
+      'members.user': req.user._id,
     });
 
     if (!organization) {
@@ -17,7 +17,7 @@ const createProject = async (req, res) => {
       name: req.body.name,
       description: req.body.description,
       organization: req.params.orgId,
-      llm_configurations: req.body.llm_configurations || []
+      llm_configurations: req.body.llm_configurations || [],
     });
 
     await project.save();
@@ -30,7 +30,7 @@ const createProject = async (req, res) => {
 const getProjects = async (req, res) => {
   try {
     const projects = await Project.find({
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     res.json(projects);
@@ -43,20 +43,20 @@ const getProject = async (req, res) => {
   try {
     const project = await Project.findOne({
       _id: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     }).populate([
       {
         path: 'apiKeys',
         select: '-key',
         populate: {
           path: 'provider',
-          select: 'name models'
-        }
+          select: 'name models',
+        },
       },
       {
         path: 'prompts',
-        select: 'name description createdAt updatedAt'
-      }
+        select: 'name description createdAt updatedAt',
+      },
     ]);
 
     if (!project) {
@@ -69,9 +69,8 @@ const getProject = async (req, res) => {
   }
 };
 
-
 module.exports = {
   createProject,
   getProjects,
-  getProject
+  getProject,
 };

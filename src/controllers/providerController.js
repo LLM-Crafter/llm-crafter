@@ -38,7 +38,7 @@ const createProvider = async (req, res) => {
   try {
     const provider = new Provider({
       name: req.body.name,
-      models: req.body.models
+      models: req.body.models,
     });
     await provider.save();
     res.status(201).json(provider);
@@ -57,8 +57,12 @@ const updateProvider = async (req, res) => {
       return res.status(404).json({ error: 'Provider not found' });
     }
 
-    if (req.body.name) {provider.name = req.body.name;}
-    if (req.body.models) {provider.models = req.body.models;}
+    if (req.body.name) {
+      provider.name = req.body.name;
+    }
+    if (req.body.models) {
+      provider.models = req.body.models;
+    }
 
     await provider.save();
     res.json(provider);
@@ -85,7 +89,7 @@ const refreshProviders = async (req, res) => {
     const providers = await Provider.find({});
     res.json({
       message: 'Default providers refreshed successfully',
-      providers
+      providers,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to refresh default providers' });
@@ -99,5 +103,5 @@ module.exports = {
   createProvider,
   updateProvider,
   deleteProvider,
-  refreshProviders
+  refreshProviders,
 };

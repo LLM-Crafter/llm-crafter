@@ -7,7 +7,7 @@ const createPrompt = async (req, res) => {
     // Verify project exists and belongs to the organization
     const project = await Project.findOne({
       _id: req.params.projectId,
-      organization: req.params.orgId
+      organization: req.params.orgId,
     });
 
     if (!project) {
@@ -22,7 +22,7 @@ const createPrompt = async (req, res) => {
       project: req.params.projectId,
       description: req.body.description,
       content: req.body.content,
-      system_prompt: req.body.system_prompt
+      system_prompt: req.body.system_prompt,
     });
 
     await prompt.save();
@@ -42,7 +42,7 @@ const updatePrompt = async (req, res) => {
   try {
     const prompt = await Prompt.findOne({
       _id: req.params.promptId,
-      project: req.params.projectId
+      project: req.params.projectId,
     });
 
     if (!prompt) {
@@ -53,7 +53,7 @@ const updatePrompt = async (req, res) => {
     if (req.body.api_key) {
       const apiKey = await ApiKey.findOne({
         _id: req.body.api_key,
-        project: req.params.projectId
+        project: req.params.projectId,
       }).populate('provider');
 
       if (!apiKey) {
@@ -76,18 +76,20 @@ const updatePrompt = async (req, res) => {
     }
 
     // Update other fields if provided
-    if (req.body.description !== undefined)
-    {prompt.description = req.body.description;}
+    if (req.body.description !== undefined) {
+      prompt.description = req.body.description;
+    }
     if (req.body.content !== undefined) {
       prompt.content = req.body.content;
       prompt.version += 1;
     }
-    if (req.body.system_prompt !== undefined)
-    {prompt.system_prompt = req.body.system_prompt;}
+    if (req.body.system_prompt !== undefined) {
+      prompt.system_prompt = req.body.system_prompt;
+    }
     if (req.body.llm_settings) {
       prompt.llm_settings = {
         ...prompt.llm_settings,
-        ...req.body.llm_settings
+        ...req.body.llm_settings,
       };
     }
     console.log(prompt.llm_settings);
@@ -100,8 +102,8 @@ const updatePrompt = async (req, res) => {
       select: 'name provider',
       populate: {
         path: 'provider',
-        select: 'name models'
-      }
+        select: 'name models',
+      },
     });
 
     res.json(updatedPrompt);
@@ -114,7 +116,7 @@ const deletePrompt = async (req, res) => {
   try {
     const prompt = await Prompt.findOneAndDelete({
       _id: req.params.promptId,
-      project: req.params.projectId
+      project: req.params.projectId,
     });
 
     if (!prompt) {
@@ -131,7 +133,7 @@ const getPrompt = async (req, res) => {
   try {
     const prompt = await Prompt.findOne({
       _id: req.params.promptId,
-      project: req.params.projectId
+      project: req.params.projectId,
     });
 
     if (!prompt) {
@@ -148,5 +150,5 @@ module.exports = {
   createPrompt,
   updatePrompt,
   deletePrompt,
-  getPrompt
+  getPrompt,
 };

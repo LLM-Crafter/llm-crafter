@@ -5,49 +5,49 @@ const agentExecutionSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     agent: {
       type: String,
       ref: 'Agent',
-      required: true
+      required: true,
     },
     type: {
       type: String,
       enum: ['task', 'workflow', 'api'],
-      required: true
+      required: true,
     },
     input: {
       type: mongoose.Schema.Types.Mixed,
-      required: true
+      required: true,
     },
     output: {
-      type: mongoose.Schema.Types.Mixed
+      type: mongoose.Schema.Types.Mixed,
     },
     status: {
       type: String,
       enum: ['pending', 'running', 'completed', 'failed', 'timeout'],
-      default: 'pending'
+      default: 'pending',
     },
     thinking_process: [
       {
         step: {
           type: String,
-          required: true
+          required: true,
         },
         reasoning: String,
         timestamp: {
           type: Date,
-          default: Date.now
+          default: Date.now,
         },
-        data: mongoose.Schema.Types.Mixed
-      }
+        data: mongoose.Schema.Types.Mixed,
+      },
     ],
     tools_executed: [
       {
         tool_name: {
           type: String,
-          required: true
+          required: true,
         },
         parameters: mongoose.Schema.Types.Mixed,
         result: mongoose.Schema.Types.Mixed,
@@ -55,60 +55,60 @@ const agentExecutionSchema = new mongoose.Schema(
         status: {
           type: String,
           enum: ['success', 'error', 'timeout'],
-          default: 'success'
+          default: 'success',
         },
         error_message: String,
         timestamp: {
           type: Date,
-          default: Date.now
-        }
-      }
+          default: Date.now,
+        },
+      },
     ],
     usage: {
       prompt_tokens: {
         type: Number,
-        default: 0
+        default: 0,
       },
       completion_tokens: {
         type: Number,
-        default: 0
+        default: 0,
       },
       total_tokens: {
         type: Number,
-        default: 0
+        default: 0,
       },
       cost: {
         type: Number,
-        default: 0
+        default: 0,
       },
       tool_calls_count: {
         type: Number,
-        default: 0
+        default: 0,
       },
       suggestions: {
         prompt_tokens: {
           type: Number,
-          default: 0
+          default: 0,
         },
         completion_tokens: {
           type: Number,
-          default: 0
+          default: 0,
         },
         total_tokens: {
           type: Number,
-          default: 0
+          default: 0,
         },
         cost: {
           type: Number,
-          default: 0
+          default: 0,
         },
         model: String,
         execution_time_ms: Number,
         generated: {
           type: Boolean,
-          default: false
-        }
-      }
+          default: false,
+        },
+      },
     },
     execution_time_ms: Number,
     started_at: Date,
@@ -116,7 +116,7 @@ const agentExecutionSchema = new mongoose.Schema(
     error: {
       message: String,
       code: String,
-      stack: String
+      stack: String,
     },
     metadata: {
       user_identifier: String,
@@ -126,12 +126,12 @@ const agentExecutionSchema = new mongoose.Schema(
       priority: {
         type: String,
         enum: ['low', 'normal', 'high'],
-        default: 'normal'
-      }
-    }
+        default: 'normal',
+      },
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
@@ -160,7 +160,7 @@ agentExecutionSchema.methods.fail = function (error) {
   this.error = {
     message: error.message,
     code: error.code || 'UNKNOWN_ERROR',
-    stack: error.stack
+    stack: error.stack,
   };
   this.completed_at = new Date();
   this.execution_time_ms = this.completed_at - this.started_at;
@@ -176,7 +176,7 @@ agentExecutionSchema.methods.addThinkingStep = function (
     step,
     reasoning,
     data,
-    timestamp: new Date()
+    timestamp: new Date(),
   });
   return this.save();
 };
@@ -196,7 +196,7 @@ agentExecutionSchema.methods.addToolExecution = function (
     execution_time_ms: executionTime,
     status,
     error_message: errorMessage,
-    timestamp: new Date()
+    timestamp: new Date(),
   });
 
   this.usage.tool_calls_count += 1;

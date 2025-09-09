@@ -6,28 +6,28 @@ const sessionTokenSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     token_hash: {
       type: String,
       required: true,
-      unique: true
+      unique: true,
     },
     user_api_key: {
       type: String,
       ref: 'UserApiKey',
-      required: true
+      required: true,
     },
     agent: {
       type: String,
       ref: 'Agent',
-      required: true
+      required: true,
     },
 
     // Security
     expires_at: {
       type: Date,
-      required: true
+      required: true,
     }, // Short-lived (15-60 minutes)
     client_ip: String,
     client_domain: String,
@@ -35,31 +35,31 @@ const sessionTokenSchema = new mongoose.Schema(
     // Usage limits for this session
     max_interactions: {
       type: Number,
-      default: 100
+      default: 100,
     },
     interactions_used: {
       type: Number,
-      default: 0
+      default: 0,
     },
 
     // Metadata
     last_used_at: Date,
     is_revoked: {
       type: Boolean,
-      default: false
-    }
+      default: false,
+    },
   },
   {
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform (doc, ret) {
+      transform(doc, ret) {
         // Never expose the actual token hash
         delete ret.token_hash;
         return ret;
-      }
+      },
     },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 
@@ -120,9 +120,9 @@ sessionTokenSchema.statics.cleanupExpired = async function () {
       { expires_at: { $lt: new Date() } },
       {
         is_revoked: true,
-        updatedAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-      } // Remove revoked tokens older than 24 hours
-    ]
+        updatedAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      }, // Remove revoked tokens older than 24 hours
+    ],
   });
 
   return result.deletedCount;

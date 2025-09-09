@@ -55,7 +55,7 @@ const createAgentValidation = [
   body('question_suggestions.custom_prompt')
     .optional()
     .isString()
-    .withMessage('Question suggestions custom prompt must be a string')
+    .withMessage('Question suggestions custom prompt must be a string'),
 ];
 
 const updateAgentValidation = [
@@ -104,7 +104,7 @@ const updateAgentValidation = [
   body('question_suggestions.custom_prompt')
     .optional()
     .isString()
-    .withMessage('Question suggestions custom prompt must be a string')
+    .withMessage('Question suggestions custom prompt must be a string'),
 ];
 
 const chatbotExecutionValidation = [
@@ -112,17 +112,17 @@ const chatbotExecutionValidation = [
   body('user_identifier').notEmpty().withMessage('User identifier is required'),
   body('conversation_id')
     .optional()
-    .custom((value) => {
+    .custom(value => {
       if (value === null || value === undefined || typeof value === 'string') {
         return true;
       }
       throw new Error('Conversation ID must be a string or null');
-    })
+    }),
 ];
 
 const taskExecutionValidation = [
   body('input').notEmpty().withMessage('Input is required'),
-  body('user_identifier').optional().isString()
+  body('user_identifier').optional().isString(),
 ];
 
 // ===== AGENT MANAGEMENT ROUTES =====
@@ -227,7 +227,7 @@ const apiEndpointsValidation = [
   body('authentication.type')
     .optional()
     .isIn(['bearer_token', 'api_key', 'cookie'])
-    .withMessage('Invalid authentication type')
+    .withMessage('Invalid authentication type'),
 ];
 
 router.post(
@@ -261,7 +261,7 @@ const faqValidation = [
   body('faqs.*.category')
     .optional()
     .isString()
-    .withMessage('FAQ category must be a string')
+    .withMessage('FAQ category must be a string'),
 ];
 
 router.post(
@@ -312,7 +312,7 @@ const questionSuggestionsValidation = [
   body('custom_prompt')
     .optional()
     .isString()
-    .withMessage('Custom prompt must be a string')
+    .withMessage('Custom prompt must be a string'),
 ];
 
 router.put(

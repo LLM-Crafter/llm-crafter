@@ -9,7 +9,7 @@ const {
   authLimiter,
   loginLimiter,
   authSlowDown,
-  generalLimiter
+  generalLimiter,
 } = require('../middleware/rateLimiting');
 const { expressValidatorPassword } = require('../utils/passwordPolicy');
 
@@ -17,17 +17,17 @@ const { expressValidatorPassword } = require('../utils/passwordPolicy');
 const registerValidation = [
   body('email').isEmail().normalizeEmail(),
   body('password').custom(expressValidatorPassword),
-  body('name').trim().notEmpty().isLength({ min: 2, max: 100 })
+  body('name').trim().notEmpty().isLength({ min: 2, max: 100 }),
 ];
 
 const loginValidation = [
   body('email').isEmail().normalizeEmail(),
-  body('password').notEmpty()
+  body('password').notEmpty(),
 ];
 
 const updateValidation = [
   body('name').optional().trim().notEmpty().isLength({ min: 2, max: 100 }),
-  body('password').optional().custom(expressValidatorPassword)
+  body('password').optional().custom(expressValidatorPassword),
 ];
 
 // Routes with rate limiting

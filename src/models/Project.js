@@ -5,24 +5,24 @@ const projectSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     name: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     description: String,
     organization: {
       type: String,
       ref: 'Organization',
-      required: true
-    }
+      required: true,
+    },
   },
   {
     timestamps: true,
     toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 
@@ -31,14 +31,14 @@ projectSchema.virtual('apiKeys', {
   ref: 'ApiKey',
   localField: '_id',
   foreignField: 'project',
-  justOne: false
+  justOne: false,
 });
 
 projectSchema.virtual('prompts', {
   ref: 'Prompt',
   localField: '_id',
   foreignField: 'project',
-  justOne: false
+  justOne: false,
 });
 
 module.exports = mongoose.model('Project', projectSchema);

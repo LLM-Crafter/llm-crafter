@@ -42,22 +42,19 @@ const validateEnvironment = () => {
     'development',
     'admin',
     'key',
-    'sdjahdkjsahjkdha' // The current weak JWT secret in .env
+    'sdjahdkjsahjkdha', // The current weak JWT secret in .env
   ];
 
   for (const variable of required) {
     const value = process.env[variable];
-    if (
-      value &&
-      commonWeak.some((weak) => value.toLowerCase().includes(weak))
-    ) {
+    if (value && commonWeak.some(weak => value.toLowerCase().includes(weak))) {
       weak.push(`${variable} appears to use a weak/default value`);
     }
   }
 
   if (missing.length > 0) {
     console.error('🚨 Missing required environment variables:');
-    missing.forEach((variable) => {
+    missing.forEach(variable => {
       console.error(`   - ${variable}`);
     });
     console.error(
@@ -68,7 +65,7 @@ const validateEnvironment = () => {
 
   if (weak.length > 0) {
     console.warn('⚠️  Weak environment variable values detected:');
-    weak.forEach((warning) => {
+    weak.forEach(warning => {
       console.warn(`   - ${warning}`);
     });
 

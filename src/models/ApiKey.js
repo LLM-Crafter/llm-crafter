@@ -6,53 +6,53 @@ const apiKeySchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4
+      default: uuidv4,
     },
     name: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     key: {
       type: String,
       required: true,
-      unique: true
+      unique: true,
     },
     provider: {
       type: String,
       ref: 'Provider',
-      required: true
+      required: true,
     },
     project: {
       type: String,
       ref: 'Project',
-      required: true
+      required: true,
     },
     usage: {
       total_tokens: {
         type: Number,
-        default: 0
+        default: 0,
       },
       total_cost: {
         type: Number,
-        default: 0
+        default: 0,
       },
       usage_by_model: [
         {
           model: String,
           input_tokens: Number,
           output_tokens: Number,
-          cost: Number
-        }
-      ]
+          cost: Number,
+        },
+      ],
     },
     is_active: {
       type: Boolean,
-      default: true
-    }
+      default: true,
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
@@ -98,11 +98,11 @@ apiKeySchema.virtual('decryptedKey').get(function () {
 
 // Ensure virtual fields are not included in JSON output by default
 apiKeySchema.set('toJSON', {
-  transform (doc, ret) {
+  transform(doc, ret) {
     delete ret.key; // Never expose encrypted key in JSON
     delete ret.decryptedKey; // Never expose decrypted key in JSON
     return ret;
-  }
+  },
 });
 
 // Add static method to find and decrypt API key
@@ -114,7 +114,7 @@ apiKeySchema.statics.findByIdWithDecryptedKey = async function (id) {
 
   return {
     ...apiKey.toObject(),
-    decryptedKey: apiKey.getDecryptedKey()
+    decryptedKey: apiKey.getDecryptedKey(),
   };
 };
 
