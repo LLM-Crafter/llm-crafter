@@ -1,6 +1,6 @@
-const UserApiKey = require("../models/UserApiKey");
-const Organization = require("../models/Organization");
-const Project = require("../models/Project");
+const UserApiKey = require('../models/UserApiKey');
+const Organization = require('../models/Organization');
+const Project = require('../models/Project');
 
 /**
  * Create a new API key for the user
@@ -13,7 +13,7 @@ const createApiKey = async (req, res) => {
     // Verify organization membership
     const organization = await Organization.findById(req.params.orgId);
     if (!organization) {
-      return res.status(404).json({ error: "Organization not found" });
+      return res.status(404).json({ error: 'Organization not found' });
     }
 
     const membership = organization.members.find(
@@ -21,32 +21,32 @@ const createApiKey = async (req, res) => {
     );
 
     if (!membership) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Check if user has reached API key limit
     const existingKeysCount = await UserApiKey.countDocuments({
       user: req.user._id,
       organization: req.params.orgId,
-      is_active: true,
+      is_active: true
     });
 
     const maxApiKeys = process.env.MAX_API_KEYS_PER_USER || 10;
     if (existingKeysCount >= maxApiKeys) {
       return res.status(400).json({
         error: `Maximum number of API keys reached (${maxApiKeys})`,
-        code: "MAX_API_KEYS_EXCEEDED",
+        code: 'MAX_API_KEYS_EXCEEDED'
       });
     }
 
     // Validate scopes
     const validScopes = [
-      "prompts:execute",
-      "agents:read",
-      "agents:execute",
-      "agents:chat",
-      "projects:read",
-      "statistics:read",
+      'prompts:execute',
+      'agents:read',
+      'agents:execute',
+      'agents:chat',
+      'projects:read',
+      'statistics:read'
     ];
 
     const invalidScopes = scopes.filter(
@@ -54,9 +54,9 @@ const createApiKey = async (req, res) => {
     );
     if (invalidScopes.length > 0) {
       return res.status(400).json({
-        error: "Invalid scopes provided",
+        error: 'Invalid scopes provided',
         invalid_scopes: invalidScopes,
-        valid_scopes: validScopes,
+        valid_scopes: validScopes
       });
     }
 
@@ -64,12 +64,12 @@ const createApiKey = async (req, res) => {
     if (allowed_projects && allowed_projects.length > 0) {
       const projects = await Project.find({
         _id: { $in: allowed_projects },
-        organization: req.params.orgId,
+        organization: req.params.orgId
       });
 
       if (projects.length !== allowed_projects.length) {
         return res.status(400).json({
-          error: "Some projects not found in this organization",
+          error: 'Some projects not found in this organization'
         });
       }
     }
@@ -83,14 +83,14 @@ const createApiKey = async (req, res) => {
     if (expires_at) {
       expirationDate = new Date(expires_at);
       if (isNaN(expirationDate.getTime())) {
-        return res.status(400).json({ error: "Invalid expiration date" });
+        return res.status(400).json({ error: 'Invalid expiration date' });
       }
 
       // Check if expiration is in the future
       if (expirationDate <= new Date()) {
         return res
           .status(400)
-          .json({ error: "Expiration date must be in the future" });
+          .json({ error: 'Expiration date must be in the future' });
       }
     }
 
@@ -100,11 +100,11 @@ const createApiKey = async (req, res) => {
       key_hash: keyHash,
       user: req.user._id,
       organization: req.params.orgId,
-      scopes: scopes || ["prompts:execute"],
+      scopes: scopes || ['prompts:execute'],
       restrictions: restrictions || {},
       expires_at: expirationDate,
       created_by: req.user._id,
-      allowed_projects: allowed_projects || [],
+      allowed_projects: allowed_projects || []
     });
 
     await userApiKey.save();
@@ -120,17 +120,17 @@ const createApiKey = async (req, res) => {
         restrictions: userApiKey.restrictions,
         expires_at: userApiKey.expires_at,
         allowed_projects: userApiKey.allowed_projects,
-        created_at: userApiKey.createdAt,
+        created_at: userApiKey.createdAt
       },
       message:
-        "API key created successfully. Save this key securely - it won't be shown again.",
+        'API key created successfully. Save this key securely - it won\'t be shown again.'
     });
   } catch (error) {
-    console.error("Create API key error:", error);
+    console.error('Create API key error:', error);
     if (error.code === 11000) {
-      return res.status(400).json({ error: "API key name already exists" });
+      return res.status(400).json({ error: 'API key name already exists' });
     }
-    res.status(500).json({ error: "Failed to create API key" });
+    res.status(500).json({ error: 'Failed to create API key' });
   }
 };
 
@@ -141,10 +141,10 @@ const getApiKeys = async (req, res) => {
   try {
     const apiKeys = await UserApiKey.find({
       user: req.user._id,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     })
-      .populate("allowed_projects", "name")
-      .select("-key_hash") // Never return the hash
+      .populate('allowed_projects', 'name')
+      .select('-key_hash') // Never return the hash
       .sort({ createdAt: -1 });
 
     res.json({
@@ -153,12 +153,12 @@ const getApiKeys = async (req, res) => {
         ...key.toJSON(),
         // Add computed fields
         is_expired: key.isExpired(),
-        masked_key: `ak_${"*".repeat(32)}${key._id.slice(-8)}`,
-      })),
+        masked_key: `ak_${'*'.repeat(32)}${key._id.slice(-8)}`
+      }))
     });
   } catch (error) {
-    console.error("Get API keys error:", error);
-    res.status(500).json({ error: "Failed to fetch API keys" });
+    console.error('Get API keys error:', error);
+    res.status(500).json({ error: 'Failed to fetch API keys' });
   }
 };
 
@@ -170,11 +170,11 @@ const getApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId,
-    }).populate("allowed_projects", "name");
+      organization: req.params.orgId
+    }).populate('allowed_projects', 'name');
 
     if (!apiKey) {
-      return res.status(404).json({ error: "API key not found" });
+      return res.status(404).json({ error: 'API key not found' });
     }
 
     res.json({
@@ -182,12 +182,12 @@ const getApiKey = async (req, res) => {
       data: {
         ...apiKey.toJSON(),
         is_expired: apiKey.isExpired(),
-        masked_key: `ak_${"*".repeat(32)}${apiKey._id.slice(-8)}`,
-      },
+        masked_key: `ak_${'*'.repeat(32)}${apiKey._id.slice(-8)}`
+      }
     });
   } catch (error) {
-    console.error("Get API key error:", error);
-    res.status(500).json({ error: "Failed to fetch API key" });
+    console.error('Get API key error:', error);
+    res.status(500).json({ error: 'Failed to fetch API key' });
   }
 };
 
@@ -202,22 +202,22 @@ const updateApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!apiKey) {
-      return res.status(404).json({ error: "API key not found" });
+      return res.status(404).json({ error: 'API key not found' });
     }
 
     // Validate scopes if provided
     if (scopes) {
       const validScopes = [
-        "prompts:execute",
-        "agents:read",
-        "agents:execute",
-        "agents:chat",
-        "projects:read",
-        "statistics:read",
+        'prompts:execute',
+        'agents:read',
+        'agents:execute',
+        'agents:chat',
+        'projects:read',
+        'statistics:read'
       ];
 
       const invalidScopes = scopes.filter(
@@ -225,9 +225,9 @@ const updateApiKey = async (req, res) => {
       );
       if (invalidScopes.length > 0) {
         return res.status(400).json({
-          error: "Invalid scopes provided",
+          error: 'Invalid scopes provided',
           invalid_scopes: invalidScopes,
-          valid_scopes: validScopes,
+          valid_scopes: validScopes
         });
       }
       apiKey.scopes = scopes;
@@ -238,12 +238,12 @@ const updateApiKey = async (req, res) => {
       if (allowed_projects.length > 0) {
         const projects = await Project.find({
           _id: { $in: allowed_projects },
-          organization: req.params.orgId,
+          organization: req.params.orgId
         });
 
         if (projects.length !== allowed_projects.length) {
           return res.status(400).json({
-            error: "Some projects not found in this organization",
+            error: 'Some projects not found in this organization'
           });
         }
       }
@@ -251,8 +251,8 @@ const updateApiKey = async (req, res) => {
     }
 
     // Update other fields
-    if (name !== undefined) apiKey.name = name;
-    if (restrictions !== undefined) apiKey.restrictions = restrictions;
+    if (name !== undefined) {apiKey.name = name;}
+    if (restrictions !== undefined) {apiKey.restrictions = restrictions;}
 
     if (expires_at !== undefined) {
       if (expires_at === null) {
@@ -260,12 +260,12 @@ const updateApiKey = async (req, res) => {
       } else {
         const expirationDate = new Date(expires_at);
         if (isNaN(expirationDate.getTime())) {
-          return res.status(400).json({ error: "Invalid expiration date" });
+          return res.status(400).json({ error: 'Invalid expiration date' });
         }
         if (expirationDate <= new Date()) {
           return res
             .status(400)
-            .json({ error: "Expiration date must be in the future" });
+            .json({ error: 'Expiration date must be in the future' });
         }
         apiKey.expires_at = expirationDate;
       }
@@ -278,13 +278,13 @@ const updateApiKey = async (req, res) => {
       data: {
         ...apiKey.toJSON(),
         is_expired: apiKey.isExpired(),
-        masked_key: `ak_${"*".repeat(32)}${apiKey._id.slice(-8)}`,
+        masked_key: `ak_${'*'.repeat(32)}${apiKey._id.slice(-8)}`
       },
-      message: "API key updated successfully",
+      message: 'API key updated successfully'
     });
   } catch (error) {
-    console.error("Update API key error:", error);
-    res.status(500).json({ error: "Failed to update API key" });
+    console.error('Update API key error:', error);
+    res.status(500).json({ error: 'Failed to update API key' });
   }
 };
 
@@ -296,11 +296,11 @@ const rotateApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!apiKey) {
-      return res.status(404).json({ error: "API key not found" });
+      return res.status(404).json({ error: 'API key not found' });
     }
 
     // Generate new API key
@@ -314,7 +314,7 @@ const rotateApiKey = async (req, res) => {
     apiKey.usage = {
       total_requests: 0,
       executions_today: 0,
-      last_reset_date: new Date(),
+      last_reset_date: new Date()
     };
 
     await apiKey.save();
@@ -325,14 +325,14 @@ const rotateApiKey = async (req, res) => {
         id: apiKey._id,
         name: apiKey.name,
         api_key: newApiKey, // Only shown once!
-        rotated_at: apiKey.last_rotated_at,
+        rotated_at: apiKey.last_rotated_at
       },
       message:
-        "API key rotated successfully. Save the new key securely - it won't be shown again.",
+        'API key rotated successfully. Save the new key securely - it won\'t be shown again.'
     });
   } catch (error) {
-    console.error("Rotate API key error:", error);
-    res.status(500).json({ error: "Failed to rotate API key" });
+    console.error('Rotate API key error:', error);
+    res.status(500).json({ error: 'Failed to rotate API key' });
   }
 };
 
@@ -344,11 +344,11 @@ const revokeApiKey = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!apiKey) {
-      return res.status(404).json({ error: "API key not found" });
+      return res.status(404).json({ error: 'API key not found' });
     }
 
     apiKey.is_active = false;
@@ -356,11 +356,11 @@ const revokeApiKey = async (req, res) => {
 
     res.json({
       success: true,
-      message: "API key revoked successfully",
+      message: 'API key revoked successfully'
     });
   } catch (error) {
-    console.error("Revoke API key error:", error);
-    res.status(500).json({ error: "Failed to revoke API key" });
+    console.error('Revoke API key error:', error);
+    res.status(500).json({ error: 'Failed to revoke API key' });
   }
 };
 
@@ -372,11 +372,11 @@ const getApiKeyUsage = async (req, res) => {
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
       user: req.user._id,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!apiKey) {
-      return res.status(404).json({ error: "API key not found" });
+      return res.status(404).json({ error: 'API key not found' });
     }
 
     res.json({
@@ -388,17 +388,17 @@ const getApiKeyUsage = async (req, res) => {
         restrictions: apiKey.restrictions,
         daily_limit_remaining: apiKey.restrictions.max_executions_per_day
           ? Math.max(
-              0,
-              apiKey.restrictions.max_executions_per_day -
+            0,
+            apiKey.restrictions.max_executions_per_day -
                 apiKey.usage.executions_today
-            )
+          )
           : null,
-        is_within_daily_limit: apiKey.isWithinDailyLimit(),
-      },
+        is_within_daily_limit: apiKey.isWithinDailyLimit()
+      }
     });
   } catch (error) {
-    console.error("Get API key usage error:", error);
-    res.status(500).json({ error: "Failed to fetch API key usage" });
+    console.error('Get API key usage error:', error);
+    res.status(500).json({ error: 'Failed to fetch API key usage' });
   }
 };
 
@@ -409,5 +409,5 @@ module.exports = {
   updateApiKey,
   rotateApiKey,
   revokeApiKey,
-  getApiKeyUsage,
+  getApiKeyUsage
 };

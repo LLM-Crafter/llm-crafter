@@ -1,6 +1,6 @@
-const SessionToken = require("../models/SessionToken");
-const Agent = require("../models/Agent");
-const crypto = require("crypto");
+const SessionToken = require('../models/SessionToken');
+const Agent = require('../models/Agent');
+const crypto = require('crypto');
 
 /**
  * Generate a session token for agent execution
@@ -10,36 +10,36 @@ const generateSessionToken = async (req, res) => {
     const { agentId, maxInteractions = 100, expiresIn = 3600 } = req.body;
 
     // Validate required scope
-    if (!req.apiKey.hasScope("agents:execute")) {
+    if (!req.apiKey.hasScope('agents:execute')) {
       return res.status(403).json({
-        error: "Insufficient permissions",
-        code: "INSUFFICIENT_PERMISSIONS",
-        required_scope: "agents:execute",
+        error: 'Insufficient permissions',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        required_scope: 'agents:execute'
       });
     }
 
     // Verify agent exists and user can access it
     const agent = await Agent.findOne({
       _id: agentId,
-      organization: req.apiKey.organization._id,
+      organization: req.apiKey.organization._id
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     // Check if API key can access this agent's project
     if (!req.apiKey.canAccessProject(agent.project)) {
       return res.status(403).json({
-        error: "Access denied to this agent",
-        code: "PROJECT_ACCESS_DENIED",
+        error: 'Access denied to this agent',
+        code: 'PROJECT_ACCESS_DENIED'
       });
     }
 
     // Validate parameters
     if (maxInteractions < 1 || maxInteractions > 1000) {
       return res.status(400).json({
-        error: "Max interactions must be between 1 and 1000",
+        error: 'Max interactions must be between 1 and 1000'
       });
     }
 
@@ -47,7 +47,7 @@ const generateSessionToken = async (req, res) => {
       // 1 minute to 24 hours
       return res.status(400).json({
         error:
-          "Expires in must be between 60 and 86400 seconds (1 minute to 24 hours)",
+          'Expires in must be between 60 and 86400 seconds (1 minute to 24 hours)'
       });
     }
 
@@ -56,14 +56,14 @@ const generateSessionToken = async (req, res) => {
       user_api_key: req.apiKey._id,
       agent: agentId,
       expires_at: { $gt: new Date() },
-      is_revoked: false,
+      is_revoked: false
     });
 
     const maxSessionsPerAgent = process.env.MAX_SESSIONS_PER_AGENT || 5;
     if (existingActiveSessions >= maxSessionsPerAgent) {
       return res.status(400).json({
         error: `Maximum number of active sessions reached for this agent (${maxSessionsPerAgent})`,
-        code: "MAX_SESSIONS_EXCEEDED",
+        code: 'MAX_SESSIONS_EXCEEDED'
       });
     }
 
@@ -82,7 +82,7 @@ const generateSessionToken = async (req, res) => {
       expires_at: expiresAt,
       max_interactions: maxInteractions,
       client_ip: req.ip || req.connection.remoteAddress,
-      client_domain: req.get("Origin") || req.get("Referer"),
+      client_domain: req.get('Origin') || req.get('Referer')
     });
 
     await session.save();
@@ -95,14 +95,14 @@ const generateSessionToken = async (req, res) => {
         agent_id: agentId,
         expires_at: expiresAt,
         max_interactions: maxInteractions,
-        expires_in: expiresIn,
+        expires_in: expiresIn
       },
       message:
-        "Session token generated successfully. Save this token securely - it won't be shown again.",
+        'Session token generated successfully. Save this token securely - it won\'t be shown again.'
     });
   } catch (error) {
-    console.error("Generate session token error:", error);
-    res.status(500).json({ error: "Failed to generate session token" });
+    console.error('Generate session token error:', error);
+    res.status(500).json({ error: 'Failed to generate session token' });
   }
 };
 
@@ -114,10 +114,10 @@ const getSessions = async (req, res) => {
     const sessions = await SessionToken.find({
       user_api_key: req.apiKey._id,
       expires_at: { $gt: new Date() },
-      is_revoked: false,
+      is_revoked: false
     })
-      .populate("agent", "name type")
-      .select("-token_hash") // Never return the hash
+      .populate('agent', 'name type')
+      .select('-token_hash') // Never return the hash
       .sort({ createdAt: -1 });
 
     res.json({
@@ -127,12 +127,12 @@ const getSessions = async (req, res) => {
         remaining_interactions:
           session.max_interactions - session.interactions_used,
         is_expired: session.isExpired(),
-        masked_token: `st_${"*".repeat(32)}${session._id.slice(-8)}`,
-      })),
+        masked_token: `st_${'*'.repeat(32)}${session._id.slice(-8)}`
+      }))
     });
   } catch (error) {
-    console.error("Get sessions error:", error);
-    res.status(500).json({ error: "Failed to fetch sessions" });
+    console.error('Get sessions error:', error);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
   }
 };
 
@@ -143,11 +143,11 @@ const getSession = async (req, res) => {
   try {
     const session = await SessionToken.findOne({
       _id: req.params.sessionId,
-      user_api_key: req.apiKey._id,
-    }).populate("agent", "name type");
+      user_api_key: req.apiKey._id
+    }).populate('agent', 'name type');
 
     if (!session) {
-      return res.status(404).json({ error: "Session not found" });
+      return res.status(404).json({ error: 'Session not found' });
     }
 
     res.json({
@@ -158,12 +158,12 @@ const getSession = async (req, res) => {
           session.max_interactions - session.interactions_used,
         is_expired: session.isExpired(),
         is_valid: session.isValid(),
-        masked_token: `st_${"*".repeat(32)}${session._id.slice(-8)}`,
-      },
+        masked_token: `st_${'*'.repeat(32)}${session._id.slice(-8)}`
+      }
     });
   } catch (error) {
-    console.error("Get session error:", error);
-    res.status(500).json({ error: "Failed to fetch session" });
+    console.error('Get session error:', error);
+    res.status(500).json({ error: 'Failed to fetch session' });
   }
 };
 
@@ -174,22 +174,22 @@ const revokeSession = async (req, res) => {
   try {
     const session = await SessionToken.findOne({
       _id: req.params.sessionId,
-      user_api_key: req.apiKey._id,
+      user_api_key: req.apiKey._id
     });
 
     if (!session) {
-      return res.status(404).json({ error: "Session not found" });
+      return res.status(404).json({ error: 'Session not found' });
     }
 
     await session.revoke();
 
     res.json({
       success: true,
-      message: "Session revoked successfully",
+      message: 'Session revoked successfully'
     });
   } catch (error) {
-    console.error("Revoke session error:", error);
-    res.status(500).json({ error: "Failed to revoke session" });
+    console.error('Revoke session error:', error);
+    res.status(500).json({ error: 'Failed to revoke session' });
   }
 };
 
@@ -201,23 +201,23 @@ const revokeAllSessions = async (req, res) => {
     const result = await SessionToken.updateMany(
       {
         user_api_key: req.apiKey._id,
-        is_revoked: false,
+        is_revoked: false
       },
       {
-        is_revoked: true,
+        is_revoked: true
       }
     );
 
     res.json({
       success: true,
       data: {
-        revoked_count: result.modifiedCount,
+        revoked_count: result.modifiedCount
       },
-      message: `${result.modifiedCount} sessions revoked successfully`,
+      message: `${result.modifiedCount} sessions revoked successfully`
     });
   } catch (error) {
-    console.error("Revoke all sessions error:", error);
-    res.status(500).json({ error: "Failed to revoke sessions" });
+    console.error('Revoke all sessions error:', error);
+    res.status(500).json({ error: 'Failed to revoke sessions' });
   }
 };
 
@@ -231,13 +231,13 @@ const cleanupExpiredSessions = async (req, res) => {
     res.json({
       success: true,
       data: {
-        deleted_count: deletedCount,
+        deleted_count: deletedCount
       },
-      message: `${deletedCount} expired sessions cleaned up`,
+      message: `${deletedCount} expired sessions cleaned up`
     });
   } catch (error) {
-    console.error("Cleanup expired sessions error:", error);
-    res.status(500).json({ error: "Failed to cleanup expired sessions" });
+    console.error('Cleanup expired sessions error:', error);
+    res.status(500).json({ error: 'Failed to cleanup expired sessions' });
   }
 };
 
@@ -247,5 +247,5 @@ module.exports = {
   getSession,
   revokeSession,
   revokeAllSessions,
-  cleanupExpiredSessions,
+  cleanupExpiredSessions
 };

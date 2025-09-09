@@ -1,5 +1,5 @@
-const UserApiKey = require("../models/UserApiKey");
-const crypto = require("crypto");
+const UserApiKey = require('../models/UserApiKey');
+const crypto = require('crypto');
 
 /**
  * Middleware to authenticate requests using API keys
@@ -11,15 +11,15 @@ const apiKeyAuth = (requiredScopes = []) => {
     try {
       // Extract API key from headers
       const apiKey =
-        req.header("X-API-Key") ||
-        (req.header("Authorization")?.startsWith("Bearer ")
-          ? req.header("Authorization").replace("Bearer ", "")
+        req.header('X-API-Key') ||
+        (req.header('Authorization')?.startsWith('Bearer ')
+          ? req.header('Authorization').replace('Bearer ', '')
           : null);
 
       if (!apiKey) {
         return res.status(401).json({
-          error: "API key required",
-          code: "API_KEY_REQUIRED",
+          error: 'API key required',
+          code: 'API_KEY_REQUIRED'
         });
       }
 
@@ -29,21 +29,21 @@ const apiKeyAuth = (requiredScopes = []) => {
       // Find and validate the key
       const userApiKey = await UserApiKey.findOne({
         key_hash: keyHash,
-        is_active: true,
-      }).populate(["user", "organization"]);
+        is_active: true
+      }).populate(['user', 'organization']);
 
       if (!userApiKey) {
         return res.status(401).json({
-          error: "Invalid API key",
-          code: "INVALID_API_KEY",
+          error: 'Invalid API key',
+          code: 'INVALID_API_KEY'
         });
       }
 
       // Check expiration
       if (userApiKey.isExpired()) {
         return res.status(401).json({
-          error: "API key expired",
-          code: "API_KEY_EXPIRED",
+          error: 'API key expired',
+          code: 'API_KEY_EXPIRED'
         });
       }
 
@@ -54,10 +54,10 @@ const apiKeyAuth = (requiredScopes = []) => {
         );
         if (!hasRequiredScope) {
           return res.status(403).json({
-            error: "Insufficient permissions",
-            code: "INSUFFICIENT_PERMISSIONS",
+            error: 'Insufficient permissions',
+            code: 'INSUFFICIENT_PERMISSIONS',
             required_scopes: requiredScopes,
-            available_scopes: userApiKey.scopes,
+            available_scopes: userApiKey.scopes
           });
         }
       }
@@ -75,22 +75,22 @@ const apiKeyAuth = (requiredScopes = []) => {
 
       next();
     } catch (error) {
-      console.error("API key authentication error:", error);
+      console.error('API key authentication error:', error);
 
       if (
-        error.message.includes("IP address not allowed") ||
-        error.message.includes("Domain not allowed") ||
-        error.message.includes("Daily execution limit exceeded")
+        error.message.includes('IP address not allowed') ||
+        error.message.includes('Domain not allowed') ||
+        error.message.includes('Daily execution limit exceeded')
       ) {
         return res.status(403).json({
           error: error.message,
-          code: "ACCESS_RESTRICTED",
+          code: 'ACCESS_RESTRICTED'
         });
       }
 
       res.status(401).json({
-        error: "API key authentication failed",
-        code: "AUTH_FAILED",
+        error: 'API key authentication failed',
+        code: 'AUTH_FAILED'
       });
     }
   };
@@ -109,12 +109,12 @@ const validateApiKeyRestrictions = async (userApiKey, req) => {
   ) {
     const clientIP = req.ip || req.connection.remoteAddress;
     if (!userApiKey.restrictions.ip_whitelist.includes(clientIP)) {
-      throw new Error("IP address not allowed");
+      throw new Error('IP address not allowed');
     }
   }
 
   // Check domain whitelist
-  const origin = req.get("Origin") || req.get("Referer");
+  const origin = req.get('Origin') || req.get('Referer');
   if (
     userApiKey.restrictions.domain_whitelist &&
     userApiKey.restrictions.domain_whitelist.length > 0 &&
@@ -123,17 +123,17 @@ const validateApiKeyRestrictions = async (userApiKey, req) => {
     try {
       const domain = new URL(origin).hostname;
       if (!userApiKey.restrictions.domain_whitelist.includes(domain)) {
-        throw new Error("Domain not allowed");
+        throw new Error('Domain not allowed');
       }
     } catch (urlError) {
       // Invalid URL in Origin/Referer header
-      throw new Error("Invalid origin domain");
+      throw new Error('Invalid origin domain');
     }
   }
 
   // Check daily execution limits
   if (!userApiKey.isWithinDailyLimit()) {
-    throw new Error("Daily execution limit exceeded");
+    throw new Error('Daily execution limit exceeded');
   }
 };
 
@@ -149,8 +149,8 @@ const flexibleAuth = (options = {}) => {
   const { allowApiKey = true, allowJWT = true, requiredScopes = [] } = options;
 
   return async (req, res, next) => {
-    const authHeader = req.header("Authorization");
-    const apiKeyHeader = req.header("X-API-Key");
+    const authHeader = req.header('Authorization');
+    const apiKeyHeader = req.header('X-API-Key');
 
     // Try API key first if provided
     if (allowApiKey && apiKeyHeader) {
@@ -158,30 +158,30 @@ const flexibleAuth = (options = {}) => {
     }
 
     // Try JWT token if provided and no API key
-    if (allowJWT && authHeader?.startsWith("Bearer ") && !apiKeyHeader) {
+    if (allowJWT && authHeader?.startsWith('Bearer ') && !apiKeyHeader) {
       // Import auth middleware here to avoid circular dependencies
-      const auth = require("./auth");
+      const auth = require('./auth');
       return auth(req, res, next);
     }
 
     // If API key is in Authorization header (Bearer format)
     if (
       allowApiKey &&
-      authHeader?.startsWith("Bearer ") &&
-      !req.header("X-API-Key")
+      authHeader?.startsWith('Bearer ') &&
+      !req.header('X-API-Key')
     ) {
       return apiKeyAuth(requiredScopes)(req, res, next);
     }
 
     return res.status(401).json({
-      error: "Authentication required",
-      code: "AUTH_REQUIRED",
+      error: 'Authentication required',
+      code: 'AUTH_REQUIRED',
       accepted_methods: [
-        ...(allowJWT ? ["JWT Token (Authorization: Bearer <token>)"] : []),
+        ...(allowJWT ? ['JWT Token (Authorization: Bearer <token>)'] : []),
         ...(allowApiKey
-          ? ["API Key (X-API-Key: <key> or Authorization: Bearer <key>)"]
-          : []),
-      ],
+          ? ['API Key (X-API-Key: <key> or Authorization: Bearer <key>)']
+          : [])
+      ]
     });
   };
 };
@@ -189,5 +189,5 @@ const flexibleAuth = (options = {}) => {
 module.exports = {
   apiKeyAuth,
   flexibleAuth,
-  validateApiKeyRestrictions,
+  validateApiKeyRestrictions
 };

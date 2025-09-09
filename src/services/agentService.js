@@ -1,11 +1,11 @@
-const Agent = require("../models/Agent");
-const Conversation = require("../models/Conversation");
-const AgentExecution = require("../models/AgentExecution");
-const OpenAIService = require("./openaiService");
-const toolService = require("./toolService");
-const APIKey = require("../models/ApiKey");
-const summarizationService = require("./summarizationService");
-const suggestionService = require("./suggestionService");
+const Agent = require('../models/Agent');
+const Conversation = require('../models/Conversation');
+const AgentExecution = require('../models/AgentExecution');
+const OpenAIService = require('./openaiService');
+const toolService = require('./toolService');
+const APIKey = require('../models/ApiKey');
+const summarizationService = require('./summarizationService');
+const suggestionService = require('./suggestionService');
 
 class AgentService {
   /**
@@ -20,17 +20,17 @@ class AgentService {
   ) {
     //populate agent with API key and provider of api key
     const agent = await Agent.findById(agentId).populate({
-      path: "api_key",
+      path: 'api_key',
       populate: {
-        path: "provider",
-      },
+        path: 'provider'
+      }
     });
     if (!agent) {
-      throw new Error("Agent not found");
+      throw new Error('Agent not found');
     }
 
-    if (agent.type !== "chatbot") {
-      throw new Error("Agent is not a chatbot type");
+    if (agent.type !== 'chatbot') {
+      throw new Error('Agent is not a chatbot type');
     }
 
     // Get or create conversation
@@ -39,23 +39,23 @@ class AgentService {
       conversation = await Conversation.findById(conversationId);
       if (!conversation || conversation.agent !== agentId) {
         throw new Error(
-          "Conversation not found or does not belong to this agent"
+          'Conversation not found or does not belong to this agent'
         );
       }
     } else {
       conversation = new Conversation({
         agent: agentId,
         user_identifier: userIdentifier,
-        title: this.generateConversationTitle(userMessage),
+        title: this.generateConversationTitle(userMessage)
       });
       await conversation.save();
     }
 
     // Add user message to conversation
     await conversation.addMessage({
-      role: "user",
+      role: 'user',
       content: userMessage,
-      timestamp: new Date(),
+      timestamp: new Date()
     });
 
     // Execute agent reasoning
@@ -67,12 +67,12 @@ class AgentService {
 
     // Add assistant response to conversation
     await conversation.addMessage({
-      role: "assistant",
+      role: 'assistant',
       content: response.content,
       thinking_process: response.thinking_process,
       tools_used: response.tools_used,
       token_usage: response.token_usage,
-      timestamp: new Date(),
+      timestamp: new Date()
     });
 
     // Generate question suggestions if enabled
@@ -100,7 +100,7 @@ class AgentService {
       response: response.content,
       thinking_process: response.thinking_process,
       tools_used: response.tools_used,
-      token_usage: response.token_usage,
+      token_usage: response.token_usage
     };
 
     // Add suggestions to response if available
@@ -122,27 +122,27 @@ class AgentService {
     dynamicContext = {}
   ) {
     const agent = await Agent.findById(agentId).populate({
-      path: "api_key",
+      path: 'api_key',
       populate: {
-        path: "provider",
-      },
+        path: 'provider'
+      }
     });
     if (!agent) {
-      throw new Error("Agent not found");
+      throw new Error('Agent not found');
     }
 
-    if (agent.type !== "task") {
-      throw new Error("Agent is not a task type");
+    if (agent.type !== 'task') {
+      throw new Error('Agent is not a task type');
     }
 
     // Create execution record
     const execution = new AgentExecution({
       agent: agentId,
-      type: "task",
-      input: input,
+      type: 'task',
+      input,
       metadata: {
-        user_identifier: userIdentifier,
-      },
+        user_identifier: userIdentifier
+      }
     });
     await execution.save();
     await execution.start();
@@ -166,7 +166,7 @@ class AgentService {
         thinking_process: execution.thinking_process,
         tools_used: execution.tools_executed,
         token_usage: result.token_usage,
-        status: "completed",
+        status: 'completed'
       };
     } catch (error) {
       await execution.fail(error);
@@ -178,19 +178,19 @@ class AgentService {
    * Core agent reasoning engine
    */
   async executeAgentReasoning(agent, conversation, dynamicContext = {}) {
-    let decriptedApiKey = agent.api_key.getDecryptedKey();
+    const decriptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
       decriptedApiKey,
       agent.api_key.provider.name
     );
 
-    let thinkingProcess = [];
-    let toolsUsed = [];
-    let totalTokenUsage = {
+    const thinkingProcess = [];
+    const toolsUsed = [];
+    const totalTokenUsage = {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
-      cost: 0,
+      cost: 0
     };
 
     // Build context for the agent
@@ -198,13 +198,13 @@ class AgentService {
 
     // Initial reasoning step
     thinkingProcess.push({
-      step: "analyze_input",
-      reasoning: "Analyzing user input and determining response strategy",
+      step: 'analyze_input',
+      reasoning: 'Analyzing user input and determining response strategy'
     });
 
-    let maxIterations = agent.config.max_tool_calls || 5;
+    const maxIterations = agent.config.max_tool_calls || 5;
     let currentIteration = 0;
-    let finalResponse = "";
+    let finalResponse = '';
 
     while (currentIteration < maxIterations) {
       currentIteration++;
@@ -239,11 +239,11 @@ class AgentService {
       // Parse LLM response to determine next action
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
 
-      if (parsedResponse.action === "use_tool") {
+      if (parsedResponse.action === 'use_tool') {
         // Execute tool
         thinkingProcess.push({
-          step: "tool_execution",
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
+          step: 'tool_execution',
+          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`
         });
 
         const toolResult = await toolService.executeToolWithConfig(
@@ -256,7 +256,7 @@ class AgentService {
         const toolResultForAgent = {
           tool_name: parsedResponse.tool_name,
           parameters: parsedResponse.tool_parameters,
-          execution_time_ms: toolResult.execution_time_ms,
+          execution_time_ms: toolResult.execution_time_ms
         };
 
         if (toolResult.success) {
@@ -267,8 +267,8 @@ class AgentService {
           toolResultForAgent.success = false;
           // Add thinking step about tool failure
           thinkingProcess.push({
-            step: "tool_failed",
-            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
+            step: 'tool_failed',
+            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
           });
         }
 
@@ -276,33 +276,33 @@ class AgentService {
 
         // Continue reasoning with tool result (success or failure)
         continue;
-      } else if (parsedResponse.action === "respond") {
+      } else if (parsedResponse.action === 'respond') {
         // Agent decided to respond to user
         finalResponse = parsedResponse.response;
         thinkingProcess.push({
-          step: "final_response",
-          reasoning: "Determined sufficient information to respond to user",
+          step: 'final_response',
+          reasoning: 'Determined sufficient information to respond to user'
         });
         break;
       } else {
         // Continue thinking
         thinkingProcess.push({
-          step: "continue_reasoning",
-          reasoning: parsedResponse.reasoning || "Continuing analysis",
+          step: 'continue_reasoning',
+          reasoning: parsedResponse.reasoning || 'Continuing analysis'
         });
       }
     }
 
     if (!finalResponse) {
       finalResponse =
-        "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
+        'I apologize, but I wasn\'t able to complete your request within the allowed processing time. Please try rephrasing your request.';
     }
 
     return {
       content: finalResponse,
       thinking_process: thinkingProcess,
       tools_used: toolsUsed,
-      token_usage: totalTokenUsage,
+      token_usage: totalTokenUsage
     };
   }
 
@@ -310,34 +310,34 @@ class AgentService {
    * Task-specific reasoning with iterative tool usage
    */
   async executeTaskReasoning(agent, input, execution, dynamicContext = {}) {
-    let decryptedApiKey = agent.api_key.getDecryptedKey();
+    const decryptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
       decryptedApiKey,
       agent.api_key.provider.name
     );
 
-    let thinkingProcess = [];
-    let toolsUsed = [];
-    let totalTokenUsage = {
+    const thinkingProcess = [];
+    const toolsUsed = [];
+    const totalTokenUsage = {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
-      cost: 0,
+      cost: 0
     };
 
     await execution.addThinkingStep(
-      "analyze_task",
-      "Analyzing task input and determining execution strategy"
+      'analyze_task',
+      'Analyzing task input and determining execution strategy'
     );
 
     thinkingProcess.push({
-      step: "analyze_task",
-      reasoning: "Analyzing task input and determining execution strategy",
+      step: 'analyze_task',
+      reasoning: 'Analyzing task input and determining execution strategy'
     });
 
-    let maxIterations = agent.config.max_tool_calls || 5;
+    const maxIterations = agent.config.max_tool_calls || 5;
     let currentIteration = 0;
-    let finalOutput = "";
+    let finalOutput = '';
 
     while (currentIteration < maxIterations) {
       currentIteration++;
@@ -372,15 +372,15 @@ class AgentService {
       // Parse LLM response to determine next action
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
 
-      if (parsedResponse.action === "use_tool") {
+      if (parsedResponse.action === 'use_tool') {
         // Execute tool
         thinkingProcess.push({
-          step: "tool_execution",
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
+          step: 'tool_execution',
+          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`
         });
 
         await execution.addThinkingStep(
-          "tool_execution",
+          'tool_execution',
           `Using tool: ${parsedResponse.tool_name}`
         );
 
@@ -394,7 +394,7 @@ class AgentService {
         const toolResultForAgent = {
           tool_name: parsedResponse.tool_name,
           parameters: parsedResponse.tool_parameters,
-          execution_time_ms: toolResult.execution_time_ms,
+          execution_time_ms: toolResult.execution_time_ms
         };
 
         if (toolResult.success) {
@@ -413,12 +413,12 @@ class AgentService {
 
           // Add thinking step about tool failure
           thinkingProcess.push({
-            step: "tool_failed",
-            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
+            step: 'tool_failed',
+            reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
           });
 
           await execution.addThinkingStep(
-            "tool_failed",
+            'tool_failed',
             `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
           );
         }
@@ -427,46 +427,46 @@ class AgentService {
 
         // Continue reasoning with tool result (success or failure)
         continue;
-      } else if (parsedResponse.action === "respond") {
+      } else if (parsedResponse.action === 'respond') {
         // Agent decided to provide final output
         finalOutput = parsedResponse.response;
         thinkingProcess.push({
-          step: "task_completed",
-          reasoning: "Determined sufficient information to complete the task",
+          step: 'task_completed',
+          reasoning: 'Determined sufficient information to complete the task'
         });
 
         await execution.addThinkingStep(
-          "task_completed",
-          "Task processing completed with final output"
+          'task_completed',
+          'Task processing completed with final output'
         );
         break;
       } else {
         // Continue thinking
         thinkingProcess.push({
-          step: "continue_reasoning",
-          reasoning: parsedResponse.reasoning || "Continuing task analysis",
+          step: 'continue_reasoning',
+          reasoning: parsedResponse.reasoning || 'Continuing task analysis'
         });
 
         await execution.addThinkingStep(
-          "continue_reasoning",
-          parsedResponse.reasoning || "Continuing task analysis"
+          'continue_reasoning',
+          parsedResponse.reasoning || 'Continuing task analysis'
         );
       }
     }
 
     if (!finalOutput) {
       finalOutput =
-        "I apologize, but I wasn't able to complete the task within the allowed processing iterations. Please try simplifying the request or providing more specific instructions.";
+        'I apologize, but I wasn\'t able to complete the task within the allowed processing iterations. Please try simplifying the request or providing more specific instructions.';
 
       await execution.addThinkingStep(
-        "max_iterations_reached",
-        "Maximum iterations reached without completing task"
+        'max_iterations_reached',
+        'Maximum iterations reached without completing task'
       );
     }
 
     return {
       output: finalOutput,
-      token_usage: totalTokenUsage,
+      token_usage: totalTokenUsage
     };
   }
 
@@ -482,7 +482,7 @@ class AgentService {
       available_tools: agent.tools,
       agent_config: agent.config,
       has_summary: !!conversation.conversation_summary,
-      summary_version: conversation.metadata.summary_version || 0,
+      summary_version: conversation.metadata.summary_version || 0
     };
   }
 
@@ -490,40 +490,40 @@ class AgentService {
    * Build reasoning prompt for the agent
    */
   buildReasoningPrompt(agent, context, thinkingProcess, toolsUsed, iteration) {
-    let prompt = `You are an AI agent. Your task is to analyze the conversation and decide on the next action.
+    const prompt = `You are an AI agent. Your task is to analyze the conversation and decide on the next action.
 
 Conversation History:
-${context.conversation_history.map((msg) => `${msg.role}: ${msg.content}`).join("\n")}
+${context.conversation_history.map((msg) => `${msg.role}: ${msg.content}`).join('\n')}
 
 Available Tools:
 ${agent.tools
-  .map((tool) => {
-    let toolInfo = `- ${tool.name}: ${tool.description}`;
-    if (
-      tool.name === "api_caller" &&
+    .map((tool) => {
+      let toolInfo = `- ${tool.name}: ${tool.description}`;
+      if (
+        tool.name === 'api_caller' &&
       tool.parameters &&
       tool.parameters.endpoints
-    ) {
-      const endpoints = Object.keys(tool.parameters.endpoints);
-      toolInfo += `\n  Available endpoints: ${endpoints.join(", ")}`;
-    }
-    return toolInfo;
-  })
-  .join("\n")}
+      ) {
+        const endpoints = Object.keys(tool.parameters.endpoints);
+        toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
+      }
+      return toolInfo;
+    })
+    .join('\n')}
 
 Previous Thinking Process:
-${thinkingProcess.map((step) => `${step.step}: ${step.reasoning}`).join("\n")}
+${thinkingProcess.map((step) => `${step.step}: ${step.reasoning}`).join('\n')}
 
 Tools Used So Far:
 ${toolsUsed
-  .map((tool) => {
-    if (tool.success) {
-      return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
-    } else {
-      return `- ${tool.tool_name}: FAILED - ${tool.error}`;
-    }
-  })
-  .join("\n")}
+    .map((tool) => {
+      if (tool.success) {
+        return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+      } else {
+        return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+      }
+    })
+    .join('\n')}
 
 Current Iteration: ${iteration}
 
@@ -565,7 +565,7 @@ Choose your action:`;
     return `Task Input: ${JSON.stringify(input)}
 
 Available Tools:
-${agent.tools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
+${agent.tools.map((tool) => `- ${tool.name}: ${tool.description}`).join('\n')}
 
 Analyze the task and either:
 1. Use a tool if needed (respond with ACTION: use_tool, TOOL: tool_name, PARAMETERS: {...})
@@ -584,40 +584,40 @@ Your response:`;
     toolsUsed,
     iteration
   ) {
-    let prompt = `You are an AI task agent. Your goal is to complete the given task by using available tools when necessary.
+    const prompt = `You are an AI task agent. Your goal is to complete the given task by using available tools when necessary.
 
 Task Input:
 ${JSON.stringify(input)}
 
 Available Tools:
 ${agent.tools
-  .map((tool) => {
-    let toolInfo = `- ${tool.name}: ${tool.description}`;
-    if (
-      tool.name === "api_caller" &&
+    .map((tool) => {
+      let toolInfo = `- ${tool.name}: ${tool.description}`;
+      if (
+        tool.name === 'api_caller' &&
       tool.parameters &&
       tool.parameters.endpoints
-    ) {
-      const endpoints = Object.keys(tool.parameters.endpoints);
-      toolInfo += `\n  Available endpoints: ${endpoints.join(", ")}`;
-    }
-    return toolInfo;
-  })
-  .join("\n")}
+      ) {
+        const endpoints = Object.keys(tool.parameters.endpoints);
+        toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
+      }
+      return toolInfo;
+    })
+    .join('\n')}
 
 Previous Thinking Process:
-${thinkingProcess.map((step) => `${step.step}: ${step.reasoning}`).join("\n")}
+${thinkingProcess.map((step) => `${step.step}: ${step.reasoning}`).join('\n')}
 
 Tools Used So Far:
 ${toolsUsed
-  .map((tool) => {
-    if (tool.success) {
-      return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
-    } else {
-      return `- ${tool.tool_name}: FAILED - ${tool.error}`;
-    }
-  })
-  .join("\n")}
+    .map((tool) => {
+      if (tool.success) {
+        return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+      } else {
+        return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+      }
+    })
+    .join('\n')}
 
 Current Iteration: ${iteration}
 
@@ -656,27 +656,27 @@ Choose your action:`;
    * Parse agent response to determine action
    */
   parseAgentResponse(content) {
-    console.log("Raw LLM response:", content); // Debug log
+    console.log('Raw LLM response:', content); // Debug log
 
-    const lines = content.split("\n");
+    const lines = content.split('\n');
     const result = {};
 
     // First pass: extract simple single-line fields (except RESPONSE which can be multi-line)
     for (const line of lines) {
-      if (line.startsWith("ACTION:")) {
-        result.action = line.replace("ACTION:", "").trim();
-      } else if (line.startsWith("TOOL:")) {
-        result.tool_name = line.replace("TOOL:", "").trim();
-      } else if (line.startsWith("REASONING:")) {
-        result.reasoning = line.replace("REASONING:", "").trim();
+      if (line.startsWith('ACTION:')) {
+        result.action = line.replace('ACTION:', '').trim();
+      } else if (line.startsWith('TOOL:')) {
+        result.tool_name = line.replace('TOOL:', '').trim();
+      } else if (line.startsWith('REASONING:')) {
+        result.reasoning = line.replace('REASONING:', '').trim();
       }
     }
 
     // Handle multi-line RESPONSE
-    const responseIndex = content.indexOf("RESPONSE:");
+    const responseIndex = content.indexOf('RESPONSE:');
     if (responseIndex !== -1) {
       const afterResponse = content.substring(
-        responseIndex + "RESPONSE:".length
+        responseIndex + 'RESPONSE:'.length
       );
 
       // Find the end of the response (either next field or end of content)
@@ -688,28 +688,28 @@ Choose your action:`;
         : afterResponse.length;
 
       result.response = afterResponse.substring(0, responseEnd).trim();
-      console.log("Parsed multi-line response:", result.response);
+      console.log('Parsed multi-line response:', result.response);
     }
 
     // Second pass: extract potentially multi-line PARAMETERS
     // Find the start of PARAMETERS and manually parse the JSON object
-    const parametersIndex = content.indexOf("PARAMETERS:");
+    const parametersIndex = content.indexOf('PARAMETERS:');
     if (parametersIndex !== -1) {
       const afterParameters = content
-        .substring(parametersIndex + "PARAMETERS:".length)
+        .substring(parametersIndex + 'PARAMETERS:'.length)
         .trim();
 
       // Find the opening brace
-      const openBraceIndex = afterParameters.indexOf("{");
+      const openBraceIndex = afterParameters.indexOf('{');
       if (openBraceIndex !== -1) {
         // Count braces to find the matching closing brace
         let braceCount = 0;
         let endIndex = -1;
 
         for (let i = openBraceIndex; i < afterParameters.length; i++) {
-          if (afterParameters[i] === "{") {
+          if (afterParameters[i] === '{') {
             braceCount++;
-          } else if (afterParameters[i] === "}") {
+          } else if (afterParameters[i] === '}') {
             braceCount--;
             if (braceCount === 0) {
               endIndex = i;
@@ -725,34 +725,34 @@ Choose your action:`;
           );
           try {
             result.tool_parameters = JSON.parse(jsonStr);
-            console.log("Parsed parameters:", result.tool_parameters);
+            console.log('Parsed parameters:', result.tool_parameters);
           } catch (e) {
-            console.error("Failed to parse parameters JSON:", jsonStr);
-            console.error("JSON parse error:", e.message);
+            console.error('Failed to parse parameters JSON:', jsonStr);
+            console.error('JSON parse error:', e.message);
             result.tool_parameters = {};
           }
         } else {
-          console.error("Could not find matching closing brace for PARAMETERS");
+          console.error('Could not find matching closing brace for PARAMETERS');
           result.tool_parameters = {};
         }
       } else {
-        console.error("No opening brace found after PARAMETERS:");
+        console.error('No opening brace found after PARAMETERS:');
         result.tool_parameters = {};
       }
     } else {
       // Fallback: try single line parsing
       for (const line of lines) {
-        if (line.startsWith("PARAMETERS:")) {
+        if (line.startsWith('PARAMETERS:')) {
           try {
-            const paramStr = line.replace("PARAMETERS:", "").trim();
+            const paramStr = line.replace('PARAMETERS:', '').trim();
             result.tool_parameters = JSON.parse(paramStr);
             console.log(
-              "Parsed single-line parameters:",
+              'Parsed single-line parameters:',
               result.tool_parameters
             );
           } catch (e) {
-            console.error("Failed to parse single-line parameters:", line);
-            console.error("JSON parse error:", e.message);
+            console.error('Failed to parse single-line parameters:', line);
+            console.error('JSON parse error:', e.message);
             result.tool_parameters = {};
           }
           break;
@@ -762,11 +762,11 @@ Choose your action:`;
       // If no PARAMETERS found at all
       if (!result.tool_parameters) {
         result.tool_parameters = {};
-        console.log("No PARAMETERS found in LLM response");
+        console.log('No PARAMETERS found in LLM response');
       }
     }
 
-    console.log("Final parsed result:", result); // Debug log
+    console.log('Final parsed result:', result); // Debug log
     return result;
   }
 
@@ -775,7 +775,7 @@ Choose your action:`;
    */
   generateConversationTitle(message) {
     if (message.length > 50) {
-      return message.substring(0, 47) + "...";
+      return `${message.substring(0, 47)  }...`;
     }
     return message;
   }
@@ -798,13 +798,13 @@ Choose your action:`;
       if (config.summarization?.enabled) {
         config._agent_api_key = {
           key: agent.api_key.key,
-          provider: agent.api_key.provider.name,
+          provider: agent.api_key.provider.name
         };
       }
 
       // Add API key for FAQ tool to enable semantic similarity
       // Pass the full API key object so it can be decrypted
-      if (toolName === "faq") {
+      if (toolName === 'faq') {
         config._agent_api_key = agent.api_key; // Pass full object with decryption method
       }
     }
@@ -817,16 +817,16 @@ Choose your action:`;
    */
   async getAgent(agentId) {
     const agent = await Agent.findById(agentId)
-      .populate("api_key")
-      .populate("project")
-      .populate("organization");
+      .populate('api_key')
+      .populate('project')
+      .populate('organization');
 
     if (!agent) {
-      throw new Error("Agent not found");
+      throw new Error('Agent not found');
     }
 
     if (!agent.is_active) {
-      throw new Error("Agent is not active");
+      throw new Error('Agent is not active');
     }
 
     return agent;
@@ -851,7 +851,7 @@ Choose your action:`;
         summarizationService.getMessagesToSummarize(conversation);
 
       if (messagesToSummarize.length === 0) {
-        console.log("No messages to summarize");
+        console.log('No messages to summarize');
         return;
       }
 
@@ -881,7 +881,7 @@ Choose your action:`;
         result
       );
     } catch (error) {
-      console.error("Summarization failed:", error);
+      console.error('Summarization failed:', error);
       // Don't throw error - conversation should continue even if summarization fails
     }
   }
@@ -890,14 +890,14 @@ Choose your action:`;
    * Log summarization metrics for monitoring
    */
   logSummarizationMetrics(conversation, messageCount, result) {
-    console.log("Summarization Metrics:", {
+    console.log('Summarization Metrics:', {
       conversation_id: conversation._id,
       messages_summarized: messageCount,
       total_messages: conversation.messages.length,
       summary_version: conversation.metadata.summary_version,
       tokens_used: result.token_usage.total_tokens,
       cost: result.token_usage.cost,
-      model_used: result.model_used,
+      model_used: result.model_used
     });
   }
 
@@ -911,7 +911,7 @@ Choose your action:`;
     if (Object.keys(dynamicContext).length > 0) {
       const contextString = Object.entries(dynamicContext)
         .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
-        .join("\n");
+        .join('\n');
 
       enhancedPrompt += `\n\nAdditional Context:\n${contextString}`;
     }

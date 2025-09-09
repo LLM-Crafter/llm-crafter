@@ -48,35 +48,34 @@ const createApiKey = async (req, res) => {
   }
 };
 const deleteApiKey = async (req, res) => {
-    try {
-      // Verify project exists and belongs to the organization
-      const project = await Project.findOne({
-        _id: req.params.projectId,
-        organization: req.params.orgId
-      });
-  
-      if (!project) {
-        return res.status(404).json({ error: 'Project not found in this organization' });
-      }
-  
-      // Find and delete the API key
-      const apiKey = await APIKey.findOneAndDelete({
-        _id: req.params.apiKeyId,
-        project: req.params.projectId
-      });
-  
-      if (!apiKey) {
-        return res.status(404).json({ error: 'API key not found in this project' });
-      }
-  
-      res.json({ message: 'API key deleted successfully' });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete API key' });
+  try {
+    // Verify project exists and belongs to the organization
+    const project = await Project.findOne({
+      _id: req.params.projectId,
+      organization: req.params.orgId
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found in this organization' });
     }
-  };
-  
-  module.exports = {
-    createApiKey,
-    deleteApiKey
-  };
-  
+
+    // Find and delete the API key
+    const apiKey = await APIKey.findOneAndDelete({
+      _id: req.params.apiKeyId,
+      project: req.params.projectId
+    });
+
+    if (!apiKey) {
+      return res.status(404).json({ error: 'API key not found in this project' });
+    }
+
+    res.json({ message: 'API key deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete API key' });
+  }
+};
+
+module.exports = {
+  createApiKey,
+  deleteApiKey
+};

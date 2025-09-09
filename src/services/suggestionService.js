@@ -1,5 +1,5 @@
-const OpenAIService = require("./openaiService");
-const ApiKey = require("../models/ApiKey");
+const OpenAIService = require('./openaiService');
+const ApiKey = require('../models/ApiKey');
 
 class SuggestionService {
   /**
@@ -18,20 +18,20 @@ class SuggestionService {
       // Validate API key
       const apiKey = await ApiKey.findById(
         agent.question_suggestions.api_key
-      ).populate("provider");
+      ).populate('provider');
       if (!apiKey) {
-        console.error("Suggestion API key not found");
+        console.error('Suggestion API key not found');
         return null;
       }
 
       // Validate model
       if (!agent.question_suggestions.model) {
-        console.error("Suggestion model not configured");
+        console.error('Suggestion model not configured');
         return null;
       }
 
       if (!apiKey.provider.models.includes(agent.question_suggestions.model)) {
-        console.error("Invalid suggestion model for provider");
+        console.error('Invalid suggestion model for provider');
         return null;
       }
 
@@ -58,11 +58,11 @@ class SuggestionService {
         userPrompt,
         {
           temperature: 1,
-          max_tokens: 1000,
+          max_tokens: 1000
         },
         systemPrompt
       );
-      console.log("Suggestion response:", response);
+      console.log('Suggestion response:', response);
       const executionTime = Date.now() - startTime;
 
       // Parse the response
@@ -72,7 +72,7 @@ class SuggestionService {
       );
 
       if (!suggestions || suggestions.length === 0) {
-        console.error("Failed to parse suggestion response");
+        console.error('Failed to parse suggestion response');
         return null;
       }
 
@@ -84,11 +84,11 @@ class SuggestionService {
           total_tokens: response.usage.total_tokens,
           cost: response.usage.cost,
           model: agent.question_suggestions.model,
-          execution_time_ms: executionTime,
-        },
+          execution_time_ms: executionTime
+        }
       };
     } catch (error) {
-      console.error("Error generating question suggestions:", error);
+      console.error('Error generating question suggestions:', error);
       return null;
     }
   }
@@ -108,7 +108,7 @@ class SuggestionService {
       .slice(-5)
       .map((msg) => ({
         role: msg.role,
-        content: msg.content,
+        content: msg.content
       }))
       .filter((msg) => msg.content && msg.content.trim().length > 0);
   }
@@ -121,7 +121,7 @@ class SuggestionService {
    */
   buildSuggestionSystemPrompt(count, customPrompt) {
     if (customPrompt) {
-      return customPrompt.replace("{count}", count);
+      return customPrompt.replace('{count}', count);
     }
 
     return `You are a reply suggestion generator. Based on the conversation context, generate exactly ${count} relevant replies that a user might want to send.
@@ -146,12 +146,12 @@ Generate ${count} relevant reply suggestions:`;
    */
   buildSuggestionUserPrompt(contextMessages) {
     if (contextMessages.length === 0) {
-      return "This is the start of a new conversation. Generate general helpful replies a user might send to begin a conversation.";
+      return 'This is the start of a new conversation. Generate general helpful replies a user might send to begin a conversation.';
     }
 
     const conversationText = contextMessages
       .map((msg) => `${msg.role}: ${msg.content}`)
-      .join("\n");
+      .join('\n');
 
     return `Based on this conversation context, generate relevant reply suggestions:
 
@@ -176,7 +176,7 @@ Generate reply suggestions that would naturally continue this conversation:`;
         const validSuggestions = parsed.suggestions
           .filter(
             (suggestion) =>
-              typeof suggestion === "string" && suggestion.trim().length > 0
+              typeof suggestion === 'string' && suggestion.trim().length > 0
           )
           .map((suggestion) => suggestion.trim())
           .slice(0, expectedCount); // Ensure we don't exceed expected count
@@ -187,7 +187,7 @@ Generate reply suggestions that would naturally continue this conversation:`;
       return null;
     } catch (error) {
       // If JSON parsing fails, try to extract suggestions from text
-      console.warn("Failed to parse JSON response, attempting text extraction");
+      console.warn('Failed to parse JSON response, attempting text extraction');
       return this.extractSuggestionsFromText(responseContent, expectedCount);
     }
   }
@@ -202,7 +202,7 @@ Generate reply suggestions that would naturally continue this conversation:`;
     try {
       // Look for lines that seem like replies
       const lines = text
-        .split("\n")
+        .split('\n')
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
 
@@ -211,35 +211,35 @@ Generate reply suggestions that would naturally continue this conversation:`;
       for (const line of lines) {
         // Look for lines that seem like conversation replies
         if (
-          line.endsWith("?") ||
-          line.endsWith(".") ||
-          line.endsWith("!") ||
-          line.toLowerCase().includes("how") ||
-          line.toLowerCase().includes("what") ||
-          line.toLowerCase().includes("can") ||
-          line.toLowerCase().includes("yes") ||
-          line.toLowerCase().includes("no") ||
-          line.toLowerCase().includes("sure") ||
-          line.toLowerCase().includes("please") ||
-          line.toLowerCase().includes("help")
+          line.endsWith('?') ||
+          line.endsWith('.') ||
+          line.endsWith('!') ||
+          line.toLowerCase().includes('how') ||
+          line.toLowerCase().includes('what') ||
+          line.toLowerCase().includes('can') ||
+          line.toLowerCase().includes('yes') ||
+          line.toLowerCase().includes('no') ||
+          line.toLowerCase().includes('sure') ||
+          line.toLowerCase().includes('please') ||
+          line.toLowerCase().includes('help')
         ) {
           // Clean up the line (remove numbers, quotes, etc.)
           const cleaned = line
-            .replace(/^\d+\.?\s*/, "") // Remove leading numbers
-            .replace(/^["'\-\*]\s*/, "") // Remove leading quotes/dashes
-            .replace(/["']$/, "") // Remove trailing quotes
+            .replace(/^\d+\.?\s*/, '') // Remove leading numbers
+            .replace(/^["'\-\*]\s*/, '') // Remove leading quotes/dashes
+            .replace(/["']$/, '') // Remove trailing quotes
             .trim();
 
           if (cleaned.length > 2 && cleaned.length < 100) {
             replies.push(cleaned);
-            if (replies.length >= expectedCount) break;
+            if (replies.length >= expectedCount) {break;}
           }
         }
       }
 
       return replies.length > 0 ? replies : null;
     } catch (error) {
-      console.error("Failed to extract suggestions from text:", error);
+      console.error('Failed to extract suggestions from text:', error);
       return null;
     }
   }

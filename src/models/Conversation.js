@@ -1,19 +1,19 @@
-const mongoose = require("mongoose");
-const { v4: uuidv4 } = require("uuid");
+const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
 
 const messageSchema = new mongoose.Schema({
   role: {
     type: String,
-    enum: ["user", "assistant", "system", "tool"],
-    required: true,
+    enum: ['user', 'assistant', 'system', 'tool'],
+    required: true
   },
   content: {
     type: String,
-    required: true,
+    required: true
   },
   timestamp: {
     type: Date,
-    default: Date.now,
+    default: Date.now
   },
   // Agent thinking process (only for assistant messages)
   thinking_process: [
@@ -22,9 +22,9 @@ const messageSchema = new mongoose.Schema({
       reasoning: String,
       timestamp: {
         type: Date,
-        default: Date.now,
-      },
-    },
+        default: Date.now
+      }
+    }
   ],
   // Tools used in this message
   tools_used: [
@@ -35,86 +35,86 @@ const messageSchema = new mongoose.Schema({
       execution_time_ms: Number,
       timestamp: {
         type: Date,
-        default: Date.now,
-      },
-    },
+        default: Date.now
+      }
+    }
   ],
   // Token usage for this message
   token_usage: {
     prompt_tokens: Number,
     completion_tokens: Number,
     total_tokens: Number,
-    cost: Number,
+    cost: Number
   },
   // Mark if message is part of a summary
   is_summarized: {
     type: Boolean,
-    default: false,
-  },
+    default: false
+  }
 });
 
 const conversationSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4,
+      default: uuidv4
     },
     agent: {
       type: String,
-      ref: "Agent",
-      required: true,
+      ref: 'Agent',
+      required: true
     },
     user_identifier: {
       type: String,
       required: true,
-      trim: true,
+      trim: true
     },
     title: {
       type: String,
-      trim: true,
+      trim: true
     },
     messages: [messageSchema],
     status: {
       type: String,
-      enum: ["active", "ended", "timeout", "error"],
-      default: "active",
+      enum: ['active', 'ended', 'timeout', 'error'],
+      default: 'active'
     },
     metadata: {
       total_tokens_used: {
         type: Number,
-        default: 0,
+        default: 0
       },
       total_cost: {
         type: Number,
-        default: 0,
+        default: 0
       },
       tools_executed_count: {
         type: Number,
-        default: 0,
+        default: 0
       },
       last_activity: {
         type: Date,
-        default: Date.now,
+        default: Date.now
       },
       user_agent: String,
       ip_address: String,
       // Summarization metadata
       last_summary_index: {
         type: Number,
-        default: -1, // Index of last message included in summary
+        default: -1 // Index of last message included in summary
       },
       summary_version: {
         type: Number,
-        default: 0,
+        default: 0
       },
       requires_summarization: {
         type: Boolean,
-        default: false,
-      },
+        default: false
+      }
     },
     summary: {
       type: String,
-      trim: true,
+      trim: true
     },
     // Detailed conversation summary for better context preservation
     conversation_summary: {
@@ -125,27 +125,27 @@ const conversationSchema = new mongoose.Schema(
       context_data: mongoose.Schema.Types.Mixed,
       created_at: {
         type: Date,
-        default: Date.now,
+        default: Date.now
       },
       message_count_when_summarized: {
         type: Number,
-        default: 0,
-      },
-    },
+        default: 0
+      }
+    }
   },
   {
-    timestamps: true,
+    timestamps: true
   }
 );
 
 // Index for efficient queries
 conversationSchema.index({ agent: 1, user_identifier: 1 });
 conversationSchema.index({ agent: 1, status: 1 });
-conversationSchema.index({ "metadata.last_activity": 1 });
+conversationSchema.index({ 'metadata.last_activity': 1 });
 
 // Update last activity on message addition and check for summarization needs
-conversationSchema.pre("save", function (next) {
-  if (this.isModified("messages")) {
+conversationSchema.pre('save', function (next) {
+  if (this.isModified('messages')) {
     this.metadata.last_activity = new Date();
 
     // Check if summarization is needed (every 15 messages after the last summary)
@@ -188,17 +188,17 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
   const messages = [];
 
   // Always include system messages
-  const systemMessages = this.messages.filter((m) => m.role === "system");
+  const systemMessages = this.messages.filter((m) => m.role === 'system');
   messages.push(...systemMessages);
 
   // If we have a summary, include it as context
   if (this.conversation_summary && this.metadata.last_summary_index >= 0) {
     const summaryContext = this.buildSummaryContext();
     messages.push({
-      role: "system",
+      role: 'system',
       content: summaryContext,
       timestamp: this.conversation_summary.created_at,
-      is_summarized: true,
+      is_summarized: true
     });
 
     // Include only recent messages after the last summary
@@ -232,8 +232,8 @@ conversationSchema.methods.getSmartTruncatedMessages = function (
   maxTokens = 4000
 ) {
   const allMessages = this.messages;
-  const systemMessages = allMessages.filter((m) => m.role === "system");
-  const conversationMessages = allMessages.filter((m) => m.role !== "system");
+  const systemMessages = allMessages.filter((m) => m.role === 'system');
+  const conversationMessages = allMessages.filter((m) => m.role !== 'system');
 
   // Reserve tokens for system messages
   const systemTokens = this.estimateTokenCount(systemMessages);
@@ -260,21 +260,21 @@ conversationSchema.methods.getSmartTruncatedMessages = function (
 
 // Method to build summary context string
 conversationSchema.methods.buildSummaryContext = function () {
-  if (!this.conversation_summary) return "";
+  if (!this.conversation_summary) {return '';}
 
   const summary = this.conversation_summary;
-  let context = "=== CONVERSATION SUMMARY ===\n";
+  let context = '=== CONVERSATION SUMMARY ===\n';
 
   if (summary.key_topics && summary.key_topics.length > 0) {
-    context += `Key Topics Discussed: ${summary.key_topics.join(", ")}\n`;
+    context += `Key Topics Discussed: ${summary.key_topics.join(', ')}\n`;
   }
 
   if (summary.important_decisions && summary.important_decisions.length > 0) {
-    context += `Important Decisions Made: ${summary.important_decisions.join("; ")}\n`;
+    context += `Important Decisions Made: ${summary.important_decisions.join('; ')}\n`;
   }
 
   if (summary.unresolved_issues && summary.unresolved_issues.length > 0) {
-    context += `Unresolved Issues: ${summary.unresolved_issues.join("; ")}\n`;
+    context += `Unresolved Issues: ${summary.unresolved_issues.join('; ')}\n`;
   }
 
   if (
@@ -289,7 +289,7 @@ conversationSchema.methods.buildSummaryContext = function () {
   }
 
   context += `(Summary covers ${summary.message_count_when_summarized} messages up to ${summary.created_at.toISOString()})\n`;
-  context += "=== END SUMMARY ===\n";
+  context += '=== END SUMMARY ===\n';
 
   return context;
 };
@@ -303,7 +303,7 @@ conversationSchema.methods.updateSummary = function (summaryData) {
     unresolved_issues: summaryData.unresolved_issues || [],
     context_data: summaryData.context_data || {},
     created_at: new Date(),
-    message_count_when_summarized: this.messages.length,
+    message_count_when_summarized: this.messages.length
   };
 
   this.metadata.last_summary_index = this.messages.length - 1;
@@ -321,17 +321,17 @@ conversationSchema.methods.generateSimpleSummary = function (summaryData) {
   const parts = [];
 
   if (summaryData.key_topics && summaryData.key_topics.length > 0) {
-    parts.push(`Topics: ${summaryData.key_topics.join(", ")}`);
+    parts.push(`Topics: ${summaryData.key_topics.join(', ')}`);
   }
 
   if (
     summaryData.important_decisions &&
     summaryData.important_decisions.length > 0
   ) {
-    parts.push(`Decisions: ${summaryData.important_decisions.join("; ")}`);
+    parts.push(`Decisions: ${summaryData.important_decisions.join('; ')}`);
   }
 
-  return parts.join(" | ");
+  return parts.join(' | ');
 };
 
 // Method to check if conversation needs summarization
@@ -343,7 +343,7 @@ conversationSchema.methods.needsSummarization = function () {
 conversationSchema.methods.summarizeConversation = function () {
   // Simple summary logic - to be enhanced
   const assistantMessages = this.messages.filter(
-    (m) => m.role === "assistant" && !m.is_summarized
+    (m) => m.role === 'assistant' && !m.is_summarized
   );
 
   if (assistantMessages.length === 0) {
@@ -353,7 +353,7 @@ conversationSchema.methods.summarizeConversation = function () {
   // Create a summary from the content of assistant messages
   const summaryContent = assistantMessages
     .map((m) => m.content)
-    .join(" ")
+    .join(' ')
     .trim();
 
   // Update summary fields
@@ -370,4 +370,4 @@ conversationSchema.methods.summarizeConversation = function () {
   return this.save();
 };
 
-module.exports = mongoose.model("Conversation", conversationSchema);
+module.exports = mongoose.model('Conversation', conversationSchema);

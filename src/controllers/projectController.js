@@ -32,7 +32,7 @@ const getProjects = async (req, res) => {
     const projects = await Project.find({
       organization: req.params.orgId
     });
-    
+
     res.json(projects);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch projects' });
@@ -45,19 +45,19 @@ const getProject = async (req, res) => {
       _id: req.params.projectId,
       organization: req.params.orgId
     }).populate([
-        {
-          path: 'apiKeys',
-          select: '-key',
-          populate: {
-            path: 'provider',
-            select: 'name models'
-          }
-        },
-        {
-          path: 'prompts',
-          select: 'name description createdAt updatedAt'
+      {
+        path: 'apiKeys',
+        select: '-key',
+        populate: {
+          path: 'provider',
+          select: 'name models'
         }
-      ]);
+      },
+      {
+        path: 'prompts',
+        select: 'name description createdAt updatedAt'
+      }
+    ]);
 
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
@@ -71,7 +71,7 @@ const getProject = async (req, res) => {
 
 
 module.exports = {
-    createProject,
-    getProjects,
-    getProject,
+  createProject,
+  getProjects,
+  getProject
 };

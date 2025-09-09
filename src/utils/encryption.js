@@ -1,5 +1,5 @@
-const CryptoJS = require("crypto-js");
-const crypto = require("crypto");
+const CryptoJS = require('crypto-js');
+const crypto = require('crypto');
 
 class EncryptionUtil {
   constructor() {
@@ -11,7 +11,7 @@ class EncryptionUtil {
     const key = process.env.ENCRYPTION_KEY;
 
     if (!key) {
-      throw new Error("ENCRYPTION_KEY environment variable is required");
+      throw new Error('ENCRYPTION_KEY environment variable is required');
     }
 
     // crypto-js expects a string key, it will handle the key derivation
@@ -24,8 +24,8 @@ class EncryptionUtil {
    * @returns {string} - Base64 encoded encrypted data
    */
   encrypt(text) {
-    if (!text || typeof text !== "string") {
-      throw new Error("Text to encrypt must be a non-empty string");
+    if (!text || typeof text !== 'string') {
+      throw new Error('Text to encrypt must be a non-empty string');
     }
 
     try {
@@ -48,8 +48,8 @@ class EncryptionUtil {
    * @returns {string} - The decrypted plain text
    */
   decrypt(encryptedData) {
-    if (!encryptedData || typeof encryptedData !== "string") {
-      throw new Error("Encrypted data must be a non-empty string");
+    if (!encryptedData || typeof encryptedData !== 'string') {
+      throw new Error('Encrypted data must be a non-empty string');
     }
 
     try {
@@ -59,7 +59,7 @@ class EncryptionUtil {
 
       if (!plaintext) {
         throw new Error(
-          "Failed to decrypt data - invalid key or corrupted data"
+          'Failed to decrypt data - invalid key or corrupted data'
         );
       }
 
@@ -76,14 +76,14 @@ class EncryptionUtil {
    * @returns {boolean} - True if the data appears to be encrypted
    */
   isEncrypted(data) {
-    if (!data || typeof data !== "string") {
+    if (!data || typeof data !== 'string') {
       return false;
     }
 
     try {
       // crypto-js encrypted strings are base64 and have a specific structure
       // They start with "U2FsdGVkX1" when using the default format
-      if (data.startsWith("U2FsdGVkX1")) {
+      if (data.startsWith('U2FsdGVkX1')) {
         return true;
       }
 
@@ -104,7 +104,7 @@ class EncryptionUtil {
    * @returns {string} - A hex-encoded 256-bit key
    */
   static generateKey() {
-    return crypto.randomBytes(32).toString("hex");
+    return crypto.randomBytes(32).toString('hex');
   }
 }
 

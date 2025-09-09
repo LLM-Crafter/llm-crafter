@@ -300,17 +300,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- **Documentation**: [https://docs.llm-crafter.com](https://docs.llm-crafter.com)
-- **GitHub**: [https://github.com/your-username/llm-crafter](https://github.com/your-username/llm-crafter)
-- **Issues**: [https://github.com/your-username/llm-crafter/issues](https://github.com/your-username/llm-crafter/issues)
-- **Discord**: [LLM Crafter Community](https://discord.gg/llm-crafter)
+- **Documentation**: Coming soon
+- **GitHub**: [https://github.com/LLM-Crafter/llm-crafter](https://github.com/LLM-Crafter/llm-crafter)
+- **Issues**: [https://github.com/LLM-Crafter/llm-crafter/issues](https://github.com/LLM-Crafter/llm-crafter/issues)
 
 ## 💬 Support
 
 - **Documentation**: Complete guides and API reference
 - **GitHub Issues**: Bug reports and feature requests
-- **Discord Community**: Chat with other users and contributors
-- **Email**: support@llm-crafter.com
 
 ---
 

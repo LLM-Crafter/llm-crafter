@@ -1,71 +1,71 @@
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
-const { v4: uuidv4 } = require("uuid");
-const { validatePassword } = require("../utils/passwordPolicy");
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 const userSchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4,
+      default: uuidv4
     },
     email: {
       type: String,
       required: true,
       unique: true,
       lowercase: true,
-      trim: true,
+      trim: true
     },
     password: {
       type: String,
       required: true,
       validate: {
-        validator: function (password) {
+        validator (password) {
           // Skip validation if password is already hashed (during save operations)
-          if (this.isModified("password") && !password.startsWith("$2a$")) {
+          if (this.isModified('password') && !password.startsWith('$2a$')) {
             const result = validatePassword(password);
             return result.isValid;
           }
           return true;
         },
-        message: function (props) {
+        message (props) {
           const result = validatePassword(props.value);
           return (
-            result.errors[0] || "Password does not meet security requirements"
+            result.errors[0] || 'Password does not meet security requirements'
           );
-        },
-      },
+        }
+      }
     },
     name: {
       type: String,
-      required: true,
+      required: true
     },
     passwordStrength: {
       type: String,
-      enum: ["very-weak", "weak", "medium", "strong", "very-strong"],
-      default: "weak",
-    },
+      enum: ['very-weak', 'weak', 'medium', 'strong', 'very-strong'],
+      default: 'weak'
+    }
   },
   {
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: function (doc, ret) {
+      transform (doc, ret) {
         delete ret.password;
         delete ret.passwordStrength;
         return ret;
-      },
+      }
     },
-    toObject: { virtuals: true },
+    toObject: { virtuals: true }
   }
 );
 
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) {return next();}
 
   try {
     // Calculate password strength before hashing
-    const { calculatePasswordStrength } = require("../utils/passwordPolicy");
+    const { calculatePasswordStrength } = require('../utils/passwordPolicy');
     this.passwordStrength = calculatePasswordStrength(this.password);
 
     // Hash the password
@@ -84,7 +84,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 // Method to check if password needs updating (for security audits)
 userSchema.methods.shouldUpdatePassword = function () {
   // Suggest update if password strength is very weak or weak
-  return ["very-weak", "weak"].includes(this.passwordStrength);
+  return ['very-weak', 'weak'].includes(this.passwordStrength);
 };
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model('User', userSchema);

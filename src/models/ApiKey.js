@@ -1,64 +1,64 @@
-const mongoose = require("mongoose");
-const { v4: uuidv4 } = require("uuid");
-const encryptionUtil = require("../utils/encryption");
+const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
+const encryptionUtil = require('../utils/encryption');
 
 const apiKeySchema = new mongoose.Schema(
   {
     _id: {
       type: String,
-      default: uuidv4,
+      default: uuidv4
     },
     name: {
       type: String,
       required: true,
-      trim: true,
+      trim: true
     },
     key: {
       type: String,
       required: true,
-      unique: true,
+      unique: true
     },
     provider: {
       type: String,
-      ref: "Provider",
-      required: true,
+      ref: 'Provider',
+      required: true
     },
     project: {
       type: String,
-      ref: "Project",
-      required: true,
+      ref: 'Project',
+      required: true
     },
     usage: {
       total_tokens: {
         type: Number,
-        default: 0,
+        default: 0
       },
       total_cost: {
         type: Number,
-        default: 0,
+        default: 0
       },
       usage_by_model: [
         {
           model: String,
           input_tokens: Number,
           output_tokens: Number,
-          cost: Number,
-        },
-      ],
+          cost: Number
+        }
+      ]
     },
     is_active: {
       type: Boolean,
-      default: true,
-    },
+      default: true
+    }
   },
   {
-    timestamps: true,
+    timestamps: true
   }
 );
 
 // Encrypt API key before saving
-apiKeySchema.pre("save", function (next) {
-  if (this.isModified("key") && this.key) {
+apiKeySchema.pre('save', function (next) {
+  if (this.isModified('key') && this.key) {
     try {
       // Only encrypt if it's not already encrypted
       if (!encryptionUtil.isEncrypted(this.key)) {
@@ -75,7 +75,7 @@ apiKeySchema.pre("save", function (next) {
 apiKeySchema.methods.getDecryptedKey = function () {
   try {
     if (!this.key) {
-      throw new Error("No API key stored");
+      throw new Error('No API key stored');
     }
 
     // If it looks encrypted, decrypt it
@@ -92,30 +92,30 @@ apiKeySchema.methods.getDecryptedKey = function () {
 };
 
 // Add virtual for decrypted key (but don't include in JSON by default for security)
-apiKeySchema.virtual("decryptedKey").get(function () {
+apiKeySchema.virtual('decryptedKey').get(function () {
   return this.getDecryptedKey();
 });
 
 // Ensure virtual fields are not included in JSON output by default
-apiKeySchema.set("toJSON", {
-  transform: function (doc, ret) {
+apiKeySchema.set('toJSON', {
+  transform (doc, ret) {
     delete ret.key; // Never expose encrypted key in JSON
     delete ret.decryptedKey; // Never expose decrypted key in JSON
     return ret;
-  },
+  }
 });
 
 // Add static method to find and decrypt API key
 apiKeySchema.statics.findByIdWithDecryptedKey = async function (id) {
-  const apiKey = await this.findById(id).populate("provider");
+  const apiKey = await this.findById(id).populate('provider');
   if (!apiKey) {
     return null;
   }
 
   return {
     ...apiKey.toObject(),
-    decryptedKey: apiKey.getDecryptedKey(),
+    decryptedKey: apiKey.getDecryptedKey()
   };
 };
 
-module.exports = mongoose.model("ApiKey", apiKeySchema);
+module.exports = mongoose.model('ApiKey', apiKeySchema);

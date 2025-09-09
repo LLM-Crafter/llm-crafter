@@ -1,197 +1,197 @@
-const Tool = require("../models/Tool");
-const OpenAIService = require("./openaiService");
-const https = require("https");
-const http = require("http");
-const { URL } = require("url");
-const ApiKey = require("../models/ApiKey");
+const Tool = require('../models/Tool');
+const OpenAIService = require('./openaiService');
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
+const ApiKey = require('../models/ApiKey');
 
 // Language-specific abbreviation dictionaries for multi-language FAQ support
 const LANGUAGE_ABBREVIATIONS = {
   en: {
     // Common abbreviations
-    u: "you",
-    ur: "your",
-    youre: "you are",
-    cant: "cannot",
-    wont: "will not",
-    dont: "do not",
-    isnt: "is not",
-    arent: "are not",
-    wasnt: "was not",
-    werent: "were not",
-    hasnt: "has not",
-    havent: "have not",
-    hadnt: "had not",
-    shouldnt: "should not",
-    wouldnt: "would not",
-    couldnt: "could not",
-    mustnt: "must not",
-    neednt: "need not",
-    r: "are",
+    u: 'you',
+    ur: 'your',
+    youre: 'you are',
+    cant: 'cannot',
+    wont: 'will not',
+    dont: 'do not',
+    isnt: 'is not',
+    arent: 'are not',
+    wasnt: 'was not',
+    werent: 'were not',
+    hasnt: 'has not',
+    havent: 'have not',
+    hadnt: 'had not',
+    shouldnt: 'should not',
+    wouldnt: 'would not',
+    couldnt: 'could not',
+    mustnt: 'must not',
+    neednt: 'need not',
+    r: 'are',
     // Common question words
-    whats: "what is",
-    wheres: "where is",
-    whos: "who is",
-    hows: "how is",
-    whens: "when is",
-    whys: "why is",
-    thats: "that is",
-    theres: "there is",
-    heres: "here is",
+    whats: 'what is',
+    wheres: 'where is',
+    whos: 'who is',
+    hows: 'how is',
+    whens: 'when is',
+    whys: 'why is',
+    thats: 'that is',
+    theres: 'there is',
+    heres: 'here is',
     // Other common abbreviations
-    im: "i am",
-    ive: "i have",
-    ill: "i will",
-    id: "i would",
-    youll: "you will",
-    youd: "you would",
-    youve: "you have",
-    theyll: "they will",
-    theyd: "they would",
-    theyve: "they have",
-    were: "we are",
-    weve: "we have",
-    well: "we will",
-    wed: "we would",
-    its: "it is",
-    itll: "it will",
-    itd: "it would",
+    im: 'i am',
+    ive: 'i have',
+    ill: 'i will',
+    id: 'i would',
+    youll: 'you will',
+    youd: 'you would',
+    youve: 'you have',
+    theyll: 'they will',
+    theyd: 'they would',
+    theyve: 'they have',
+    were: 'we are',
+    weve: 'we have',
+    well: 'we will',
+    wed: 'we would',
+    its: 'it is',
+    itll: 'it will',
+    itd: 'it would',
     // Technical abbreviations
-    api: "application programming interface",
-    faq: "frequently asked questions",
-    url: "uniform resource locator",
-    ui: "user interface",
-    ux: "user experience",
-    db: "database",
-    pw: "password",
-    pwd: "password",
-    pass: "password",
-    login: "log in",
-    signup: "sign up",
-    signin: "sign in",
-    logout: "log out",
-    signout: "sign out",
+    api: 'application programming interface',
+    faq: 'frequently asked questions',
+    url: 'uniform resource locator',
+    ui: 'user interface',
+    ux: 'user experience',
+    db: 'database',
+    pw: 'password',
+    pwd: 'password',
+    pass: 'password',
+    login: 'log in',
+    signup: 'sign up',
+    signin: 'sign in',
+    logout: 'log out',
+    signout: 'sign out'
   },
   es: {
     // Spanish abbreviations
-    q: "que",
-    xq: "por que",
-    pq: "por que",
-    tb: "tambien",
-    tbn: "tambien",
-    tmb: "tambien",
-    x: "por",
-    xfa: "por favor",
-    pfa: "por favor",
-    qtal: "que tal",
-    cmo: "como",
-    dnd: "donde",
-    qnd: "cuando",
-    qn: "quien",
-    salu2: "saludos",
-    bss: "besos",
-    mxo: "mucho",
-    mxa: "mucha",
-    ntp: "no te preocupes",
-    sldos: "saludos",
-    tkm: "te quiero mucho",
+    q: 'que',
+    xq: 'por que',
+    pq: 'por que',
+    tb: 'tambien',
+    tbn: 'tambien',
+    tmb: 'tambien',
+    x: 'por',
+    xfa: 'por favor',
+    pfa: 'por favor',
+    qtal: 'que tal',
+    cmo: 'como',
+    dnd: 'donde',
+    qnd: 'cuando',
+    qn: 'quien',
+    salu2: 'saludos',
+    bss: 'besos',
+    mxo: 'mucho',
+    mxa: 'mucha',
+    ntp: 'no te preocupes',
+    sldos: 'saludos',
+    tkm: 'te quiero mucho'
   },
   pt: {
     // Portuguese abbreviations
-    vc: "voce",
-    vcs: "voces",
-    pq: "por que",
-    pra: "para",
-    tb: "tambem",
-    tbm: "tambem",
-    qnd: "quando",
-    qm: "quem",
-    eh: "e",
-    nd: "nada",
-    td: "tudo",
-    bjs: "beijos",
-    bjss: "beijos",
-    flw: "falou",
-    vlw: "valeu",
-    cmg: "comigo",
-    ctg: "contigo",
-    dps: "depois",
-    hj: "hoje",
-    ontem: "ontem",
-    amanha: "amanha",
-    sla: "sei la",
-    rsrs: "risos",
-    kk: "risos",
+    vc: 'voce',
+    vcs: 'voces',
+    pq: 'por que',
+    pra: 'para',
+    tb: 'tambem',
+    tbm: 'tambem',
+    qnd: 'quando',
+    qm: 'quem',
+    eh: 'e',
+    nd: 'nada',
+    td: 'tudo',
+    bjs: 'beijos',
+    bjss: 'beijos',
+    flw: 'falou',
+    vlw: 'valeu',
+    cmg: 'comigo',
+    ctg: 'contigo',
+    dps: 'depois',
+    hj: 'hoje',
+    ontem: 'ontem',
+    amanha: 'amanha',
+    sla: 'sei la',
+    rsrs: 'risos',
+    kk: 'risos'
   },
   fr: {
     // French abbreviations
-    pr: "pour",
-    qd: "quand",
-    ds: "dans",
-    vs: "vous",
-    tt: "tout",
-    tte: "toute",
-    ts: "tous",
-    ttes: "toutes",
-    bcp: "beaucoup",
-    bjr: "bonjour",
-    bsr: "bonsoir",
-    slt: "salut",
-    mtn: "maintenant",
-    qqs: "quelques",
-    qqn: "quelquun",
-    qq: "quelque",
-    qc: "quelque chose",
-    pk: "pourquoi",
-    pq: "pourquoi",
-    pcq: "parce que",
-    dsl: "desole",
-    mdr: "mort de rire",
-    lol: "mort de rire",
-    cc: "coucou",
+    pr: 'pour',
+    qd: 'quand',
+    ds: 'dans',
+    vs: 'vous',
+    tt: 'tout',
+    tte: 'toute',
+    ts: 'tous',
+    ttes: 'toutes',
+    bcp: 'beaucoup',
+    bjr: 'bonjour',
+    bsr: 'bonsoir',
+    slt: 'salut',
+    mtn: 'maintenant',
+    qqs: 'quelques',
+    qqn: 'quelquun',
+    qq: 'quelque',
+    qc: 'quelque chose',
+    pk: 'pourquoi',
+    pq: 'pourquoi',
+    pcq: 'parce que',
+    dsl: 'desole',
+    mdr: 'mort de rire',
+    lol: 'mort de rire',
+    cc: 'coucou'
   },
   de: {
     // German abbreviations
-    u: "und",
-    od: "oder",
-    z: "zu",
-    v: "von",
-    m: "mit",
-    n: "ein",
-    ne: "eine",
-    aufm: "auf dem",
-    gehts: "geht es",
-    haste: "hast du",
-    biste: "bist du",
-    kannste: "kannst du",
-    willste: "willst du",
-    machste: "machst du",
-    isses: "ist es",
-    hats: "hat es",
-    wirds: "wird es",
-    wenns: "wenn es",
-    dass: "dass",
-    mfg: "mit freundlichen gruessen",
-    lg: "liebe gruesse",
-    vg: "viele gruesse",
+    u: 'und',
+    od: 'oder',
+    z: 'zu',
+    v: 'von',
+    m: 'mit',
+    n: 'ein',
+    ne: 'eine',
+    aufm: 'auf dem',
+    gehts: 'geht es',
+    haste: 'hast du',
+    biste: 'bist du',
+    kannste: 'kannst du',
+    willste: 'willst du',
+    machste: 'machst du',
+    isses: 'ist es',
+    hats: 'hat es',
+    wirds: 'wird es',
+    wenns: 'wenn es',
+    dass: 'dass',
+    mfg: 'mit freundlichen gruessen',
+    lg: 'liebe gruesse',
+    vg: 'viele gruesse'
   },
   it: {
     // Italian abbreviations
-    x: "per",
-    xche: "perche",
-    piu: "piu",
-    nn: "non",
-    cmq: "comunque",
-    qnd: "quando",
-    qnt: "quanto",
-    qst: "questo",
-    qlc: "qualche",
-    qlcs: "qualcosa",
-    qlcn: "qualcuno",
-    tt: "tutto",
-    tvb: "ti voglio bene",
-    tvtb: "ti voglio tanto bene",
-  },
+    x: 'per',
+    xche: 'perche',
+    piu: 'piu',
+    nn: 'non',
+    cmq: 'comunque',
+    qnd: 'quando',
+    qnt: 'quanto',
+    qst: 'questo',
+    qlc: 'qualche',
+    qlcs: 'qualcosa',
+    qlcn: 'qualcuno',
+    tt: 'tutto',
+    tvb: 'ti voglio bene',
+    tvtb: 'ti voglio tanto bene'
+  }
 };
 
 class ToolService {
@@ -205,31 +205,31 @@ class ToolService {
    */
   initializeSystemTools() {
     // Web search tool
-    this.registerToolHandler("web_search", this.webSearchHandler.bind(this));
+    this.registerToolHandler('web_search', this.webSearchHandler.bind(this));
 
     // Calculator tool
-    this.registerToolHandler("calculator", this.calculatorHandler.bind(this));
+    this.registerToolHandler('calculator', this.calculatorHandler.bind(this));
 
     // LLM prompt tool (uses existing proxy system)
-    this.registerToolHandler("llm_prompt", this.llmPromptHandler.bind(this));
+    this.registerToolHandler('llm_prompt', this.llmPromptHandler.bind(this));
 
     // Current time tool
     this.registerToolHandler(
-      "current_time",
+      'current_time',
       this.currentTimeHandler.bind(this)
     );
 
     // JSON processor tool
     this.registerToolHandler(
-      "json_processor",
+      'json_processor',
       this.jsonProcessorHandler.bind(this)
     );
 
     // API caller tool
-    this.registerToolHandler("api_caller", this.apiCallerHandler.bind(this));
+    this.registerToolHandler('api_caller', this.apiCallerHandler.bind(this));
 
     // FAQ tool
-    this.registerToolHandler("faq", this.faqHandler.bind(this));
+    this.registerToolHandler('faq', this.faqHandler.bind(this));
   }
 
   /**
@@ -254,7 +254,7 @@ class ToolService {
 
     try {
       console.log(`Executing tool '${toolName}' with parameters:`, parameters);
-      console.log(`Agent tool config:`, agentToolConfig);
+      console.log('Agent tool config:', agentToolConfig);
 
       // Get tool handler
       const handler = this.toolHandlers.get(toolName);
@@ -284,7 +284,7 @@ class ToolService {
       // Merge tool config with agent-specific config
       const mergedConfig = {
         ...baseConfig,
-        ...agentToolConfig,
+        ...agentToolConfig
       };
 
       // Execute tool
@@ -294,7 +294,7 @@ class ToolService {
       // Summarize API results if enabled and result is large
       let finalResult = result;
       if (
-        toolName === "api_caller" &&
+        toolName === 'api_caller' &&
         result &&
         mergedConfig.summarization?.enabled
       ) {
@@ -322,7 +322,7 @@ class ToolService {
         success: true,
         result: finalResult,
         execution_time_ms: executionTime,
-        tool_name: toolName,
+        tool_name: toolName
       };
     } catch (error) {
       const executionTime = Date.now() - startTime;
@@ -342,7 +342,7 @@ class ToolService {
         success: false,
         error: error.message,
         execution_time_ms: executionTime,
-        tool_name: toolName,
+        tool_name: toolName
       };
     }
   }
@@ -353,14 +353,14 @@ class ToolService {
   async getAvailableTools(toolNames = []) {
     if (toolNames.length === 0) {
       return await Tool.find({ is_active: true }).select(
-        "name display_name description parameters_schema"
+        'name display_name description parameters_schema'
       );
     }
 
     return await Tool.find({
       name: { $in: toolNames },
-      is_active: true,
-    }).select("name display_name description parameters_schema");
+      is_active: true
+    }).select('name display_name description parameters_schema');
   }
 
   // ===== BUILT-IN TOOL HANDLERS =====
@@ -372,22 +372,22 @@ class ToolService {
     const { query, max_results = 5 } = parameters;
 
     if (!query) {
-      throw new Error("Query parameter is required for web search");
+      throw new Error('Query parameter is required for web search');
     }
 
     // This is a placeholder implementation
     // In a real implementation, you would integrate with a search API like Google, Bing, or DuckDuckGo
     return {
-      query: query,
+      query,
       results: [
         {
-          title: "Example Search Result",
-          url: "https://example.com",
-          snippet: "This is a placeholder search result for query: " + query,
-        },
+          title: 'Example Search Result',
+          url: 'https://example.com',
+          snippet: `This is a placeholder search result for query: ${  query}`
+        }
       ],
       total_results: 1,
-      search_time_ms: 100,
+      search_time_ms: 100
     };
   }
 
@@ -398,7 +398,7 @@ class ToolService {
     const { expression } = parameters;
 
     if (!expression) {
-      throw new Error("Expression parameter is required for calculator");
+      throw new Error('Expression parameter is required for calculator');
     }
 
     try {
@@ -407,9 +407,9 @@ class ToolService {
       const result = this.evaluateExpression(expression);
 
       return {
-        expression: expression,
-        result: result,
-        type: typeof result,
+        expression,
+        result,
+        type: typeof result
       };
     } catch (error) {
       throw new Error(`Calculator error: ${error.message}`);
@@ -423,26 +423,26 @@ class ToolService {
     const {
       prompt,
       system_prompt = null,
-      model = "gpt-4o-mini",
+      model = 'gpt-4o-mini',
       temperature = 0.7,
       max_tokens = 1000,
-      api_key_id,
+      api_key_id
     } = parameters;
 
     if (!prompt) {
-      throw new Error("Prompt parameter is required");
+      throw new Error('Prompt parameter is required');
     }
 
     if (!api_key_id) {
-      throw new Error("API key ID is required for LLM prompt tool");
+      throw new Error('API key ID is required for LLM prompt tool');
     }
 
     // Use the existing OpenAI service
-    const APIKey = require("../models/ApiKey");
-    const apiKey = await APIKey.findById(api_key_id).populate("provider");
+    const APIKey = require('../models/ApiKey');
+    const apiKey = await APIKey.findById(api_key_id).populate('provider');
 
     if (!apiKey || !apiKey.is_active) {
-      throw new Error("Invalid or inactive API key");
+      throw new Error('Invalid or inactive API key');
     }
 
     // Get decrypted API key
@@ -462,11 +462,11 @@ class ToolService {
     );
 
     return {
-      prompt: prompt,
+      prompt,
       response: result.content,
-      model: model,
+      model,
       usage: result.usage,
-      finish_reason: result.finish_reason,
+      finish_reason: result.finish_reason
     };
   }
 
@@ -474,18 +474,18 @@ class ToolService {
    * Current time tool handler
    */
   async currentTimeHandler(parameters, config) {
-    const { timezone = "UTC", format = "iso" } = parameters;
+    const { timezone = 'UTC', format = 'iso' } = parameters;
 
     const now = new Date();
 
     let formattedTime;
-    if (format === "iso") {
+    if (format === 'iso') {
       formattedTime = now.toISOString();
-    } else if (format === "unix") {
+    } else if (format === 'unix') {
       formattedTime = Math.floor(now.getTime() / 1000);
-    } else if (format === "human") {
-      formattedTime = now.toLocaleString("en-US", {
-        timeZone: timezone === "UTC" ? "UTC" : timezone,
+    } else if (format === 'human') {
+      formattedTime = now.toLocaleString('en-US', {
+        timeZone: timezone === 'UTC' ? 'UTC' : timezone
       });
     } else {
       formattedTime = now.toString();
@@ -493,10 +493,10 @@ class ToolService {
 
     return {
       timestamp: formattedTime,
-      timezone: timezone,
-      format: format,
+      timezone,
+      format,
       unix_timestamp: Math.floor(now.getTime() / 1000),
-      iso_string: now.toISOString(),
+      iso_string: now.toISOString()
     };
   }
 
@@ -504,43 +504,43 @@ class ToolService {
    * JSON processor tool handler
    */
   async jsonProcessorHandler(parameters, config) {
-    const { data, operation = "parse", path = null } = parameters;
+    const { data, operation = 'parse', path = null } = parameters;
 
     try {
       let result;
 
       switch (operation) {
-        case "parse":
-          result = typeof data === "string" ? JSON.parse(data) : data;
-          break;
+      case 'parse':
+        result = typeof data === 'string' ? JSON.parse(data) : data;
+        break;
 
-        case "stringify":
-          result = JSON.stringify(data, null, 2);
-          break;
+      case 'stringify':
+        result = JSON.stringify(data, null, 2);
+        break;
 
-        case "extract":
-          if (!path) {
-            throw new Error("Path parameter required for extract operation");
-          }
-          result = this.extractFromPath(data, path);
-          break;
+      case 'extract':
+        if (!path) {
+          throw new Error('Path parameter required for extract operation');
+        }
+        result = this.extractFromPath(data, path);
+        break;
 
-        case "validate":
-          result = {
-            valid: true,
-            type: Array.isArray(data) ? "array" : typeof data,
-            keys: typeof data === "object" ? Object.keys(data) : null,
-          };
-          break;
+      case 'validate':
+        result = {
+          valid: true,
+          type: Array.isArray(data) ? 'array' : typeof data,
+          keys: typeof data === 'object' ? Object.keys(data) : null
+        };
+        break;
 
-        default:
-          throw new Error(`Unsupported operation: ${operation}`);
+      default:
+        throw new Error(`Unsupported operation: ${operation}`);
       }
 
       return {
-        operation: operation,
-        result: result,
-        success: true,
+        operation,
+        result,
+        success: true
       };
     } catch (error) {
       throw new Error(`JSON processing error: ${error.message}`);
@@ -553,23 +553,23 @@ class ToolService {
   async apiCallerHandler(parameters, config) {
     const {
       endpoint_name,
-      method = "GET",
+      method = 'GET',
       headers = {},
       query_params = {},
       path_params = {},
       body_data = null,
-      timeout = 30000,
+      timeout = 30000
     } = parameters;
 
     // Check if we have endpoint_name (new format) or url (legacy format)
     if (!endpoint_name && !parameters.url) {
       throw new Error(
-        "Either endpoint_name or url parameter is required for API caller"
+        'Either endpoint_name or url parameter is required for API caller'
       );
     }
 
     let finalUrl;
-    let authHeaders = {};
+    const authHeaders = {};
 
     if (endpoint_name) {
       // New endpoint-based format
@@ -608,26 +608,26 @@ class ToolService {
         const auth = config.authentication;
 
         switch (auth.type) {
-          case "bearer_token":
-            if (auth.token) {
-              authHeaders["Authorization"] = `Bearer ${auth.token}`;
+        case 'bearer_token':
+          if (auth.token) {
+            authHeaders['Authorization'] = `Bearer ${auth.token}`;
+          }
+          break;
+        case 'api_key':
+          if (auth.api_key) {
+            if (auth.header) {
+              authHeaders[auth.header] = auth.api_key;
+            } else {
+              // Default to X-API-Key if no header specified
+              authHeaders['X-API-Key'] = auth.api_key;
             }
-            break;
-          case "api_key":
-            if (auth.api_key) {
-              if (auth.header) {
-                authHeaders[auth.header] = auth.api_key;
-              } else {
-                // Default to X-API-Key if no header specified
-                authHeaders["X-API-Key"] = auth.api_key;
-              }
-            }
-            break;
-          case "cookie":
-            if (auth.cookie) {
-              authHeaders["Cookie"] = auth.cookie;
-            }
-            break;
+          }
+          break;
+        case 'cookie':
+          if (auth.cookie) {
+            authHeaders['Cookie'] = auth.cookie;
+          }
+          break;
         }
       }
     } else {
@@ -636,14 +636,14 @@ class ToolService {
     }
 
     try {
-      const isHttps = finalUrl.protocol === "https:";
+      const isHttps = finalUrl.protocol === 'https:';
       const httpModule = isHttps ? https : http;
 
       // Merge all headers
       const finalHeaders = {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         ...authHeaders,
-        ...headers,
+        ...headers
       };
 
       // Prepare request options
@@ -653,38 +653,38 @@ class ToolService {
         path: finalUrl.pathname + finalUrl.search,
         method: method.toUpperCase(),
         headers: finalHeaders,
-        timeout: timeout,
+        timeout
       };
 
       // Add body if present
       let requestBody = null;
       if (
         body_data &&
-        (method.toUpperCase() === "POST" ||
-          method.toUpperCase() === "PUT" ||
-          method.toUpperCase() === "PATCH")
+        (method.toUpperCase() === 'POST' ||
+          method.toUpperCase() === 'PUT' ||
+          method.toUpperCase() === 'PATCH')
       ) {
         requestBody =
-          typeof body_data === "string" ? body_data : JSON.stringify(body_data);
-        options.headers["Content-Length"] = Buffer.byteLength(requestBody);
+          typeof body_data === 'string' ? body_data : JSON.stringify(body_data);
+        options.headers['Content-Length'] = Buffer.byteLength(requestBody);
       }
 
       return new Promise((resolve, reject) => {
         const req = httpModule.request(options, (res) => {
-          let data = "";
-          res.on("data", (chunk) => {
+          let data = '';
+          res.on('data', (chunk) => {
             data += chunk;
           });
 
-          res.on("end", () => {
+          res.on('end', () => {
             try {
               const result = {
-                endpoint_name: endpoint_name,
+                endpoint_name,
                 url: finalUrl.toString(),
                 method: method.toUpperCase(),
                 status_code: res.statusCode,
                 headers: res.headers,
-                success: res.statusCode >= 200 && res.statusCode < 300,
+                success: res.statusCode >= 200 && res.statusCode < 300
               };
 
               // Try to parse JSON response
@@ -705,12 +705,12 @@ class ToolService {
           });
         });
 
-        req.on("timeout", () => {
+        req.on('timeout', () => {
           req.destroy();
-          reject(new Error("Request timeout"));
+          reject(new Error('Request timeout'));
         });
 
-        req.on("error", (error) => {
+        req.on('error', (error) => {
           reject(new Error(`Request error: ${error.message}`));
         });
 
@@ -730,25 +730,25 @@ class ToolService {
    * FAQ tool handler using semantic similarity with OpenAI embeddings
    */
   async faqHandler(parameters, config) {
-    console.log("FAQ Handler called with parameters:", parameters);
-    console.log("FAQ Handler config:", config);
+    console.log('FAQ Handler called with parameters:', parameters);
+    console.log('FAQ Handler config:', config);
 
-    const { question, language = "auto" } = parameters;
+    const { question, language = 'auto' } = parameters;
     const startTime = Date.now();
 
     if (!question) {
-      throw new Error("Question parameter is required for FAQ search");
+      throw new Error('Question parameter is required for FAQ search');
     }
 
     // Get FAQ data from config
     const faqs = config.faqs || [];
     if (faqs.length === 0) {
       return {
-        question: question,
+        question,
         matched_faq: null,
         success: false,
-        error: "No FAQ data configured",
-        execution_time_ms: Date.now() - startTime,
+        error: 'No FAQ data configured',
+        execution_time_ms: Date.now() - startTime
       };
     }
 
@@ -764,16 +764,16 @@ class ToolService {
         language
       );
 
-      console.log("FAQ matching result:", result);
+      console.log('FAQ matching result:', result);
       return result;
     } catch (error) {
-      console.error("FAQ handler error:", error);
+      console.error('FAQ handler error:', error);
 
       // Fallback to enhanced text matching if semantic matching fails
-      console.log("Attempting fallback to enhanced text matching...");
+      console.log('Attempting fallback to enhanced text matching...');
 
       const detectedLanguage =
-        language === "auto" ? this.detectLanguage(question) : language;
+        language === 'auto' ? this.detectLanguage(question) : language;
       const threshold = config.threshold || 0.3;
 
       const matches = faqs.map((faq) => {
@@ -785,9 +785,9 @@ class ToolService {
         return {
           question: faq.question,
           answer: faq.answer,
-          category: faq.category || "general",
-          confidence: confidence,
-          method: "enhanced_text",
+          category: faq.category || 'general',
+          confidence,
+          method: 'enhanced_text'
         };
       });
 
@@ -796,14 +796,14 @@ class ToolService {
       const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
 
       return {
-        question: question,
+        question,
         detected_language: detectedLanguage,
         matched_faq: bestMatch,
         all_matches: validMatches.slice(0, 5),
         success: bestMatch !== null,
         execution_time_ms: Date.now() - startTime,
         fallback_used: true,
-        matching_method: "enhanced_text",
+        matching_method: 'enhanced_text'
       };
     }
   }
@@ -811,10 +811,10 @@ class ToolService {
   /**
    * Hybrid FAQ matching system combining multiple approaches for better accuracy
    */
-  async calculateHybridFAQMatching(question, faqs, config, language = "en") {
+  async calculateHybridFAQMatching(question, faqs, config, language = 'en') {
     const startTime = Date.now();
     const detectedLanguage =
-      language === "auto" ? this.detectLanguage(question) : language;
+      language === 'auto' ? this.detectLanguage(question) : language;
     const threshold = config.threshold || 0.3;
 
     console.log(
@@ -824,7 +824,7 @@ class ToolService {
     try {
       // First try semantic similarity if API key is available
       if (config._agent_api_key) {
-        console.log("Attempting semantic similarity matching...");
+        console.log('Attempting semantic similarity matching...');
         const semanticResult = await this.calculateSemanticSimilarity(
           question,
           faqs,
@@ -849,25 +849,25 @@ class ToolService {
 
           if (validMatches.length > 0) {
             return {
-              question: question,
+              question,
               detected_language: detectedLanguage,
               matched_faq: validMatches[0],
               all_matches: validMatches.slice(0, 5),
               success: true,
               execution_time_ms: Date.now() - startTime,
-              matching_method: "semantic",
+              matching_method: 'semantic',
               debug: {
                 total_matches: semanticResult.matches.length,
                 matches_after_filtering: validMatches.length,
-                threshold_used: threshold,
-              },
+                threshold_used: threshold
+              }
             };
           }
         }
       }
 
       // Fallback to enhanced text similarity
-      console.log("Falling back to enhanced text similarity...");
+      console.log('Falling back to enhanced text similarity...');
       const matches = faqs.map((faq) => {
         const confidence = this.calculateEnhancedTextSimilarity(
           question,
@@ -877,9 +877,9 @@ class ToolService {
         return {
           question: faq.question,
           answer: faq.answer,
-          category: faq.category || "general",
-          confidence: confidence,
-          method: "enhanced_text",
+          category: faq.category || 'general',
+          confidence,
+          method: 'enhanced_text'
         };
       });
 
@@ -888,23 +888,23 @@ class ToolService {
       const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
 
       return {
-        question: question,
+        question,
         detected_language: detectedLanguage,
         matched_faq: bestMatch,
         all_matches: validMatches.slice(0, 5),
         success: bestMatch !== null,
         execution_time_ms: Date.now() - startTime,
         fallback_used: true,
-        matching_method: "enhanced_text",
+        matching_method: 'enhanced_text',
         debug: {
           total_matches: matches.length,
           matches_after_filtering: validMatches.length,
-          threshold_used: threshold,
-        },
+          threshold_used: threshold
+        }
       };
     } catch (error) {
       console.error(
-        "FAQ hybrid matching failed, falling back to basic similarity:",
+        'FAQ hybrid matching failed, falling back to basic similarity:',
         error.message
       );
 
@@ -917,9 +917,9 @@ class ToolService {
         return {
           question: faq.question,
           answer: faq.answer,
-          category: faq.category || "general",
-          confidence: confidence,
-          method: "basic_text",
+          category: faq.category || 'general',
+          confidence,
+          method: 'basic_text'
         };
       });
 
@@ -928,15 +928,15 @@ class ToolService {
       const bestMatch = validMatches.length > 0 ? validMatches[0] : null;
 
       return {
-        question: question,
+        question,
         detected_language: detectedLanguage,
         matched_faq: bestMatch,
         all_matches: validMatches.slice(0, 5),
         success: bestMatch !== null,
         execution_time_ms: Date.now() - startTime,
         fallback_used: true,
-        matching_method: "basic_text",
-        error: error.message,
+        matching_method: 'basic_text',
+        error: error.message
       };
     }
   }
@@ -945,49 +945,49 @@ class ToolService {
    * Calculate semantic similarity using OpenAI embeddings
    */
   async calculateSemanticSimilarity(question, faqs, config) {
-    console.log("Starting semantic similarity calculation...");
+    console.log('Starting semantic similarity calculation...');
     console.log(`Question: "${question}"`);
     console.log(`Question length: ${question.length}`);
 
     if (!config._agent_api_key) {
-      console.log("No agent API key available for semantic similarity");
+      console.log('No agent API key available for semantic similarity');
       return null;
     }
 
     try {
       // Create OpenAI service instance with agent's API key
-      console.log("Creating OpenAI service instance...");
+      console.log('Creating OpenAI service instance...');
       let openaiService;
 
       if (
-        typeof config._agent_api_key === "object" &&
+        typeof config._agent_api_key === 'object' &&
         config._agent_api_key.getDecryptedKey
       ) {
         // It's an API key object, decrypt it
         const decryptedKey = config._agent_api_key.getDecryptedKey();
         console.log(
-          `Decrypted API key length: ${decryptedKey ? decryptedKey.length : "null"}`
+          `Decrypted API key length: ${decryptedKey ? decryptedKey.length : 'null'}`
         );
         openaiService = new OpenAIService(decryptedKey);
-      } else if (typeof config._agent_api_key === "string") {
+      } else if (typeof config._agent_api_key === 'string') {
         // It's already a string
         console.log(
           `API key is string, length: ${config._agent_api_key.length}`
         );
         openaiService = new OpenAIService(config._agent_api_key);
       } else {
-        console.error("Invalid API key format:", typeof config._agent_api_key);
+        console.error('Invalid API key format:', typeof config._agent_api_key);
         return null;
       }
 
       // Get embedding for the question
-      console.log("Getting embedding for question...");
+      console.log('Getting embedding for question...');
       const questionEmbedding = await this.getTextEmbedding(
         question,
         openaiService
       );
       if (!questionEmbedding) {
-        console.error("Failed to get question embedding");
+        console.error('Failed to get question embedding');
         return null;
       }
 
@@ -1019,9 +1019,9 @@ class ToolService {
             return {
               question: faq.question,
               answer: faq.answer,
-              category: faq.category || "general",
+              category: faq.category || 'general',
               confidence: similarity,
-              method: "semantic",
+              method: 'semantic'
             };
           } catch (error) {
             console.error(
@@ -1042,8 +1042,8 @@ class ToolService {
       );
       return { matches: validMatches };
     } catch (error) {
-      console.error("Semantic similarity calculation failed:", error.message);
-      console.error("Error stack:", error.stack);
+      console.error('Semantic similarity calculation failed:', error.message);
+      console.error('Error stack:', error.stack);
       return null;
     }
   }
@@ -1054,14 +1054,14 @@ class ToolService {
   async getTextEmbedding(text, openaiService) {
     try {
       // Validate and clean the input text
-      if (!text || typeof text !== "string") {
-        console.error("Invalid text input for embedding:", text);
+      if (!text || typeof text !== 'string') {
+        console.error('Invalid text input for embedding:', text);
         return null;
       }
 
       const cleanText = text.trim();
       if (cleanText.length === 0) {
-        console.error("Empty text after cleaning:", text);
+        console.error('Empty text after cleaning:', text);
         return null;
       }
 
@@ -1072,7 +1072,7 @@ class ToolService {
       // Call the OpenAI service with proper parameter format
       const response = await openaiService.createEmbedding({
         input: cleanText,
-        model: "text-embedding-3-small",
+        model: 'text-embedding-3-small'
       });
 
       if (
@@ -1081,7 +1081,7 @@ class ToolService {
         !response.data[0] ||
         !response.data[0].embedding
       ) {
-        console.error("Invalid embedding response structure:", response);
+        console.error('Invalid embedding response structure:', response);
         return null;
       }
 
@@ -1090,7 +1090,7 @@ class ToolService {
       );
       return response.data[0].embedding;
     } catch (error) {
-      console.error("Failed to get text embedding:", error.message);
+      console.error('Failed to get text embedding:', error.message);
       return null;
     }
   }
@@ -1103,7 +1103,7 @@ class ToolService {
     console.log(`Input matches: ${matches.length}`);
 
     if (matches.length === 0) {
-      console.log("No matches to filter");
+      console.log('No matches to filter');
       return [];
     }
 
@@ -1126,7 +1126,7 @@ class ToolService {
     );
 
     if (thresholdFiltered.length === 0) {
-      console.log("No matches met the threshold requirement");
+      console.log('No matches met the threshold requirement');
       return [];
     }
 
@@ -1135,7 +1135,7 @@ class ToolService {
 
     // Dynamic minimum relevant score based on match method
     let minRelevantScore;
-    if (thresholdFiltered[0].method === "semantic") {
+    if (thresholdFiltered[0].method === 'semantic') {
       // For semantic matching, use a higher relative threshold
       minRelevantScore = Math.max(threshold, bestScore * 0.8);
     } else {
@@ -1162,7 +1162,7 @@ class ToolService {
         relevantMatches[0].confidence - relevantMatches[2].confidence;
       if (scoreGap < 0.1) {
         // Scores are too close, only keep top 3
-        console.log("Scores too close, limiting to top 3 matches");
+        console.log('Scores too close, limiting to top 3 matches');
         return relevantMatches.slice(0, 3);
       }
     }
@@ -1173,7 +1173,7 @@ class ToolService {
   /**
    * Calculate enhanced text similarity with multi-language support
    */
-  calculateEnhancedTextSimilarity(text1, text2, language = "en") {
+  calculateEnhancedTextSimilarity(text1, text2, language = 'en') {
     // Normalize and expand abbreviations
     const normalized1 = this.normalizeText(text1, language);
     const normalized2 = this.normalizeText(text2, language);
@@ -1204,7 +1204,7 @@ class ToolService {
       jaccard: 0.3,
       levenshtein: 0.2,
       wordOverlap: 0.3,
-      ngram: 0.2,
+      ngram: 0.2
     };
 
     const combinedScore =
@@ -1227,7 +1227,7 @@ class ToolService {
     const normalized1 = text1.toLowerCase().trim();
     const normalized2 = text2.toLowerCase().trim();
 
-    if (normalized1 === normalized2) return 1.0;
+    if (normalized1 === normalized2) {return 1.0;}
 
     return this.jaccardSimilarity(normalized1, normalized2);
   }
@@ -1235,14 +1235,14 @@ class ToolService {
   /**
    * Normalize text for better matching
    */
-  normalizeText(text, language = "en") {
+  normalizeText(text, language = 'en') {
     let normalized = text.toLowerCase().trim();
 
     // Remove extra whitespace
-    normalized = normalized.replace(/\s+/g, " ");
+    normalized = normalized.replace(/\s+/g, ' ');
 
     // Remove punctuation but keep apostrophes for contractions
-    normalized = normalized.replace(/[^\w\s']/g, "");
+    normalized = normalized.replace(/[^\w\s']/g, '');
 
     // Expand abbreviations based on language
     normalized = this.expandAbbreviations(normalized, language);
@@ -1253,17 +1253,17 @@ class ToolService {
   /**
    * Expand abbreviations based on language
    */
-  expandAbbreviations(text, language = "en") {
+  expandAbbreviations(text, language = 'en') {
     const abbreviations =
       LANGUAGE_ABBREVIATIONS[language] || LANGUAGE_ABBREVIATIONS.en;
     const words = text.split(/\s+/);
 
     const expanded = words.map((word) => {
-      const cleanWord = word.replace(/[^\w]/g, "");
+      const cleanWord = word.replace(/[^\w]/g, '');
       return abbreviations[cleanWord] || word;
     });
 
-    return expanded.join(" ");
+    return expanded.join(' ');
   }
 
   /**
@@ -1278,11 +1278,11 @@ class ToolService {
       pt: /\b(que|como|onde|quando|por|para|com|uma|este|esta|muito|mais|todo|fazer|tempo|ano|sim|nao|ola|obrigado)\b/g,
       fr: /\b(que|comment|ou|quand|pour|avec|une|cette|tres|plus|tout|faire|temps|annee|oui|non|bonjour|merci)\b/g,
       de: /\b(was|wie|wo|wann|fur|mit|eine|diese|sehr|mehr|alle|machen|zeit|jahr|ja|nein|hallo|danke)\b/g,
-      it: /\b(che|come|dove|quando|per|con|una|questa|molto|piu|tutto|fare|tempo|anno|si|no|ciao|grazie)\b/g,
+      it: /\b(che|come|dove|quando|per|con|una|questa|molto|piu|tutto|fare|tempo|anno|si|no|ciao|grazie)\b/g
     };
 
     let maxMatches = 0;
-    let detectedLang = "en";
+    let detectedLang = 'en';
 
     for (const [lang, pattern] of Object.entries(languagePatterns)) {
       const matches = (normalized.match(pattern) || []).length;
@@ -1393,14 +1393,14 @@ class ToolService {
   evaluateExpression(expression) {
     // Basic safety check - only allow numbers, operators, and whitespace
     if (!/^[0-9+\-*/.() ]+$/.test(expression)) {
-      throw new Error("Invalid characters in expression");
+      throw new Error('Invalid characters in expression');
     }
 
     try {
       // Use Function constructor for safer evaluation than eval
-      return Function('"use strict"; return (' + expression + ")")();
+      return Function(`"use strict"; return (${  expression  })`)();
     } catch (error) {
-      throw new Error("Invalid mathematical expression");
+      throw new Error('Invalid mathematical expression');
     }
   }
 
@@ -1408,7 +1408,7 @@ class ToolService {
    * Extract value from object using dot notation path
    */
   extractFromPath(obj, path) {
-    return path.split(".").reduce((current, key) => {
+    return path.split('.').reduce((current, key) => {
       return current && current[key] !== undefined ? current[key] : undefined;
     }, obj);
   }
@@ -1432,7 +1432,7 @@ class ToolService {
 
     try {
       // Use summarization service
-      const SummarizationService = require("./summarizationService");
+      const SummarizationService = require('./summarizationService');
       const summary = await SummarizationService.summarizeApiResult(
         result,
         parameters.url,
@@ -1443,10 +1443,10 @@ class ToolService {
         ...result,
         _summarized: true,
         _original_length: resultStr.length,
-        summary: summary,
+        summary
       };
     } catch (error) {
-      console.error("Failed to summarize API result:", error.message);
+      console.error('Failed to summarize API result:', error.message);
       return result;
     }
   }
@@ -1481,34 +1481,34 @@ class ToolService {
    */
   calculateNegationPenalty(text1, text2) {
     const opposites = [
-      ["in", "out"],
-      ["on", "off"],
-      ["start", "end"],
-      ["begin", "finish"],
-      ["open", "close"],
-      ["enter", "exit"],
-      ["arrive", "depart"],
-      ["login", "logout"],
-      ["signin", "signout"],
-      ["checkin", "checkout"],
-      ["upload", "download"],
-      ["import", "export"],
-      ["enable", "disable"],
-      ["activate", "deactivate"],
-      ["connect", "disconnect"],
-      ["lock", "unlock"],
-      ["show", "hide"],
-      ["expand", "collapse"],
-      ["increase", "decrease"],
-      ["add", "remove"],
-      ["create", "delete"],
-      ["save", "cancel"],
-      ["accept", "reject"],
-      ["allow", "deny"],
-      ["grant", "revoke"],
-      ["install", "uninstall"],
-      ["freeze", "unfreeze"],
-      ["subscribe", "unsubscribe"],
+      ['in', 'out'],
+      ['on', 'off'],
+      ['start', 'end'],
+      ['begin', 'finish'],
+      ['open', 'close'],
+      ['enter', 'exit'],
+      ['arrive', 'depart'],
+      ['login', 'logout'],
+      ['signin', 'signout'],
+      ['checkin', 'checkout'],
+      ['upload', 'download'],
+      ['import', 'export'],
+      ['enable', 'disable'],
+      ['activate', 'deactivate'],
+      ['connect', 'disconnect'],
+      ['lock', 'unlock'],
+      ['show', 'hide'],
+      ['expand', 'collapse'],
+      ['increase', 'decrease'],
+      ['add', 'remove'],
+      ['create', 'delete'],
+      ['save', 'cancel'],
+      ['accept', 'reject'],
+      ['allow', 'deny'],
+      ['grant', 'revoke'],
+      ['install', 'uninstall'],
+      ['freeze', 'unfreeze'],
+      ['subscribe', 'unsubscribe']
     ];
 
     const words1 = text1.toLowerCase().split(/\s+/);
@@ -1539,22 +1539,22 @@ class ToolService {
   calculateContextBonus(text1, text2) {
     const contextGroups = [
       // Hotel/accommodation contexts
-      ["check", "room", "hotel", "guest", "stay", "reservation", "booking"],
-      ["wifi", "internet", "connection", "network", "password"],
-      ["breakfast", "food", "meal", "restaurant", "dining", "eat"],
-      ["pool", "swimming", "water", "swim", "deck"],
-      ["parking", "car", "vehicle", "garage", "valet"],
-      ["towel", "linen", "clean", "housekeeping", "service"],
-      ["key", "card", "access", "door", "lock", "unlock"],
-      ["checkout", "checkin", "arrival", "departure", "time"],
-      ["gym", "fitness", "exercise", "workout", "equipment"],
-      ["pet", "animal", "dog", "cat", "allowed", "policy"],
+      ['check', 'room', 'hotel', 'guest', 'stay', 'reservation', 'booking'],
+      ['wifi', 'internet', 'connection', 'network', 'password'],
+      ['breakfast', 'food', 'meal', 'restaurant', 'dining', 'eat'],
+      ['pool', 'swimming', 'water', 'swim', 'deck'],
+      ['parking', 'car', 'vehicle', 'garage', 'valet'],
+      ['towel', 'linen', 'clean', 'housekeeping', 'service'],
+      ['key', 'card', 'access', 'door', 'lock', 'unlock'],
+      ['checkout', 'checkin', 'arrival', 'departure', 'time'],
+      ['gym', 'fitness', 'exercise', 'workout', 'equipment'],
+      ['pet', 'animal', 'dog', 'cat', 'allowed', 'policy'],
       // Technical contexts
-      ["api", "endpoint", "request", "response", "data"],
-      ["database", "query", "table", "record", "sql"],
-      ["authentication", "login", "password", "user", "account"],
-      ["error", "bug", "issue", "problem", "fix", "solve"],
-      ["file", "upload", "download", "document", "attachment"],
+      ['api', 'endpoint', 'request', 'response', 'data'],
+      ['database', 'query', 'table', 'record', 'sql'],
+      ['authentication', 'login', 'password', 'user', 'account'],
+      ['error', 'bug', 'issue', 'problem', 'fix', 'solve'],
+      ['file', 'upload', 'download', 'document', 'attachment']
     ];
 
     const words1 = text1.toLowerCase().split(/\s+/);

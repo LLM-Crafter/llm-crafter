@@ -61,7 +61,7 @@ const organizationAuth = {
         }
 
         const userRole = organization.members.find(m => m.user === req.user._id).role;
-        
+
         if (roleHierarchy[userRole] >= roleHierarchy[minimumRole]) {
           req.userRole = userRole;
           next();

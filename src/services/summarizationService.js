@@ -1,4 +1,4 @@
-const OpenAIService = require("./openaiService");
+const OpenAIService = require('./openaiService');
 
 class SummarizationService {
   /**
@@ -22,7 +22,7 @@ class SummarizationService {
       const summaryParams = {
         temperature: 0.3,
         max_tokens: 800, // Limit summary length
-        top_p: 0.9,
+        top_p: 0.9
       };
 
       const response = await openai.generateCompletion(
@@ -38,10 +38,10 @@ class SummarizationService {
       return {
         summary: summaryData,
         token_usage: response.usage,
-        model_used: summaryModel,
+        model_used: summaryModel
       };
     } catch (error) {
-      console.error("Summarization error:", error);
+      console.error('Summarization error:', error);
       throw new Error(`Failed to summarize conversation: ${error.message}`);
     }
   }
@@ -52,18 +52,18 @@ class SummarizationService {
   selectSummaryModel(agentModel) {
     // Map to faster/cheaper models for summarization
     const summaryModelMap = {
-      "gpt-4o": "gpt-4o-mini",
-      "gpt-5": "gpt-5-mini",
-      "gpt-5-chat-latest": "gpt-5-mini",
-      "gpt-4-turbo": "gpt-4o-mini",
-      o3: "o3-mini",
-      "o3-pro": "o3-mini",
-      o1: "o1-mini",
-      "deepseek-chat": "deepseek-chat", // Already efficient
-      "deepseek-reasoner": "deepseek-chat",
+      'gpt-4o': 'gpt-4o-mini',
+      'gpt-5': 'gpt-5-mini',
+      'gpt-5-chat-latest': 'gpt-5-mini',
+      'gpt-4-turbo': 'gpt-4o-mini',
+      o3: 'o3-mini',
+      'o3-pro': 'o3-mini',
+      o1: 'o1-mini',
+      'deepseek-chat': 'deepseek-chat', // Already efficient
+      'deepseek-reasoner': 'deepseek-chat'
     };
 
-    return summaryModelMap[agentModel] || "gpt-4o-mini"; // Default to efficient model
+    return summaryModelMap[agentModel] || 'gpt-4o-mini'; // Default to efficient model
   }
 
   /**
@@ -72,20 +72,20 @@ class SummarizationService {
   buildSummarizationPrompt(messages, existingSummary = null) {
     // Filter out system messages and focus on user-assistant exchanges
     const conversationMessages = messages.filter(
-      (m) => m.role === "user" || m.role === "assistant"
+      (m) => m.role === 'user' || m.role === 'assistant'
     );
 
     let prompt =
-      "Please analyze the following conversation and provide a structured summary:\n\n";
+      'Please analyze the following conversation and provide a structured summary:\n\n';
 
     // Add existing summary context if available
     if (existingSummary) {
-      prompt += "EXISTING SUMMARY TO UPDATE:\n";
-      prompt += `Key Topics: ${existingSummary.key_topics?.join(", ") || "None"}\n`;
-      prompt += `Important Decisions: ${existingSummary.important_decisions?.join("; ") || "None"}\n`;
-      prompt += `Unresolved Issues: ${existingSummary.unresolved_issues?.join("; ") || "None"}\n`;
+      prompt += 'EXISTING SUMMARY TO UPDATE:\n';
+      prompt += `Key Topics: ${existingSummary.key_topics?.join(', ') || 'None'}\n`;
+      prompt += `Important Decisions: ${existingSummary.important_decisions?.join('; ') || 'None'}\n`;
+      prompt += `Unresolved Issues: ${existingSummary.unresolved_issues?.join('; ') || 'None'}\n`;
       prompt += `User Preferences: ${JSON.stringify(existingSummary.user_preferences || {})}\n\n`;
-      prompt += "NEW CONVERSATION TO ADD TO SUMMARY:\n\n";
+      prompt += 'NEW CONVERSATION TO ADD TO SUMMARY:\n\n';
     }
 
     // Add conversation messages
@@ -95,19 +95,19 @@ class SummarizationService {
 
       // Truncate very long messages
       if (content.length > 500) {
-        content = content.substring(0, 497) + "...";
+        content = `${content.substring(0, 497)  }...`;
       }
 
       prompt += `${role}: ${content}\n\n`;
 
       // Include key tool usage information
       if (msg.tools_used && msg.tools_used.length > 0) {
-        const toolNames = msg.tools_used.map((t) => t.tool_name).join(", ");
+        const toolNames = msg.tools_used.map((t) => t.tool_name).join(', ');
         prompt += `[Tools used: ${toolNames}]\n\n`;
       }
     });
 
-    prompt += "\nProvide your analysis in this exact JSON format:\n";
+    prompt += '\nProvide your analysis in this exact JSON format:\n';
     prompt += `{
   "key_topics": ["topic1", "topic2", "topic3"],
   "important_decisions": ["decision1", "decision2"],
@@ -149,7 +149,7 @@ Guidelines:
       // Extract JSON from the response
       const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error("No JSON found in response");
+        throw new Error('No JSON found in response');
       }
 
       const summaryData = JSON.parse(jsonMatch[0]);
@@ -166,17 +166,17 @@ Guidelines:
           ? summaryData.unresolved_issues
           : [],
         user_preferences:
-          typeof summaryData.user_preferences === "object"
+          typeof summaryData.user_preferences === 'object'
             ? summaryData.user_preferences
             : {},
         context_data:
-          typeof summaryData.context_data === "object"
+          typeof summaryData.context_data === 'object'
             ? summaryData.context_data
-            : {},
+            : {}
       };
     } catch (error) {
-      console.error("Failed to parse summary response:", error);
-      console.error("Response content:", responseContent);
+      console.error('Failed to parse summary response:', error);
+      console.error('Response content:', responseContent);
 
       // Return empty summary structure if parsing fails
       return {
@@ -184,7 +184,7 @@ Guidelines:
         important_decisions: [],
         unresolved_issues: [],
         user_preferences: {},
-        context_data: {},
+        context_data: {}
       };
     }
   }

@@ -1,43 +1,43 @@
-const Agent = require("../models/Agent");
-const Conversation = require("../models/Conversation");
-const AgentExecution = require("../models/AgentExecution");
-const Project = require("../models/Project");
-const ApiKey = require("../models/ApiKey");
-const agentService = require("../services/agentService");
-const toolService = require("../services/toolService");
-const summarizationService = require("../services/summarizationService");
+const Agent = require('../models/Agent');
+const Conversation = require('../models/Conversation');
+const AgentExecution = require('../models/AgentExecution');
+const Project = require('../models/Project');
+const ApiKey = require('../models/ApiKey');
+const agentService = require('../services/agentService');
+const toolService = require('../services/toolService');
+const summarizationService = require('../services/summarizationService');
 
 const createAgent = async (req, res) => {
   try {
     // Verify project exists and belongs to the organization
     const project = await Project.findOne({
       _id: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!project) {
       return res
         .status(404)
-        .json({ error: "Project not found in this organization" });
+        .json({ error: 'Project not found in this organization' });
     }
 
     // Verify API key exists and belongs to the project
     const apiKey = await ApiKey.findOne({
       _id: req.body.api_key,
-      project: req.params.projectId,
-    }).populate("provider");
+      project: req.params.projectId
+    }).populate('provider');
 
     if (!apiKey) {
       return res
         .status(404)
-        .json({ error: "API key not found in this project" });
+        .json({ error: 'API key not found in this project' });
     }
 
     // Verify the model belongs to the provider
     if (!apiKey.provider.models.includes(req.body.llm_settings.model)) {
       return res
         .status(400)
-        .json({ error: "Invalid model for selected provider" });
+        .json({ error: 'Invalid model for selected provider' });
     }
 
     // Get available tools
@@ -52,7 +52,7 @@ const createAgent = async (req, res) => {
 
     if (invalidTools.length > 0) {
       return res.status(400).json({
-        error: `Invalid tools: ${invalidTools.join(", ")}`,
+        error: `Invalid tools: ${invalidTools.join(', ')}`
       });
     }
 
@@ -63,7 +63,7 @@ const createAgent = async (req, res) => {
         name: tool.name,
         description: tool.description,
         parameters: tool.parameters_schema, // For new agents, use schema defaults
-        enabled: true,
+        enabled: true
       };
     });
 
@@ -78,33 +78,33 @@ const createAgent = async (req, res) => {
         if (!api_key || !model) {
           return res.status(400).json({
             error:
-              "API key and model are required when enabling question suggestions",
+              'API key and model are required when enabling question suggestions'
           });
         }
 
         // Validate suggestion API key exists and belongs to the project
         const suggestionApiKey = await ApiKey.findOne({
           _id: api_key,
-          project: req.params.projectId,
-        }).populate("provider");
+          project: req.params.projectId
+        }).populate('provider');
 
         if (!suggestionApiKey) {
           return res
             .status(404)
-            .json({ error: "Suggestion API key not found in this project" });
+            .json({ error: 'Suggestion API key not found in this project' });
         }
 
         // Verify the model belongs to the provider
         if (!suggestionApiKey.provider.models.includes(model)) {
           return res
             .status(400)
-            .json({ error: "Invalid suggestion model for selected provider" });
+            .json({ error: 'Invalid suggestion model for selected provider' });
         }
 
         // Validate count if provided
         if (count && (count < 1 || count > 5)) {
           return res.status(400).json({
-            error: "Question count must be between 1 and 5",
+            error: 'Question count must be between 1 and 5'
           });
         }
 
@@ -113,7 +113,7 @@ const createAgent = async (req, res) => {
           count: count || 3,
           api_key,
           model,
-          custom_prompt: custom_prompt || null,
+          custom_prompt: custom_prompt || null
         };
       } else {
         questionSuggestions = {
@@ -121,7 +121,7 @@ const createAgent = async (req, res) => {
           count: count || 3,
           api_key: api_key || null,
           model: model || null,
-          custom_prompt: custom_prompt || null,
+          custom_prompt: custom_prompt || null
         };
       }
     }
@@ -129,7 +129,7 @@ const createAgent = async (req, res) => {
     const agent = new Agent({
       name: req.body.name,
       description: req.body.description,
-      type: req.body.type || "chatbot",
+      type: req.body.type || 'chatbot',
       organization: req.params.orgId,
       project: req.params.projectId,
       system_prompt: req.body.system_prompt,
@@ -137,7 +137,7 @@ const createAgent = async (req, res) => {
       llm_settings: req.body.llm_settings,
       tools: agentTools,
       config: req.body.config || {},
-      question_suggestions: questionSuggestions,
+      question_suggestions: questionSuggestions
     });
 
     await agent.save();
@@ -147,10 +147,10 @@ const createAgent = async (req, res) => {
     if (error.code === 11000) {
       return res
         .status(400)
-        .json({ error: "Agent name already exists in this project" });
+        .json({ error: 'Agent name already exists in this project' });
     }
-    console.error("Create agent error:", error);
-    res.status(500).json({ error: "Failed to create agent" });
+    console.error('Create agent error:', error);
+    res.status(500).json({ error: 'Failed to create agent' });
   }
 };
 
@@ -158,20 +158,20 @@ const getAgents = async (req, res) => {
   try {
     const agents = await Agent.find({
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     })
-      .populate("api_key", "name provider")
+      .populate('api_key', 'name provider')
       .populate({
-        path: "api_key",
+        path: 'api_key',
         populate: {
-          path: "provider",
-          select: "name",
-        },
+          path: 'provider',
+          select: 'name'
+        }
       });
 
     res.json(agents);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch agents" });
+    res.status(500).json({ error: 'Failed to fetch agents' });
   }
 };
 
@@ -180,23 +180,23 @@ const getAgent = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     })
-      .populate("api_key")
+      .populate('api_key')
       .populate({
-        path: "api_key",
+        path: 'api_key',
         populate: {
-          path: "provider",
-        },
+          path: 'provider'
+        }
       });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     res.json(agent);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch agent" });
+    res.status(500).json({ error: 'Failed to fetch agent' });
   }
 };
 
@@ -205,24 +205,24 @@ const updateAgent = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     // Validate API key if being updated
     if (req.body.api_key) {
       const apiKey = await ApiKey.findOne({
         _id: req.body.api_key,
-        project: req.params.projectId,
-      }).populate("provider");
+        project: req.params.projectId
+      }).populate('provider');
 
       if (!apiKey) {
         return res
           .status(404)
-          .json({ error: "API key not found in this project" });
+          .json({ error: 'API key not found in this project' });
       }
 
       // Verify the model belongs to the provider
@@ -232,7 +232,7 @@ const updateAgent = async (req, res) => {
       ) {
         return res
           .status(400)
-          .json({ error: "Invalid model for selected provider" });
+          .json({ error: 'Invalid model for selected provider' });
       }
 
       agent.api_key = apiKey._id;
@@ -248,7 +248,7 @@ const updateAgent = async (req, res) => {
 
       if (invalidTools.length > 0) {
         return res.status(400).json({
-          error: `Invalid tools: ${invalidTools.join(", ")}`,
+          error: `Invalid tools: ${invalidTools.join(', ')}`
         });
       }
 
@@ -267,7 +267,7 @@ const updateAgent = async (req, res) => {
           parameters: existingTool
             ? existingTool.parameters
             : tool.parameters_schema,
-          enabled: existingTool ? existingTool.enabled : true,
+          enabled: existingTool ? existingTool.enabled : true
         };
       });
 
@@ -275,18 +275,18 @@ const updateAgent = async (req, res) => {
     }
 
     // Update other fields
-    if (req.body.name !== undefined) agent.name = req.body.name;
+    if (req.body.name !== undefined) {agent.name = req.body.name;}
     if (req.body.description !== undefined)
-      agent.description = req.body.description;
+    {agent.description = req.body.description;}
     if (req.body.system_prompt !== undefined)
-      agent.system_prompt = req.body.system_prompt;
+    {agent.system_prompt = req.body.system_prompt;}
     if (req.body.llm_settings) {
       agent.llm_settings = { ...agent.llm_settings, ...req.body.llm_settings };
     }
     if (req.body.config) {
       agent.config = { ...agent.config, ...req.body.config };
     }
-    if (req.body.is_active !== undefined) agent.is_active = req.body.is_active;
+    if (req.body.is_active !== undefined) {agent.is_active = req.body.is_active;}
 
     // Update question suggestions if provided
     if (req.body.question_suggestions !== undefined) {
@@ -298,34 +298,34 @@ const updateAgent = async (req, res) => {
         if (!api_key || !model) {
           return res.status(400).json({
             error:
-              "API key and model are required when enabling question suggestions",
+              'API key and model are required when enabling question suggestions'
           });
         }
 
         // Validate suggestion API key exists and belongs to the project
         const suggestionApiKey = await ApiKey.findOne({
           _id: api_key,
-          project: req.params.projectId,
-        }).populate("provider");
+          project: req.params.projectId
+        }).populate('provider');
 
         if (!suggestionApiKey) {
           return res
             .status(404)
-            .json({ error: "Suggestion API key not found in this project" });
+            .json({ error: 'Suggestion API key not found in this project' });
         }
 
         // Verify the model belongs to the provider
         if (!suggestionApiKey.provider.models.includes(model)) {
           return res
             .status(400)
-            .json({ error: "Invalid suggestion model for selected provider" });
+            .json({ error: 'Invalid suggestion model for selected provider' });
         }
       }
 
       // Validate count if provided
       if (count !== undefined && (count < 1 || count > 5)) {
         return res.status(400).json({
-          error: "Question count must be between 1 and 5",
+          error: 'Question count must be between 1 and 5'
         });
       }
 
@@ -340,7 +340,7 @@ const updateAgent = async (req, res) => {
         custom_prompt:
           custom_prompt !== undefined
             ? custom_prompt
-            : agent.question_suggestions.custom_prompt,
+            : agent.question_suggestions.custom_prompt
       };
     }
 
@@ -351,12 +351,12 @@ const updateAgent = async (req, res) => {
 
     // Fetch updated agent with populated fields
     const updatedAgent = await Agent.findById(agent._id)
-      .populate("api_key")
+      .populate('api_key')
       .populate({
-        path: "api_key",
+        path: 'api_key',
         populate: {
-          path: "provider",
-        },
+          path: 'provider'
+        }
       });
 
     res.json(updatedAgent);
@@ -364,9 +364,9 @@ const updateAgent = async (req, res) => {
     if (error.code === 11000) {
       return res
         .status(400)
-        .json({ error: "Agent name already exists in this project" });
+        .json({ error: 'Agent name already exists in this project' });
     }
-    res.status(500).json({ error: "Failed to update agent" });
+    res.status(500).json({ error: 'Failed to update agent' });
   }
 };
 
@@ -375,16 +375,16 @@ const deleteAgent = async (req, res) => {
     const agent = await Agent.findOneAndDelete({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
-    res.json({ message: "Agent deleted successfully" });
+    res.json({ message: 'Agent deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: "Failed to delete agent" });
+    res.status(500).json({ error: 'Failed to delete agent' });
   }
 };
 
@@ -395,11 +395,11 @@ const executeChatbotAgent = async (req, res) => {
     const { message, conversation_id, user_identifier, context } = req.body;
 
     if (!message) {
-      return res.status(400).json({ error: "Message is required" });
+      return res.status(400).json({ error: 'Message is required' });
     }
 
     if (!user_identifier) {
-      return res.status(400).json({ error: "User identifier is required" });
+      return res.status(400).json({ error: 'User identifier is required' });
     }
 
     const result = await agentService.executeChatbotAgent(
@@ -412,10 +412,10 @@ const executeChatbotAgent = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error("Chatbot execution error:", error);
+    console.error('Chatbot execution error:', error);
     res
       .status(500)
-      .json({ error: error.message || "Failed to execute chatbot agent" });
+      .json({ error: error.message || 'Failed to execute chatbot agent' });
   }
 };
 
@@ -424,7 +424,7 @@ const executeTaskAgent = async (req, res) => {
     const { input, user_identifier, context } = req.body;
 
     if (!input) {
-      return res.status(400).json({ error: "Input is required" });
+      return res.status(400).json({ error: 'Input is required' });
     }
 
     const result = await agentService.executeTaskAgent(
@@ -436,10 +436,10 @@ const executeTaskAgent = async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error("Task execution error:", error);
+    console.error('Task execution error:', error);
     res
       .status(500)
-      .json({ error: error.message || "Failed to execute task agent" });
+      .json({ error: error.message || 'Failed to execute task agent' });
   }
 };
 
@@ -451,29 +451,29 @@ const getConversations = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = { agent: req.params.agentId };
-    if (user_identifier) filter.user_identifier = user_identifier;
-    if (status) filter.status = status;
+    if (user_identifier) {filter.user_identifier = user_identifier;}
+    if (status) {filter.status = status;}
 
     const [conversations, total] = await Promise.all([
       Conversation.find(filter)
-        .sort({ "metadata.last_activity": -1 })
+        .sort({ 'metadata.last_activity': -1 })
         .skip(skip)
         .limit(parseInt(limit))
         .select(
-          "_id user_identifier title status metadata createdAt updatedAt"
+          '_id user_identifier title status metadata createdAt updatedAt'
         ),
 
-      Conversation.countDocuments(filter),
+      Conversation.countDocuments(filter)
     ]);
 
     res.json({
       total,
       page: parseInt(page),
       limit: parseInt(limit),
-      conversations,
+      conversations
     });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch conversations" });
+    res.status(500).json({ error: 'Failed to fetch conversations' });
   }
 };
 
@@ -481,16 +481,16 @@ const getConversation = async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.conversationId,
-      agent: req.params.agentId,
+      agent: req.params.agentId
     });
 
     if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
+      return res.status(404).json({ error: 'Conversation not found' });
     }
 
     res.json(conversation);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch conversation" });
+    res.status(500).json({ error: 'Failed to fetch conversation' });
   }
 };
 
@@ -502,27 +502,27 @@ const getAgentExecutions = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = { agent: req.params.agentId };
-    if (status) filter.status = status;
-    if (type) filter.type = type;
+    if (status) {filter.status = status;}
+    if (type) {filter.type = type;}
 
     const [executions, total] = await Promise.all([
       AgentExecution.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
-        .select("_id type status usage execution_time_ms createdAt metadata"),
+        .select('_id type status usage execution_time_ms createdAt metadata'),
 
-      AgentExecution.countDocuments(filter),
+      AgentExecution.countDocuments(filter)
     ]);
 
     res.json({
       total,
       page: parseInt(page),
       limit: parseInt(limit),
-      executions,
+      executions
     });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch agent executions" });
+    res.status(500).json({ error: 'Failed to fetch agent executions' });
   }
 };
 
@@ -530,16 +530,16 @@ const getAgentExecution = async (req, res) => {
   try {
     const execution = await AgentExecution.findOne({
       _id: req.params.executionId,
-      agent: req.params.agentId,
+      agent: req.params.agentId
     });
 
     if (!execution) {
-      return res.status(404).json({ error: "Execution not found" });
+      return res.status(404).json({ error: 'Execution not found' });
     }
 
     res.json(execution);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch execution" });
+    res.status(500).json({ error: 'Failed to fetch execution' });
   }
 };
 
@@ -550,21 +550,21 @@ const configureApiEndpoints = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     // Check if agent has api_caller tool
     const hasApiCallerTool = agent.tools.some(
-      (tool) => tool.name === "api_caller"
+      (tool) => tool.name === 'api_caller'
     );
     if (!hasApiCallerTool) {
       return res
         .status(400)
-        .json({ error: "Agent does not have api_caller tool configured" });
+        .json({ error: 'Agent does not have api_caller tool configured' });
     }
 
     const { endpoints, authentication, summarization } = req.body;
@@ -574,14 +574,14 @@ const configureApiEndpoints = async (req, res) => {
       for (const [endpointName, config] of Object.entries(endpoints)) {
         if (!config.base_url || !config.path) {
           return res.status(400).json({
-            error: `Endpoint '${endpointName}' must have base_url and path`,
+            error: `Endpoint '${endpointName}' must have base_url and path`
           });
         }
 
         // Validate methods array
         if (config.methods && !Array.isArray(config.methods)) {
           return res.status(400).json({
-            error: `Endpoint '${endpointName}' methods must be an array`,
+            error: `Endpoint '${endpointName}' methods must be an array`
           });
         }
       }
@@ -589,10 +589,10 @@ const configureApiEndpoints = async (req, res) => {
 
     // Validate authentication configuration
     if (authentication && authentication.type) {
-      const validAuthTypes = ["bearer_token", "api_key", "cookie"];
+      const validAuthTypes = ['bearer_token', 'api_key', 'cookie'];
       if (!validAuthTypes.includes(authentication.type)) {
         return res.status(400).json({
-          error: `Invalid authentication type. Must be one of: ${validAuthTypes.join(", ")}`,
+          error: `Invalid authentication type. Must be one of: ${validAuthTypes.join(', ')}`
         });
       }
     }
@@ -600,48 +600,48 @@ const configureApiEndpoints = async (req, res) => {
     // Validate summarization configuration
     if (summarization) {
       if (
-        typeof summarization.enabled !== "undefined" &&
-        typeof summarization.enabled !== "boolean"
+        typeof summarization.enabled !== 'undefined' &&
+        typeof summarization.enabled !== 'boolean'
       ) {
         return res.status(400).json({
-          error: "Summarization 'enabled' field must be a boolean",
+          error: 'Summarization \'enabled\' field must be a boolean'
         });
       }
 
       if (
         summarization.max_tokens &&
-        (typeof summarization.max_tokens !== "number" ||
+        (typeof summarization.max_tokens !== 'number' ||
           summarization.max_tokens < 10 ||
           summarization.max_tokens > 72000)
       ) {
         return res.status(400).json({
           error:
-            "Summarization 'max_tokens' must be a number between 10 and 72000",
+            'Summarization \'max_tokens\' must be a number between 10 and 72000'
         });
       }
 
       if (
         summarization.min_size &&
-        (typeof summarization.min_size !== "number" ||
+        (typeof summarization.min_size !== 'number' ||
           summarization.min_size < 100)
       ) {
         return res.status(400).json({
-          error: "Summarization 'min_size' must be a number >= 100",
+          error: 'Summarization \'min_size\' must be a number >= 100'
         });
       }
 
-      if (summarization.model && typeof summarization.model !== "string") {
+      if (summarization.model && typeof summarization.model !== 'string') {
         return res.status(400).json({
-          error: "Summarization 'model' must be a string",
+          error: 'Summarization \'model\' must be a string'
         });
       }
 
       if (
         summarization.endpoint_rules &&
-        typeof summarization.endpoint_rules !== "object"
+        typeof summarization.endpoint_rules !== 'object'
       ) {
         return res.status(400).json({
-          error: "Summarization 'endpoint_rules' must be an object",
+          error: 'Summarization \'endpoint_rules\' must be an object'
         });
       }
 
@@ -652,17 +652,17 @@ const configureApiEndpoints = async (req, res) => {
         )) {
           if (
             rules.max_tokens &&
-            (typeof rules.max_tokens !== "number" ||
+            (typeof rules.max_tokens !== 'number' ||
               rules.max_tokens < 10 ||
               rules.max_tokens > 1000)
           ) {
             return res.status(400).json({
-              error: `Endpoint rule '${endpointName}' max_tokens must be a number between 10 and 1000`,
+              error: `Endpoint rule '${endpointName}' max_tokens must be a number between 10 and 1000`
             });
           }
-          if (rules.focus && typeof rules.focus !== "string") {
+          if (rules.focus && typeof rules.focus !== 'string') {
             return res.status(400).json({
-              error: `Endpoint rule '${endpointName}' focus must be a string`,
+              error: `Endpoint rule '${endpointName}' focus must be a string`
             });
           }
         }
@@ -676,9 +676,9 @@ const configureApiEndpoints = async (req, res) => {
     );
 
     const responseData = {
-      message: "API configuration updated successfully",
+      message: 'API configuration updated successfully',
       endpoints: endpoints || {},
-      authentication: authentication ? { type: authentication.type } : {},
+      authentication: authentication ? { type: authentication.type } : {}
     };
 
     // Include summarization in response if provided
@@ -688,8 +688,8 @@ const configureApiEndpoints = async (req, res) => {
 
     res.json(responseData);
   } catch (error) {
-    console.error("Configure API endpoints error:", error);
-    res.status(500).json({ error: "Failed to configure API endpoints" });
+    console.error('Configure API endpoints error:', error);
+    res.status(500).json({ error: 'Failed to configure API endpoints' });
   }
 };
 
@@ -698,40 +698,40 @@ const getApiEndpoints = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     const apiConfig = agent.getApiEndpoints();
     if (!apiConfig) {
       return res
         .status(404)
-        .json({ error: "Agent does not have api_caller tool configured" });
+        .json({ error: 'Agent does not have api_caller tool configured' });
     }
 
     // Don't expose sensitive authentication details
     const sanitizedAuth = apiConfig.authentication
       ? {
-          type: apiConfig.authentication.type,
-          configured: !!(
-            apiConfig.authentication.token ||
+        type: apiConfig.authentication.type,
+        configured: !!(
+          apiConfig.authentication.token ||
             apiConfig.authentication.api_key ||
             apiConfig.authentication.cookie
-          ),
-        }
+        )
+      }
       : {};
 
     res.json({
       endpoints: apiConfig.endpoints,
       authentication: sanitizedAuth,
-      summarization: apiConfig.summarization || {},
+      summarization: apiConfig.summarization || {}
     });
   } catch (error) {
-    console.error("Get API endpoints error:", error);
-    res.status(500).json({ error: "Failed to get API endpoints" });
+    console.error('Get API endpoints error:', error);
+    res.status(500).json({ error: 'Failed to get API endpoints' });
   }
 };
 
@@ -742,19 +742,19 @@ const configureFAQs = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     // Check if agent has FAQ tool
-    const hasFAQTool = agent.tools.some((tool) => tool.name === "faq");
+    const hasFAQTool = agent.tools.some((tool) => tool.name === 'faq');
     if (!hasFAQTool) {
       return res
         .status(400)
-        .json({ error: "Agent does not have faq tool configured" });
+        .json({ error: 'Agent does not have faq tool configured' });
     }
 
     const { faqs } = req.body;
@@ -762,7 +762,7 @@ const configureFAQs = async (req, res) => {
     // Validate FAQs configuration
     if (faqs && !Array.isArray(faqs)) {
       return res.status(400).json({
-        error: "FAQs must be an array",
+        error: 'FAQs must be an array'
       });
     }
 
@@ -771,20 +771,20 @@ const configureFAQs = async (req, res) => {
         const faq = faqs[i];
         if (!faq.question || !faq.answer) {
           return res.status(400).json({
-            error: `FAQ at index ${i} must have both question and answer`,
+            error: `FAQ at index ${i} must have both question and answer`
           });
         }
         if (
-          typeof faq.question !== "string" ||
-          typeof faq.answer !== "string"
+          typeof faq.question !== 'string' ||
+          typeof faq.answer !== 'string'
         ) {
           return res.status(400).json({
-            error: `FAQ at index ${i} question and answer must be strings`,
+            error: `FAQ at index ${i} question and answer must be strings`
           });
         }
-        if (faq.category && typeof faq.category !== "string") {
+        if (faq.category && typeof faq.category !== 'string') {
           return res.status(400).json({
-            error: `FAQ at index ${i} category must be a string`,
+            error: `FAQ at index ${i} category must be a string`
           });
         }
       }
@@ -793,13 +793,13 @@ const configureFAQs = async (req, res) => {
     await agent.configureFAQs(faqs || []);
 
     res.json({
-      message: "FAQ configuration updated successfully",
+      message: 'FAQ configuration updated successfully',
       faqs: faqs || [],
-      count: (faqs || []).length,
+      count: (faqs || []).length
     });
   } catch (error) {
-    console.error("Configure FAQs error:", error);
-    res.status(500).json({ error: "Failed to configure FAQs" });
+    console.error('Configure FAQs error:', error);
+    res.status(500).json({ error: 'Failed to configure FAQs' });
   }
 };
 
@@ -808,29 +808,29 @@ const getFAQs = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     const faqConfig = agent.getFAQs();
     if (!faqConfig) {
       return res
         .status(404)
-        .json({ error: "Agent does not have faq tool configured" });
+        .json({ error: 'Agent does not have faq tool configured' });
     }
 
     res.json({
       faqs: faqConfig.faqs,
       enable_partial_matching: faqConfig.enable_partial_matching,
       default_threshold: faqConfig.default_threshold,
-      count: faqConfig.faqs.length,
+      count: faqConfig.faqs.length
     });
   } catch (error) {
-    console.error("Get FAQs error:", error);
-    res.status(500).json({ error: "Failed to get FAQs" });
+    console.error('Get FAQs error:', error);
+    res.status(500).json({ error: 'Failed to get FAQs' });
   }
 };
 
@@ -840,28 +840,28 @@ const summarizeConversation = async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.conversationId,
-      agent: req.params.agentId,
+      agent: req.params.agentId
     });
 
     if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
+      return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    const agent = await Agent.findById(req.params.agentId).populate("api_key");
+    const agent = await Agent.findById(req.params.agentId).populate('api_key');
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     // Check if summarization is needed
     if (!summarizationService.shouldSummarize(conversation)) {
       return res.json({
-        message: "Conversation does not need summarization",
+        message: 'Conversation does not need summarization',
         summary_status: {
           has_summary: !!conversation.conversation_summary,
           messages_count: conversation.messages.length,
           last_summary_index: conversation.metadata.last_summary_index,
-          requires_summarization: conversation.metadata.requires_summarization,
-        },
+          requires_summarization: conversation.metadata.requires_summarization
+        }
       });
     }
 
@@ -872,19 +872,19 @@ const summarizeConversation = async (req, res) => {
     const updatedConversation = await Conversation.findById(conversation._id);
 
     res.json({
-      message: "Conversation summarized successfully",
+      message: 'Conversation summarized successfully',
       summary: updatedConversation.conversation_summary,
       summary_status: {
         has_summary: true,
         messages_count: updatedConversation.messages.length,
         last_summary_index: updatedConversation.metadata.last_summary_index,
         summary_version: updatedConversation.metadata.summary_version,
-        requires_summarization: false,
-      },
+        requires_summarization: false
+      }
     });
   } catch (error) {
-    console.error("Manual summarization error:", error);
-    res.status(500).json({ error: "Failed to summarize conversation" });
+    console.error('Manual summarization error:', error);
+    res.status(500).json({ error: 'Failed to summarize conversation' });
   }
 };
 
@@ -892,13 +892,13 @@ const getConversationSummary = async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.conversationId,
-      agent: req.params.agentId,
+      agent: req.params.agentId
     }).select(
-      "conversation_summary metadata.last_summary_index metadata.summary_version metadata.requires_summarization messages"
+      'conversation_summary metadata.last_summary_index metadata.summary_version metadata.requires_summarization messages'
     );
 
     if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
+      return res.status(404).json({ error: 'Conversation not found' });
     }
 
     const messagesSinceLastSummary =
@@ -906,11 +906,11 @@ const getConversationSummary = async (req, res) => {
       (conversation.metadata.last_summary_index + 1);
     const estimatedTokenSavings = conversation.conversation_summary
       ? summarizationService.estimateTokenSavings(
-          conversation.messages.slice(
-            0,
-            conversation.metadata.last_summary_index + 1
-          )
+        conversation.messages.slice(
+          0,
+          conversation.metadata.last_summary_index + 1
         )
+      )
       : 0;
 
     res.json({
@@ -922,11 +922,11 @@ const getConversationSummary = async (req, res) => {
         last_summary_index: conversation.metadata.last_summary_index,
         summary_version: conversation.metadata.summary_version || 0,
         requires_summarization: conversation.metadata.requires_summarization,
-        estimated_token_savings: estimatedTokenSavings,
-      },
+        estimated_token_savings: estimatedTokenSavings
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch conversation summary" });
+    res.status(500).json({ error: 'Failed to fetch conversation summary' });
   }
 };
 
@@ -937,11 +937,11 @@ const configureQuestionSuggestions = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     const { enabled, count, api_key, model, custom_prompt } = req.body;
@@ -950,13 +950,13 @@ const configureQuestionSuggestions = async (req, res) => {
     if (enabled && (!api_key || !model)) {
       return res.status(400).json({
         error:
-          "API key and model are required when enabling question suggestions",
+          'API key and model are required when enabling question suggestions'
       });
     }
 
     if (count && (count < 1 || count > 5)) {
       return res.status(400).json({
-        error: "Question count must be between 1 and 5",
+        error: 'Question count must be between 1 and 5'
       });
     }
 
@@ -964,39 +964,39 @@ const configureQuestionSuggestions = async (req, res) => {
     if (api_key) {
       const apiKeyObj = await ApiKey.findOne({
         _id: api_key,
-        project: req.params.projectId,
-      }).populate("provider");
+        project: req.params.projectId
+      }).populate('provider');
 
       if (!apiKeyObj) {
         return res
           .status(404)
-          .json({ error: "API key not found in this project" });
+          .json({ error: 'API key not found in this project' });
       }
 
       // Verify the model belongs to the provider
       if (model && !apiKeyObj.provider.models.includes(model)) {
         return res
           .status(400)
-          .json({ error: "Invalid model for selected provider" });
+          .json({ error: 'Invalid model for selected provider' });
       }
     }
 
     const config = {};
-    if (enabled !== undefined) config.enabled = enabled;
-    if (count !== undefined) config.count = count;
-    if (api_key !== undefined) config.api_key = api_key;
-    if (model !== undefined) config.model = model;
-    if (custom_prompt !== undefined) config.custom_prompt = custom_prompt;
+    if (enabled !== undefined) {config.enabled = enabled;}
+    if (count !== undefined) {config.count = count;}
+    if (api_key !== undefined) {config.api_key = api_key;}
+    if (model !== undefined) {config.model = model;}
+    if (custom_prompt !== undefined) {config.custom_prompt = custom_prompt;}
 
     await agent.configureQuestionSuggestions(config);
 
     res.json({
-      message: "Question suggestions configuration updated successfully",
-      configuration: agent.getQuestionSuggestions(),
+      message: 'Question suggestions configuration updated successfully',
+      configuration: agent.getQuestionSuggestions()
     });
   } catch (error) {
-    console.error("Configure question suggestions error:", error);
-    res.status(500).json({ error: "Failed to configure question suggestions" });
+    console.error('Configure question suggestions error:', error);
+    res.status(500).json({ error: 'Failed to configure question suggestions' });
   }
 };
 
@@ -1005,11 +1005,11 @@ const getQuestionSuggestions = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     const config = agent.getQuestionSuggestions();
@@ -1020,15 +1020,15 @@ const getQuestionSuggestions = async (req, res) => {
       count: config.count,
       model: config.model,
       custom_prompt: config.custom_prompt,
-      api_key_configured: !!config.api_key,
+      api_key_configured: !!config.api_key
     };
 
     res.json(sanitizedConfig);
   } catch (error) {
-    console.error("Get question suggestions error:", error);
+    console.error('Get question suggestions error:', error);
     res
       .status(500)
-      .json({ error: "Failed to get question suggestions configuration" });
+      .json({ error: 'Failed to get question suggestions configuration' });
   }
 };
 
@@ -1060,14 +1060,14 @@ const executeChatbotAgentWithSession = async (req, res) => {
       session_info: {
         session_id: req.session._id,
         remaining_interactions: req.remainingInteractions,
-        expires_at: req.session.expires_at,
-      },
+        expires_at: req.session.expires_at
+      }
     });
   } catch (error) {
-    console.error("Session-based chatbot execution error:", error);
+    console.error('Session-based chatbot execution error:', error);
     res.status(500).json({
-      error: error.message || "Failed to execute chatbot agent",
-      code: "EXECUTION_FAILED",
+      error: error.message || 'Failed to execute chatbot agent',
+      code: 'EXECUTION_FAILED'
     });
   }
 };
@@ -1095,14 +1095,14 @@ const executeTaskAgentWithSession = async (req, res) => {
       session_info: {
         session_id: req.session._id,
         remaining_interactions: req.remainingInteractions,
-        expires_at: req.session.expires_at,
-      },
+        expires_at: req.session.expires_at
+      }
     });
   } catch (error) {
-    console.error("Session-based task execution error:", error);
+    console.error('Session-based task execution error:', error);
     res.status(500).json({
-      error: error.message || "Failed to execute task agent",
-      code: "EXECUTION_FAILED",
+      error: error.message || 'Failed to execute task agent',
+      code: 'EXECUTION_FAILED'
     });
   }
 };
@@ -1121,11 +1121,11 @@ const executeChatbotAgentWithApiKey = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     const result = await agentService.executeChatbotAgent(
@@ -1143,18 +1143,18 @@ const executeChatbotAgentWithApiKey = async (req, res) => {
         api_key_id: req.apiKey._id,
         daily_limit_remaining: req.apiKey.restrictions.max_executions_per_day
           ? Math.max(
-              0,
-              req.apiKey.restrictions.max_executions_per_day -
+            0,
+            req.apiKey.restrictions.max_executions_per_day -
                 req.apiKey.usage.executions_today
-            )
-          : null,
-      },
+          )
+          : null
+      }
     });
   } catch (error) {
-    console.error("API key-based chatbot execution error:", error);
+    console.error('API key-based chatbot execution error:', error);
     res.status(500).json({
-      error: error.message || "Failed to execute chatbot agent",
-      code: "EXECUTION_FAILED",
+      error: error.message || 'Failed to execute chatbot agent',
+      code: 'EXECUTION_FAILED'
     });
   }
 };
@@ -1167,22 +1167,22 @@ const getAgentForApiKey = async (req, res) => {
     const agent = await Agent.findOne({
       _id: req.params.agentId,
       project: req.params.projectId,
-      organization: req.params.orgId,
+      organization: req.params.orgId
     })
       .select(
-        "name description type system_prompt tools config version is_active"
+        'name description type system_prompt tools config version is_active'
       )
-      .populate("api_key", "name provider")
+      .populate('api_key', 'name provider')
       .populate({
-        path: "api_key",
+        path: 'api_key',
         populate: {
-          path: "provider",
-          select: "name",
-        },
+          path: 'provider',
+          select: 'name'
+        }
       });
 
     if (!agent) {
-      return res.status(404).json({ error: "Agent not found" });
+      return res.status(404).json({ error: 'Agent not found' });
     }
 
     // Don't expose sensitive configuration details for external access
@@ -1196,24 +1196,24 @@ const getAgentForApiKey = async (req, res) => {
       tools: agent.tools.map((tool) => ({
         name: tool.name,
         description: tool.description,
-        enabled: tool.enabled,
+        enabled: tool.enabled
       })),
       // Don't expose system_prompt or detailed config
       api_key: agent.api_key
         ? {
-            name: agent.api_key.name,
-            provider: agent.api_key.provider?.name,
-          }
-        : null,
+          name: agent.api_key.name,
+          provider: agent.api_key.provider?.name
+        }
+        : null
     };
 
     res.json({
       success: true,
-      data: sanitizedAgent,
+      data: sanitizedAgent
     });
   } catch (error) {
-    console.error("Get agent for API key error:", error);
-    res.status(500).json({ error: "Failed to fetch agent" });
+    console.error('Get agent for API key error:', error);
+    res.status(500).json({ error: 'Failed to fetch agent' });
   }
 };
 
@@ -1225,9 +1225,9 @@ const getAgentsForApiKey = async (req, res) => {
     const agents = await Agent.find({
       project: req.params.projectId,
       organization: req.params.orgId,
-      is_active: true,
+      is_active: true
     })
-      .select("name description type version is_active")
+      .select('name description type version is_active')
       .sort({ name: 1 });
 
     const sanitizedAgents = agents.map((agent) => ({
@@ -1236,16 +1236,16 @@ const getAgentsForApiKey = async (req, res) => {
       description: agent.description,
       type: agent.type,
       version: agent.version,
-      is_active: agent.is_active,
+      is_active: agent.is_active
     }));
 
     res.json({
       success: true,
-      data: sanitizedAgents,
+      data: sanitizedAgents
     });
   } catch (error) {
-    console.error("Get agents for API key error:", error);
-    res.status(500).json({ error: "Failed to fetch agents" });
+    console.error('Get agents for API key error:', error);
+    res.status(500).json({ error: 'Failed to fetch agents' });
   }
 };
 
@@ -1274,5 +1274,5 @@ module.exports = {
   executeTaskAgentWithSession,
   executeChatbotAgentWithApiKey,
   getAgentForApiKey,
-  getAgentsForApiKey,
+  getAgentsForApiKey
 };

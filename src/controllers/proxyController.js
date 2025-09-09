@@ -1,9 +1,9 @@
-const Prompt = require("../models/Prompt");
-const APIKey = require("../models/ApiKey");
-const PromptExecution = require("../models/PromptExecution");
-const OpenAIService = require("../services/openaiService");
-const cacheService = require("../services/cacheService");
-const Mustache = require("mustache");
+const Prompt = require('../models/Prompt');
+const APIKey = require('../models/ApiKey');
+const PromptExecution = require('../models/PromptExecution');
+const OpenAIService = require('../services/openaiService');
+const cacheService = require('../services/cacheService');
+const Mustache = require('mustache');
 
 const testPrompt = async (req, res) => {
   try {
@@ -12,28 +12,28 @@ const testPrompt = async (req, res) => {
       req.body;
 
     if (!content) {
-      return res.status(400).json({ error: "Prompt content is required" });
+      return res.status(400).json({ error: 'Prompt content is required' });
     }
 
     if (!api_key_id) {
-      return res.status(400).json({ error: "API key ID is required" });
+      return res.status(400).json({ error: 'API key ID is required' });
     }
 
     if (!llm_settings || !llm_settings.model) {
       return res
         .status(400)
-        .json({ error: "LLM settings with model required" });
+        .json({ error: 'LLM settings with model required' });
     }
 
     // Fetch API key from database
-    const apiKey = await APIKey.findById(api_key_id).populate("provider");
+    const apiKey = await APIKey.findById(api_key_id).populate('provider');
 
     if (!apiKey) {
-      return res.status(404).json({ error: "API key not found" });
+      return res.status(404).json({ error: 'API key not found' });
     }
 
     if (!apiKey.is_active) {
-      return res.status(400).json({ error: "API key is not active" });
+      return res.status(400).json({ error: 'API key is not active' });
     }
 
     // Get decrypted API key
@@ -41,19 +41,19 @@ const testPrompt = async (req, res) => {
     try {
       decryptedKey = apiKey.getDecryptedKey();
     } catch (error) {
-      return res.status(500).json({ error: "Failed to decrypt API key" });
+      return res.status(500).json({ error: 'Failed to decrypt API key' });
     }
 
     // Validate provider
     const supportedProviders = [
-      "openai",
-      "deepseek",
-      "openrouter",
-      "anthropic",
-      "google",
+      'openai',
+      'deepseek',
+      'openrouter',
+      'anthropic',
+      'google'
     ];
     if (!supportedProviders.includes(apiKey.provider.name)) {
-      return res.status(400).json({ error: "Unsupported provider" });
+      return res.status(400).json({ error: 'Unsupported provider' });
     }
 
     // Mustache render
@@ -65,11 +65,11 @@ const testPrompt = async (req, res) => {
     // No caching -- always live
     let result;
     if (
-      apiKey.provider.name === "openai" ||
-      apiKey.provider.name === "deepseek" ||
-      apiKey.provider.name === "openrouter" ||
-      apiKey.provider.name === "anthropic" ||
-      apiKey.provider.name === "google"
+      apiKey.provider.name === 'openai' ||
+      apiKey.provider.name === 'deepseek' ||
+      apiKey.provider.name === 'openrouter' ||
+      apiKey.provider.name === 'anthropic' ||
+      apiKey.provider.name === 'google'
     ) {
       const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
       result = await openai.generateCompletion(
@@ -85,13 +85,13 @@ const testPrompt = async (req, res) => {
       result: result.content,
       usage: result.usage,
       finish_reason: result.finish_reason,
-      cached: false, // always false for tests
+      cached: false // always false for tests
     });
   } catch (error) {
-    console.error("Proxy test prompt error:", error);
+    console.error('Proxy test prompt error:', error);
     res
       .status(500)
-      .json({ error: "Failed to test prompt", details: error.message });
+      .json({ error: 'Failed to test prompt', details: error.message });
   }
 };
 
@@ -102,26 +102,26 @@ const executePrompt = async (req, res) => {
     // Find prompt by name in the project
     const prompt = await Prompt.findOne({
       project: req.params.projectId,
-      name: req.params.promptName,
+      name: req.params.promptName
     }).populate({
-      path: "api_key",
+      path: 'api_key',
       populate: {
-        path: "provider",
-      },
+        path: 'provider'
+      }
     });
 
     if (!prompt) {
-      return res.status(404).json({ error: "Prompt not found" });
+      return res.status(404).json({ error: 'Prompt not found' });
     }
 
     if (!prompt.content) {
-      return res.status(400).json({ error: "Prompt content not configured" });
+      return res.status(400).json({ error: 'Prompt content not configured' });
     }
 
     if (!prompt.api_key) {
       return res
         .status(400)
-        .json({ error: "No API key configured for this prompt" });
+        .json({ error: 'No API key configured for this prompt' });
     }
 
     // Get decrypted API key
@@ -129,13 +129,13 @@ const executePrompt = async (req, res) => {
     try {
       decryptedApiKey = prompt.api_key.getDecryptedKey();
     } catch (error) {
-      return res.status(500).json({ error: "Failed to decrypt API key" });
+      return res.status(500).json({ error: 'Failed to decrypt API key' });
     }
 
     // Verify provider is supported
-    const supportedProviders = ["openai", "deepseek", "openrouter"];
+    const supportedProviders = ['openai', 'deepseek', 'openrouter'];
     if (!supportedProviders.includes(prompt.api_key.provider.name)) {
-      return res.status(400).json({ error: "Unsupported provider" });
+      return res.status(400).json({ error: 'Unsupported provider' });
     }
 
     // Replace variables in prompt template
@@ -168,14 +168,14 @@ const executePrompt = async (req, res) => {
         content: cached.result,
         finish_reason: cached.metadata.finish_reason,
         usage: cached.usage,
-        cached: true,
+        cached: true
       };
     } else {
       // Execute the prompt
       if (
-        prompt.api_key.provider.name == "openai" ||
-        prompt.api_key.provider.name == "deepseek" ||
-        prompt.api_key.provider.name == "openrouter"
+        prompt.api_key.provider.name == 'openai' ||
+        prompt.api_key.provider.name == 'deepseek' ||
+        prompt.api_key.provider.name == 'openrouter'
       ) {
         const openai = new OpenAIService(
           decryptedApiKey,
@@ -197,7 +197,7 @@ const executePrompt = async (req, res) => {
         result.usage,
         {
           model: prompt.llm_settings.model,
-          finish_reason: result.finish_reason,
+          finish_reason: result.finish_reason
         }
       );
     }
@@ -207,7 +207,7 @@ const executePrompt = async (req, res) => {
         content: cached.result,
         finish_reason: cached.metadata.finish_reason,
         usage: cached.usage,
-        cached: true,
+        cached: true
       };
 
       executionRecord = new PromptExecution({
@@ -216,13 +216,13 @@ const executePrompt = async (req, res) => {
         api_key: prompt.api_key._id,
         metadata: {
           model: prompt.llm_settings.model,
-          finish_reason: result.finish_reason,
+          finish_reason: result.finish_reason
         },
-        status: "cached",
+        status: 'cached',
         usage: {
           ...result.usage,
-          cost: 0, // Set cost to 0 for cached results
-        },
+          cost: 0 // Set cost to 0 for cached results
+        }
       });
     } else {
       executionRecord = new PromptExecution({
@@ -231,10 +231,10 @@ const executePrompt = async (req, res) => {
         api_key: prompt.api_key._id,
         metadata: {
           model: prompt.llm_settings.model,
-          finish_reason: result.finish_reason,
+          finish_reason: result.finish_reason
         },
-        status: "success",
-        usage: result.usage,
+        status: 'success',
+        usage: result.usage
       });
     }
 
@@ -244,17 +244,17 @@ const executePrompt = async (req, res) => {
     if (!result.cached) {
       await APIKey.findByIdAndUpdate(prompt.api_key._id, {
         $inc: {
-          "usage.total_tokens": result.usage.total_tokens,
-          "usage.total_cost": result.usage.cost,
+          'usage.total_tokens': result.usage.total_tokens,
+          'usage.total_cost': result.usage.cost
         },
         $push: {
-          "usage.usage_by_model": {
+          'usage.usage_by_model': {
             model: prompt.llm_settings.model,
             input_tokens: result.usage.prompt_tokens,
             output_tokens: result.usage.completion_tokens,
-            cost: result.usage.cost,
-          },
-        },
+            cost: result.usage.cost
+          }
+        }
       });
     }
 
@@ -262,20 +262,20 @@ const executePrompt = async (req, res) => {
       execution_id: executionRecord._id,
       result: result.content,
       usage: result.usage,
-      cached: result.cached || false,
+      cached: result.cached || false
     });
   } catch (error) {
     if (executionRecord) {
-      executionRecord.status = "error";
+      executionRecord.status = 'error';
       executionRecord.error = {
         message: error.message,
-        code: error.code,
+        code: error.code
       };
       await executionRecord.save();
     }
 
-    console.error("Proxy execution error:", error);
-    res.status(500).json({ error: "Failed to execute prompt" });
+    console.error('Proxy execution error:', error);
+    res.status(500).json({ error: 'Failed to execute prompt' });
   }
 };
 
@@ -287,7 +287,7 @@ const getPromptExecutions = async (req, res) => {
     const [executions, total] = await Promise.all([
       PromptExecution.find({
         prompt: req.params.promptId,
-        project: req.params.projectId,
+        project: req.params.projectId
       })
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -295,18 +295,18 @@ const getPromptExecutions = async (req, res) => {
 
       PromptExecution.countDocuments({
         prompt: req.params.promptId,
-        project: req.params.projectId,
-      }),
+        project: req.params.projectId
+      })
     ]);
 
     res.json({
       total,
       page: parseInt(page),
       limit: parseInt(limit),
-      executions,
+      executions
     });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch execution history" });
+    res.status(500).json({ error: 'Failed to fetch execution history' });
   }
 };
 
@@ -324,32 +324,32 @@ const executePromptWithApiKey = async (req, res) => {
     // Find prompt by name in the project
     const prompt = await Prompt.findOne({
       project: req.params.projectId,
-      name: req.params.promptName,
+      name: req.params.promptName
     }).populate({
-      path: "api_key",
+      path: 'api_key',
       populate: {
-        path: "provider",
-      },
+        path: 'provider'
+      }
     });
 
     if (!prompt) {
       return res.status(404).json({
-        error: "Prompt not found",
-        code: "PROMPT_NOT_FOUND",
+        error: 'Prompt not found',
+        code: 'PROMPT_NOT_FOUND'
       });
     }
 
     if (!prompt.content) {
       return res.status(400).json({
-        error: "Prompt content not configured",
-        code: "PROMPT_NOT_CONFIGURED",
+        error: 'Prompt content not configured',
+        code: 'PROMPT_NOT_CONFIGURED'
       });
     }
 
     if (!prompt.api_key) {
       return res.status(400).json({
-        error: "No API key configured for this prompt",
-        code: "PROMPT_API_KEY_NOT_CONFIGURED",
+        error: 'No API key configured for this prompt',
+        code: 'PROMPT_API_KEY_NOT_CONFIGURED'
       });
     }
 
@@ -359,23 +359,23 @@ const executePromptWithApiKey = async (req, res) => {
       decryptedApiKey = prompt.api_key.getDecryptedKey();
     } catch (error) {
       return res.status(500).json({
-        error: "Failed to decrypt API key",
-        code: "DECRYPTION_FAILED",
+        error: 'Failed to decrypt API key',
+        code: 'DECRYPTION_FAILED'
       });
     }
 
     // Verify provider is supported
     const supportedProviders = [
-      "openai",
-      "deepseek",
-      "openrouter",
-      "anthropic",
-      "google",
+      'openai',
+      'deepseek',
+      'openrouter',
+      'anthropic',
+      'google'
     ];
     if (!supportedProviders.includes(prompt.api_key.provider.name)) {
       return res.status(400).json({
-        error: "Unsupported provider",
-        code: "UNSUPPORTED_PROVIDER",
+        error: 'Unsupported provider',
+        code: 'UNSUPPORTED_PROVIDER'
       });
     }
 
@@ -386,25 +386,25 @@ const executePromptWithApiKey = async (req, res) => {
       : undefined;
 
     // Check cache first
-    const crypto = require("crypto");
+    const crypto = require('crypto');
     const hash = crypto
-      .createHash("sha256")
+      .createHash('sha256')
       .update(
         processedPrompt +
-          (processedSystemPrompt || "") +
+          (processedSystemPrompt || '') +
           JSON.stringify(prompt.llm_settings)
       )
-      .digest("hex");
+      .digest('hex');
 
     let result;
-    let cached = await cacheService.getCachedResult(hash);
+    const cached = await cacheService.getCachedResult(hash);
 
     if (!cached) {
       // Execute the prompt
       if (
-        prompt.api_key.provider.name == "openai" ||
-        prompt.api_key.provider.name == "deepseek" ||
-        prompt.api_key.provider.name == "openrouter"
+        prompt.api_key.provider.name == 'openai' ||
+        prompt.api_key.provider.name == 'deepseek' ||
+        prompt.api_key.provider.name == 'openrouter'
       ) {
         const openai = new OpenAIService(
           decryptedApiKey,
@@ -426,7 +426,7 @@ const executePromptWithApiKey = async (req, res) => {
         result.usage,
         {
           model: prompt.llm_settings.model,
-          finish_reason: result.finish_reason,
+          finish_reason: result.finish_reason
         }
       );
     } else {
@@ -434,7 +434,7 @@ const executePromptWithApiKey = async (req, res) => {
         content: cached.result,
         finish_reason: cached.metadata.finish_reason,
         usage: cached.usage,
-        cached: true,
+        cached: true
       };
     }
 
@@ -444,17 +444,17 @@ const executePromptWithApiKey = async (req, res) => {
       project: req.params.projectId,
       api_key: prompt.api_key._id,
       user_api_key: req.apiKey._id, // Track which user API key was used
-      status: cached ? "cached" : "success",
+      status: cached ? 'cached' : 'success',
       metadata: {
         model: prompt.llm_settings.model,
         finish_reason: result.finish_reason,
         cached: !!cached,
-        external_execution: true, // Mark as external API execution
+        external_execution: true // Mark as external API execution
       },
       variables: variables || {},
       result: result.content,
       usage: result.usage,
-      hash,
+      hash
     });
 
     await executionRecord.save();
@@ -471,14 +471,14 @@ const executePromptWithApiKey = async (req, res) => {
         cached: !!cached,
         execution_id: executionRecord._id,
         prompt_name: prompt.name,
-        model: prompt.llm_settings.model,
-      },
+        model: prompt.llm_settings.model
+      }
     });
   } catch (error) {
-    console.error("Execute prompt with API key error:", error);
+    console.error('Execute prompt with API key error:', error);
     res.status(500).json({
-      error: "Failed to execute prompt",
-      code: "EXECUTION_FAILED",
+      error: 'Failed to execute prompt',
+      code: 'EXECUTION_FAILED'
     });
   }
 };
@@ -487,5 +487,5 @@ module.exports = {
   executePrompt,
   getPromptExecutions,
   testPrompt,
-  executePromptWithApiKey,
+  executePromptWithApiKey
 };

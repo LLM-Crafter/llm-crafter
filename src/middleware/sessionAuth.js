@@ -1,5 +1,5 @@
-const SessionToken = require("../models/SessionToken");
-const crypto = require("crypto");
+const SessionToken = require('../models/SessionToken');
+const crypto = require('crypto');
 
 /**
  * Middleware to authenticate requests using session tokens
@@ -9,15 +9,15 @@ const sessionAuth = async (req, res, next) => {
   try {
     // Extract session token from headers
     const sessionToken =
-      req.header("X-Session-Token") ||
-      (req.header("Authorization")?.startsWith("Session ")
-        ? req.header("Authorization").replace("Session ", "")
+      req.header('X-Session-Token') ||
+      (req.header('Authorization')?.startsWith('Session ')
+        ? req.header('Authorization').replace('Session ', '')
         : null);
 
     if (!sessionToken) {
       return res.status(401).json({
-        error: "Session token required",
-        code: "SESSION_TOKEN_REQUIRED",
+        error: 'Session token required',
+        code: 'SESSION_TOKEN_REQUIRED'
       });
     }
 
@@ -28,65 +28,65 @@ const sessionAuth = async (req, res, next) => {
     const session = await SessionToken.findOne({
       token_hash: tokenHash,
       is_revoked: false,
-      expires_at: { $gt: new Date() },
+      expires_at: { $gt: new Date() }
     }).populate([
       {
-        path: "user_api_key",
+        path: 'user_api_key',
         populate: {
-          path: "user organization",
-        },
+          path: 'user organization'
+        }
       },
-      "agent",
+      'agent'
     ]);
 
     if (!session) {
       return res.status(401).json({
-        error: "Invalid or expired session token",
-        code: "INVALID_SESSION_TOKEN",
+        error: 'Invalid or expired session token',
+        code: 'INVALID_SESSION_TOKEN'
       });
     }
 
     // Additional validation
     if (!session.isValid()) {
       return res.status(401).json({
-        error: "Session token is no longer valid",
-        code: "SESSION_INVALID",
+        error: 'Session token is no longer valid',
+        code: 'SESSION_INVALID'
       });
     }
 
     // Check interaction limits
     if (!session.canInteract()) {
       return res.status(429).json({
-        error: "Session interaction limit exceeded",
-        code: "INTERACTION_LIMIT_EXCEEDED",
+        error: 'Session interaction limit exceeded',
+        code: 'INTERACTION_LIMIT_EXCEEDED',
         max_interactions: session.max_interactions,
-        interactions_used: session.interactions_used,
+        interactions_used: session.interactions_used
       });
     }
 
     // Validate that the session's API key is still active
     if (!session.user_api_key.is_active) {
       return res.status(401).json({
-        error: "Associated API key is no longer active",
-        code: "API_KEY_INACTIVE",
+        error: 'Associated API key is no longer active',
+        code: 'API_KEY_INACTIVE'
       });
     }
 
     // Check if API key is expired
     if (session.user_api_key.isExpired()) {
       return res.status(401).json({
-        error: "Associated API key has expired",
-        code: "API_KEY_EXPIRED",
+        error: 'Associated API key has expired',
+        code: 'API_KEY_EXPIRED'
       });
     }
 
     // Optional: Validate IP consistency (if enabled)
-    if (process.env.ENFORCE_SESSION_IP_CONSISTENCY === "true") {
+    if (process.env.ENFORCE_SESSION_IP_CONSISTENCY === 'true') {
       const currentIP = req.ip || req.connection.remoteAddress;
       if (session.client_ip && session.client_ip !== currentIP) {
         return res.status(403).json({
-          error: "IP address mismatch",
-          code: "IP_MISMATCH",
+          error: 'IP address mismatch',
+          code: 'IP_MISMATCH'
         });
       }
     }
@@ -104,18 +104,18 @@ const sessionAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Session authentication error:", error);
+    console.error('Session authentication error:', error);
 
-    if (error.message === "Session interaction limit exceeded") {
+    if (error.message === 'Session interaction limit exceeded') {
       return res.status(429).json({
         error: error.message,
-        code: "INTERACTION_LIMIT_EXCEEDED",
+        code: 'INTERACTION_LIMIT_EXCEEDED'
       });
     }
 
     res.status(401).json({
-      error: "Session authentication failed",
-      code: "SESSION_AUTH_FAILED",
+      error: 'Session authentication failed',
+      code: 'SESSION_AUTH_FAILED'
     });
   }
 };
@@ -128,13 +128,13 @@ const flexibleSessionAuth = (options = {}) => {
   const {
     allowSessionToken = true,
     allowApiKey = true,
-    requiredScopes = [],
+    requiredScopes = []
   } = options;
 
   return async (req, res, next) => {
-    const sessionTokenHeader = req.header("X-Session-Token");
-    const authHeader = req.header("Authorization");
-    const apiKeyHeader = req.header("X-API-Key");
+    const sessionTokenHeader = req.header('X-Session-Token');
+    const authHeader = req.header('Authorization');
+    const apiKeyHeader = req.header('X-API-Key');
 
     // Try session token first if provided
     if (allowSessionToken && sessionTokenHeader) {
@@ -142,29 +142,29 @@ const flexibleSessionAuth = (options = {}) => {
     }
 
     // Try session token in Authorization header
-    if (allowSessionToken && authHeader?.startsWith("Session ")) {
+    if (allowSessionToken && authHeader?.startsWith('Session ')) {
       return sessionAuth(req, res, next);
     }
 
     // Try API key if provided and no session token
-    if (allowApiKey && (apiKeyHeader || authHeader?.startsWith("Bearer "))) {
-      const { apiKeyAuth } = require("./apiKeyAuth");
+    if (allowApiKey && (apiKeyHeader || authHeader?.startsWith('Bearer '))) {
+      const { apiKeyAuth } = require('./apiKeyAuth');
       return apiKeyAuth(requiredScopes)(req, res, next);
     }
 
     return res.status(401).json({
-      error: "Authentication required",
-      code: "AUTH_REQUIRED",
+      error: 'Authentication required',
+      code: 'AUTH_REQUIRED',
       accepted_methods: [
         ...(allowSessionToken
           ? [
-              "Session Token (X-Session-Token: <token> or Authorization: Session <token>)",
-            ]
+            'Session Token (X-Session-Token: <token> or Authorization: Session <token>)'
+          ]
           : []),
         ...(allowApiKey
-          ? ["API Key (X-API-Key: <key> or Authorization: Bearer <key>)"]
-          : []),
-      ],
+          ? ['API Key (X-API-Key: <key> or Authorization: Bearer <key>)']
+          : [])
+      ]
     });
   };
 };
@@ -178,15 +178,15 @@ const validateSessionAgent = (req, res, next) => {
 
   if (!req.session) {
     return res.status(401).json({
-      error: "Session authentication required",
-      code: "SESSION_REQUIRED",
+      error: 'Session authentication required',
+      code: 'SESSION_REQUIRED'
     });
   }
 
   if (req.session.agent._id.toString() !== agentIdFromUrl) {
     return res.status(403).json({
-      error: "Session is not authorized for this agent",
-      code: "AGENT_MISMATCH",
+      error: 'Session is not authorized for this agent',
+      code: 'AGENT_MISMATCH'
     });
   }
 
@@ -196,5 +196,5 @@ const validateSessionAgent = (req, res, next) => {
 module.exports = {
   sessionAuth,
   flexibleSessionAuth,
-  validateSessionAgent,
+  validateSessionAgent
 };

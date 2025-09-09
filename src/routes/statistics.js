@@ -1,9 +1,9 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const auth = require("../middleware/auth");
-const orgAuth = require("../middleware/organizationAuth");
-const statisticsController = require("../controllers/statisticsController");
-const { generalLimiter } = require("../middleware/rateLimiting");
+const auth = require('../middleware/auth');
+const orgAuth = require('../middleware/organizationAuth');
+const statisticsController = require('../controllers/statisticsController');
+const { generalLimiter } = require('../middleware/rateLimiting');
 
 /**
  * @route GET /api/v1/organizations/:orgId/statistics/dashboard
@@ -12,7 +12,7 @@ const { generalLimiter } = require("../middleware/rateLimiting");
  * @query {string} period - Time period: '1d', '1w', '1m' (default: '1d')
  */
 router.get(
-  "/:orgId/statistics/dashboard",
+  '/:orgId/statistics/dashboard',
   generalLimiter, // Rate limit: 100 requests per 15 minutes
   auth,
   orgAuth.isMember,
@@ -26,7 +26,7 @@ router.get(
  * @query {string} period - Time period: '1d', '1w', '1m' (default: '1d')
  */
 router.get(
-  "/:orgId/statistics/agents/:agentId",
+  '/:orgId/statistics/agents/:agentId',
   generalLimiter, // Rate limit: 100 requests per 15 minutes
   auth,
   orgAuth.isMember,
