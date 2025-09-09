@@ -310,8 +310,181 @@ const getPromptExecutions = async (req, res) => {
   }
 };
 
+/**
+ * Execute a prompt using API key authentication
+ * This is for external API access
+ */
+const executePromptWithApiKey = async (req, res) => {
+  try {
+    const { variables } = req.body;
+
+    // req.apiKey is populated by apiKeyAuth middleware
+    // req.user is the user associated with the API key
+
+    // Find prompt by name in the project
+    const prompt = await Prompt.findOne({
+      project: req.params.projectId,
+      name: req.params.promptName,
+    }).populate({
+      path: "api_key",
+      populate: {
+        path: "provider",
+      },
+    });
+
+    if (!prompt) {
+      return res.status(404).json({
+        error: "Prompt not found",
+        code: "PROMPT_NOT_FOUND",
+      });
+    }
+
+    if (!prompt.content) {
+      return res.status(400).json({
+        error: "Prompt content not configured",
+        code: "PROMPT_NOT_CONFIGURED",
+      });
+    }
+
+    if (!prompt.api_key) {
+      return res.status(400).json({
+        error: "No API key configured for this prompt",
+        code: "PROMPT_API_KEY_NOT_CONFIGURED",
+      });
+    }
+
+    // Get decrypted API key
+    let decryptedApiKey;
+    try {
+      decryptedApiKey = prompt.api_key.getDecryptedKey();
+    } catch (error) {
+      return res.status(500).json({
+        error: "Failed to decrypt API key",
+        code: "DECRYPTION_FAILED",
+      });
+    }
+
+    // Verify provider is supported
+    const supportedProviders = [
+      "openai",
+      "deepseek",
+      "openrouter",
+      "anthropic",
+      "google",
+    ];
+    if (!supportedProviders.includes(prompt.api_key.provider.name)) {
+      return res.status(400).json({
+        error: "Unsupported provider",
+        code: "UNSUPPORTED_PROVIDER",
+      });
+    }
+
+    // Process the prompt with variables
+    const processedPrompt = Mustache.render(prompt.content, variables || {});
+    const processedSystemPrompt = prompt.system_prompt
+      ? Mustache.render(prompt.system_prompt, variables || {})
+      : undefined;
+
+    // Check cache first
+    const crypto = require("crypto");
+    const hash = crypto
+      .createHash("sha256")
+      .update(
+        processedPrompt +
+          (processedSystemPrompt || "") +
+          JSON.stringify(prompt.llm_settings)
+      )
+      .digest("hex");
+
+    let result;
+    let cached = await cacheService.getCachedResult(hash);
+
+    if (!cached) {
+      // Execute the prompt
+      if (
+        prompt.api_key.provider.name == "openai" ||
+        prompt.api_key.provider.name == "deepseek" ||
+        prompt.api_key.provider.name == "openrouter"
+      ) {
+        const openai = new OpenAIService(
+          decryptedApiKey,
+          prompt.api_key.provider.name
+        );
+        result = await openai.generateCompletion(
+          prompt.llm_settings.model,
+          processedPrompt,
+          prompt.llm_settings.parameters,
+          processedSystemPrompt
+        );
+      }
+
+      // Cache the result
+      await cacheService.cacheResult(
+        hash,
+        prompt._id,
+        result.content,
+        result.usage,
+        {
+          model: prompt.llm_settings.model,
+          finish_reason: result.finish_reason,
+        }
+      );
+    } else {
+      result = {
+        content: cached.result,
+        finish_reason: cached.metadata.finish_reason,
+        usage: cached.usage,
+        cached: true,
+      };
+    }
+
+    // Create execution record
+    const executionRecord = new PromptExecution({
+      prompt: prompt._id,
+      project: req.params.projectId,
+      api_key: prompt.api_key._id,
+      user_api_key: req.apiKey._id, // Track which user API key was used
+      metadata: {
+        model: prompt.llm_settings.model,
+        finish_reason: result.finish_reason,
+        cached: !!cached,
+        external_execution: true, // Mark as external API execution
+      },
+      variables: variables || {},
+      result: result.content,
+      usage: result.usage,
+      hash,
+    });
+
+    await executionRecord.save();
+
+    // Update API key usage statistics
+    await req.apiKey.updateUsage();
+
+    // Return the result
+    res.json({
+      success: true,
+      data: {
+        result: result.content,
+        usage: result.usage,
+        cached: !!cached,
+        execution_id: executionRecord._id,
+        prompt_name: prompt.name,
+        model: prompt.llm_settings.model,
+      },
+    });
+  } catch (error) {
+    console.error("Execute prompt with API key error:", error);
+    res.status(500).json({
+      error: "Failed to execute prompt",
+      code: "EXECUTION_FAILED",
+    });
+  }
+};
+
 module.exports = {
   executePrompt,
   getPromptExecutions,
   testPrompt,
+  executePromptWithApiKey,
 };

@@ -20,6 +20,8 @@ const providerRoutes = require("./routes/providers");
 const proxyRoutes = require("./routes/proxy");
 const toolRoutes = require("./routes/tools");
 const statisticsRoutes = require("./routes/statistics");
+const sessionRoutes = require("./routes/sessions");
+const externalRoutes = require("./routes/external");
 
 // Middleware
 app.use(helmet());
@@ -34,6 +36,8 @@ app.use("/api/v1/organizations", statisticsRoutes);
 app.use("/api/v1/providers", providerRoutes);
 app.use("/api/v1/proxy", proxyRoutes);
 app.use("/api/v1/tools", toolRoutes);
+app.use("/api/v1/sessions", sessionRoutes);
+app.use("/api/v1/external", externalRoutes);
 
 // Connect to database
 connectDB();

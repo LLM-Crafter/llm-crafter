@@ -15,8 +15,10 @@ const {
 const promptRoutes = require("./prompts");
 const apiKeyRoutes = require("./apiKeys");
 const agentRoutes = require("./agents");
+const userApiKeyRoutes = require("./userApiKeys");
 router.use("/:orgId/projects/:projectId/api-keys", apiKeyRoutes);
 router.use("/:orgId/projects/:projectId/agents", agentRoutes);
+router.use("/:orgId/user-api-keys", userApiKeyRoutes);
 
 // Organization validation
 const organizationValidation = [

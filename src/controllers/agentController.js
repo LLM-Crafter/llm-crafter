@@ -1032,6 +1032,223 @@ const getQuestionSuggestions = async (req, res) => {
   }
 };
 
+// ===== EXTERNAL API EXECUTION METHODS =====
+
+/**
+ * Execute chatbot agent using session token (for external API access)
+ */
+const executeChatbotAgentWithSession = async (req, res) => {
+  try {
+    const { message, conversationId, userIdentifier, dynamicContext } =
+      req.body;
+
+    // req.session is populated by sessionAuth middleware
+    // req.agent is the agent this session is authorized for
+    // req.remainingInteractions shows how many interactions are left
+
+    const result = await agentService.executeChatbotAgent(
+      req.agent._id,
+      conversationId,
+      message,
+      userIdentifier || `session_${req.session._id}`,
+      dynamicContext
+    );
+
+    // Add session information to the response
+    res.json({
+      ...result,
+      session_info: {
+        session_id: req.session._id,
+        remaining_interactions: req.remainingInteractions,
+        expires_at: req.session.expires_at,
+      },
+    });
+  } catch (error) {
+    console.error("Session-based chatbot execution error:", error);
+    res.status(500).json({
+      error: error.message || "Failed to execute chatbot agent",
+      code: "EXECUTION_FAILED",
+    });
+  }
+};
+
+/**
+ * Execute task agent using session token (for external API access)
+ */
+const executeTaskAgentWithSession = async (req, res) => {
+  try {
+    const { input, context } = req.body;
+
+    // req.session is populated by sessionAuth middleware
+    // req.agent is the agent this session is authorized for
+
+    const result = await agentService.executeTaskAgent(
+      req.agent._id,
+      input,
+      `session_${req.session._id}`,
+      context
+    );
+
+    // Add session information to the response
+    res.json({
+      ...result,
+      session_info: {
+        session_id: req.session._id,
+        remaining_interactions: req.remainingInteractions,
+        expires_at: req.session.expires_at,
+      },
+    });
+  } catch (error) {
+    console.error("Session-based task execution error:", error);
+    res.status(500).json({
+      error: error.message || "Failed to execute task agent",
+      code: "EXECUTION_FAILED",
+    });
+  }
+};
+
+/**
+ * Execute chatbot agent using API key (for simple external access)
+ * This bypasses the session system but requires agents:chat scope
+ */
+const executeChatbotAgentWithApiKey = async (req, res) => {
+  try {
+    const { message, conversationId, userIdentifier, dynamicContext } =
+      req.body;
+
+    // req.apiKey is populated by apiKeyAuth middleware
+    // Validate that the API key can access this agent's project
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    const result = await agentService.executeChatbotAgent(
+      req.params.agentId,
+      conversationId,
+      message,
+      userIdentifier || `apikey_${req.apiKey._id}`,
+      dynamicContext
+    );
+
+    // Add API key usage information to the response
+    res.json({
+      ...result,
+      api_key_info: {
+        api_key_id: req.apiKey._id,
+        daily_limit_remaining: req.apiKey.restrictions.max_executions_per_day
+          ? Math.max(
+              0,
+              req.apiKey.restrictions.max_executions_per_day -
+                req.apiKey.usage.executions_today
+            )
+          : null,
+      },
+    });
+  } catch (error) {
+    console.error("API key-based chatbot execution error:", error);
+    res.status(500).json({
+      error: error.message || "Failed to execute chatbot agent",
+      code: "EXECUTION_FAILED",
+    });
+  }
+};
+
+/**
+ * Get agent information for API key access (read-only)
+ */
+const getAgentForApiKey = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    })
+      .select(
+        "name description type system_prompt tools config version is_active"
+      )
+      .populate("api_key", "name provider")
+      .populate({
+        path: "api_key",
+        populate: {
+          path: "provider",
+          select: "name",
+        },
+      });
+
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    // Don't expose sensitive configuration details for external access
+    const sanitizedAgent = {
+      id: agent._id,
+      name: agent.name,
+      description: agent.description,
+      type: agent.type,
+      version: agent.version,
+      is_active: agent.is_active,
+      tools: agent.tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        enabled: tool.enabled,
+      })),
+      // Don't expose system_prompt or detailed config
+      api_key: agent.api_key
+        ? {
+            name: agent.api_key.name,
+            provider: agent.api_key.provider?.name,
+          }
+        : null,
+    };
+
+    res.json({
+      success: true,
+      data: sanitizedAgent,
+    });
+  } catch (error) {
+    console.error("Get agent for API key error:", error);
+    res.status(500).json({ error: "Failed to fetch agent" });
+  }
+};
+
+/**
+ * List agents accessible via API key
+ */
+const getAgentsForApiKey = async (req, res) => {
+  try {
+    const agents = await Agent.find({
+      project: req.params.projectId,
+      organization: req.params.orgId,
+      is_active: true,
+    })
+      .select("name description type version is_active")
+      .sort({ name: 1 });
+
+    const sanitizedAgents = agents.map((agent) => ({
+      id: agent._id,
+      name: agent.name,
+      description: agent.description,
+      type: agent.type,
+      version: agent.version,
+      is_active: agent.is_active,
+    }));
+
+    res.json({
+      success: true,
+      data: sanitizedAgents,
+    });
+  } catch (error) {
+    console.error("Get agents for API key error:", error);
+    res.status(500).json({ error: "Failed to fetch agents" });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -1052,4 +1269,10 @@ module.exports = {
   getConversationSummary,
   configureQuestionSuggestions,
   getQuestionSuggestions,
+  // New external API methods
+  executeChatbotAgentWithSession,
+  executeTaskAgentWithSession,
+  executeChatbotAgentWithApiKey,
+  getAgentForApiKey,
+  getAgentsForApiKey,
 };
