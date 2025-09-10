@@ -67,7 +67,7 @@ router.post(
   generalLimiter, // Rate limit: 100 requests per 15 minutes
   generalSlowDown, // Progressive delays
   auth,
-  orgAuth.isMember,
+  orgAuth.hasRole('member'),
   projectValidation,
   validate,
   projectController.createProject
