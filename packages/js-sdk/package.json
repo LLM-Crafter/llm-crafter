@@ -1,0 +1,67 @@
+{
+  "name": "@llm-crafter/sdk",
+  "version": "0.1.0",
+  "description": "JavaScript SDK for LLM Crafter API - A simple client library for interacting with LLM Crafter platform",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "browser": "dist/index.umd.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch",
+    "test": "node tests/simple-test.js",
+    "test:watch": "jest --watch",
+    "test:package": "node test-package.js",
+    "pack:test": "npm pack --dry-run",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "prompt-engineering",
+    "sdk",
+    "api-client",
+    "javascript",
+    "typescript"
+  ],
+  "author": "LLM Crafter",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LLM-Crafter/llm-crafter.git",
+    "directory": "packages/js-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/LLM-Crafter/llm-crafter/issues"
+  },
+  "homepage": "https://github.com/LLM-Crafter/llm-crafter/tree/main/packages/js-sdk#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "peerDependencies": {
+    "node-fetch": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "node-fetch": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-json": "^6.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "jest-environment-jsdom": "^29.0.0",
+    "rollup": "^3.0.0"
+  }
+}

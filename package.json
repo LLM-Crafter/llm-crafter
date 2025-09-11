@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "A collaborative platform for managing and executing LLM prompts",
   "main": "src/app.js",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "start": "nodemon src/app.js",
     "dev": "nodemon src/app.js",
@@ -20,7 +23,11 @@
     "verify:api-keys": "node scripts/migrate-encrypt-api-keys.js --verify-only",
     "test:rate-limiting": "node scripts/test-rate-limiting.js",
     "test:password-policy": "node scripts/test-password-policy.js",
-    "test:password-api": "node scripts/test-password-api.js"
+    "test:password-api": "node scripts/test-password-api.js",
+    "sdk:build": "npm run build --workspace=packages/js-sdk",
+    "sdk:test": "npm run test --workspace=packages/js-sdk",
+    "sdk:publish": "npm run publish --workspace=packages/js-sdk",
+    "sdk:dev": "npm run dev --workspace=packages/js-sdk"
   },
   "keywords": [
     "llm",

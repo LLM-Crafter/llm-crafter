@@ -5,6 +5,8 @@
  *
  * @example
  * ```javascript
+ * import { LLMCrafterClient } from '@llm-crafter/sdk';
+ *
  * const client = new LLMCrafterClient('your-api-key', 'https://your-domain.com/api/v1');
  *
  * // Execute a prompt
@@ -18,20 +20,44 @@
  * ```
  */
 
+// Polyfill fetch for Node.js environments
+const fetch = (() => {
+  if (typeof globalThis !== 'undefined' && globalThis.fetch) {
+    return globalThis.fetch;
+  }
+  if (typeof window !== 'undefined' && window.fetch) {
+    return window.fetch;
+  }
+  // For Node.js, require node-fetch if available
+  try {
+    return require('node-fetch');
+  } catch {
+    throw new Error(
+      'fetch is not available. Please install node-fetch: npm install node-fetch'
+    );
+  }
+})();
+
+/**
+ * LLM Crafter API Client
+ */
 class LLMCrafterClient {
   /**
    * Create a new LLM Crafter client
    * @param {string} apiKey - Your API key
    * @param {string} baseUrl - Base URL for the API (e.g., 'https://api.llmcrafter.com/api/v1')
    * @param {Object} options - Additional options
+   * @param {number} [options.timeout=30000] - Request timeout in milliseconds
+   * @param {number} [options.retryAttempts=3] - Number of retry attempts
+   * @param {number} [options.retryDelay=1000] - Delay between retries in milliseconds
    */
   constructor(apiKey, baseUrl, options = {}) {
     if (!apiKey || !baseUrl) {
-      throw new Error("API key and base URL are required");
+      throw new Error('API key and base URL are required');
     }
 
     this.apiKey = apiKey;
-    this.baseUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash
+    this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
     this.timeout = options.timeout || 30000; // 30 second default timeout
     this.retryAttempts = options.retryAttempts || 3;
     this.retryDelay = options.retryDelay || 1000;
@@ -44,16 +70,16 @@ class LLMCrafterClient {
   async _request(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
     const config = {
-      method: options.method || "GET",
+      method: options.method || 'GET',
       headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": this.apiKey,
+        'Content-Type': 'application/json',
+        'X-API-Key': this.apiKey,
         ...options.headers,
       },
       ...options,
     };
 
-    if (config.body && typeof config.body === "object") {
+    if (config.body && typeof config.body === 'object') {
       config.body = JSON.stringify(config.body);
     }
 
@@ -91,7 +117,7 @@ class LLMCrafterClient {
         }
 
         // Wait before retrying
-        await new Promise((resolve) =>
+        await new Promise(resolve =>
           setTimeout(resolve, this.retryDelay * attempt)
         );
       }
@@ -114,7 +140,7 @@ class LLMCrafterClient {
     return this._request(
       `/external/organizations/${orgId}/projects/${projectId}/prompts/${promptName}/execute`,
       {
-        method: "POST",
+        method: 'POST',
         body: { variables },
       }
     );
@@ -131,8 +157,8 @@ class LLMCrafterClient {
    * @returns {Promise<Object>} Session information including token
    */
   async createAgentSession(agentId, options = {}) {
-    return this._request("/sessions", {
-      method: "POST",
+    return this._request('/sessions', {
+      method: 'POST',
       body: {
         agentId,
         maxInteractions: options.maxInteractions || 100,
@@ -146,7 +172,7 @@ class LLMCrafterClient {
    * @returns {Promise<Object>} List of active sessions
    */
   async getSessions() {
-    return this._request("/sessions");
+    return this._request('/sessions');
   }
 
   /**
@@ -165,7 +191,7 @@ class LLMCrafterClient {
    */
   async revokeSession(sessionId) {
     return this._request(`/sessions/${sessionId}`, {
-      method: "DELETE",
+      method: 'DELETE',
     });
   }
 
@@ -174,8 +200,8 @@ class LLMCrafterClient {
    * @returns {Promise<Object>} Revocation confirmation
    */
   async revokeAllSessions() {
-    return this._request("/sessions", {
-      method: "DELETE",
+    return this._request('/sessions', {
+      method: 'DELETE',
     });
   }
 
@@ -197,10 +223,10 @@ class LLMCrafterClient {
     userIdentifier = null,
     dynamicContext = {}
   ) {
-    return this._request("/external/agents/chat", {
-      method: "POST",
+    return this._request('/external/agents/chat', {
+      method: 'POST',
       headers: {
-        "X-Session-Token": sessionToken,
+        'X-Session-Token': sessionToken,
       },
       body: {
         message,
@@ -219,10 +245,10 @@ class LLMCrafterClient {
    * @returns {Promise<Object>} Agent response
    */
   async executeTaskAgent(sessionToken, input, context = {}) {
-    return this._request("/external/agents/execute", {
-      method: "POST",
+    return this._request('/external/agents/execute', {
+      method: 'POST',
       headers: {
-        "X-Session-Token": sessionToken,
+        'X-Session-Token': sessionToken,
       },
       body: {
         input,
@@ -254,7 +280,7 @@ class LLMCrafterClient {
     return this._request(
       `/external/organizations/${orgId}/projects/${projectId}/agents/${agentId}/chat`,
       {
-        method: "POST",
+        method: 'POST',
         body: {
           message,
           conversationId,
@@ -318,7 +344,7 @@ class LLMCrafterClient {
    * @returns {Promise<Object>} Usage statistics
    */
   async getUsage() {
-    return this._request("/external/usage/api-key");
+    return this._request('/external/usage/api-key');
   }
 
   // ===== CONVENIENCE METHODS =====
@@ -352,7 +378,7 @@ class LLMCrafterClient {
       const usage = await this.getUsage();
       return {
         success: true,
-        message: "API key is valid and working",
+        message: 'API key is valid and working',
         usage: usage.data,
       };
     } catch (error) {
@@ -365,47 +391,13 @@ class LLMCrafterClient {
   }
 }
 
-// Export for different environments
-if (typeof module !== "undefined" && module.exports) {
-  // Node.js
+// Export for different module systems
+export { LLMCrafterClient };
+export default LLMCrafterClient;
+
+// CommonJS fallback
+if (typeof module !== 'undefined' && module.exports) {
   module.exports = LLMCrafterClient;
-} else if (typeof window !== "undefined") {
-  // Browser
-  window.LLMCrafterClient = LLMCrafterClient;
+  module.exports.LLMCrafterClient = LLMCrafterClient;
+  module.exports.default = LLMCrafterClient;
 }
-
-// Example usage for documentation
-const EXAMPLE_USAGE = `
-// Initialize client
-const client = new LLMCrafterClient('your-api-key', 'https://api.llmcrafter.com/api/v1');
-
-// Test connection
-const connectionTest = await client.testConnection();
-console.log(connectionTest.success ? 'Connected!' : 'Connection failed');
-
-// Execute a prompt
-const promptResult = await client.executePrompt('org_123', 'proj_456', 'greeting', {
-  name: 'John',
-  language: 'English'
-});
-console.log('Prompt result:', promptResult.data.result);
-
-// Agent chat with session (recommended for chatbots)
-const agentChat = await client.startAgentChat('agent_789', 'Hello, how are you?');
-console.log('Agent response:', agentChat.response.data.response);
-
-// Continue the conversation
-const followUp = await client.chatWithAgent(
-  agentChat.session.session_token, 
-  'Can you help me with something?',
-  agentChat.response.data.conversation_id
-);
-console.log('Follow-up response:', followUp.data.response);
-
-// Direct agent chat (simpler, but requires agents:chat scope)
-const directChat = await client.chatWithAgentDirect(
-  'org_123', 'proj_456', 'agent_789', 
-  'Quick question!'
-);
-console.log('Direct chat response:', directChat.data.response);
-`;
