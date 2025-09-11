@@ -16,7 +16,6 @@ RUN npm ci --only=production && npm cache clean --force
 
 # Copy application source code
 COPY src/ ./src/
-COPY sdk/ ./sdk/
 
 # Create necessary directories and set permissions
 RUN mkdir -p /app/logs && \
