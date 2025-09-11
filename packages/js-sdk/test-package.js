@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { LLMCrafterClient } from './dist/index.esm.js';
+import { LLMCrafterClient } from './dist/index.js';
 
 console.log('🧪 Testing built SDK package...\n');
 

@@ -394,10 +394,3 @@ class LLMCrafterClient {
 // Export for different module systems
 export { LLMCrafterClient };
 export default LLMCrafterClient;
-
-// CommonJS fallback
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = LLMCrafterClient;
-  module.exports.LLMCrafterClient = LLMCrafterClient;
-  module.exports.default = LLMCrafterClient;
-}

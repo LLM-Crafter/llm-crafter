@@ -3,10 +3,18 @@
   "version": "0.1.0",
   "description": "JavaScript SDK for LLM Crafter API - A simple client library for interacting with LLM Crafter platform",
   "type": "module",
-  "main": "dist/index.js",
-  "module": "dist/index.esm.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "browser": "dist/index.umd.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "browser": "./dist/index.umd.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
     "dist/",
     "README.md",

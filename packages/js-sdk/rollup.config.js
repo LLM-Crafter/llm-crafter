@@ -19,23 +19,23 @@ const baseConfig = {
 };
 
 export default [
-  // CommonJS build
+  // ES Module build (main export)
   {
     ...baseConfig,
     output: {
       file: 'dist/index.js',
-      format: 'cjs',
-      exports: 'named',
+      format: 'esm',
     },
     plugins: [...baseConfig.plugins, isProduction && terser()].filter(Boolean),
   },
 
-  // ES Module build
+  // CommonJS build
   {
     ...baseConfig,
     output: {
-      file: 'dist/index.esm.js',
-      format: 'esm',
+      file: 'dist/index.cjs',
+      format: 'cjs',
+      exports: 'named',
     },
     plugins: [...baseConfig.plugins, isProduction && terser()].filter(Boolean),
   },
