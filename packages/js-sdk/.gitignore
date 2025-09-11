@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+*.lock
+package-lock.json
+yarn.lock
+
+# Build outputs (uncomment dist/ if you want to ignore built files)
+# dist/
+coverage/
+.nyc_output/
+*.tgz
+
+# Development and testing files
+test-package.js
+
+# Development cache
+.eslintcache
+.rollup.cache/
+
+# Test results
+junit.xml
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+.tmp/
+.temp/
