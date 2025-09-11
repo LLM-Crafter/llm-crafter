@@ -3,18 +3,10 @@
   "preset": null,
   "transform": {},
   "testTimeout": 10000,
-  "collectCoverageFrom": [
-    "src/**/*.js"
-  ],
+  "collectCoverageFrom": ["src/**/*.js"],
   "coverageDirectory": "coverage",
-  "coverageReporters": [
-    "text",
-    "lcov",
-    "html"
-  ],
-  "testMatch": [
-    "**/tests/**/*.test.js"
-  ],
+  "coverageReporters": ["text", "lcov", "html"],
+  "testMatch": ["**/tests/**/*.test.js"],
   "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
   "verbose": true
 }

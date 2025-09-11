@@ -7,14 +7,14 @@ const config = {
   baseUrl: process.env.LLM_CRAFTER_BASE_URL || 'https://your-domain.com/api/v1',
   orgId: process.env.LLM_CRAFTER_ORG_ID || 'your-org-id',
   projectId: process.env.LLM_CRAFTER_PROJECT_ID || 'your-project-id',
-  agentId: process.env.LLM_CRAFTER_AGENT_ID || 'your-agent-id'
+  agentId: process.env.LLM_CRAFTER_AGENT_ID || 'your-agent-id',
 };
 
 async function advancedExample() {
   const client = new LLMCrafterClient(config.apiKey, config.baseUrl, {
-    timeout: 45000,     // 45 second timeout
-    retryAttempts: 5,   // 5 retry attempts
-    retryDelay: 2000    // 2 second delay between retries
+    timeout: 45000, // 45 second timeout
+    retryAttempts: 5, // 5 retry attempts
+    retryDelay: 2000, // 2 second delay between retries
   });
 
   try {
@@ -36,11 +36,11 @@ async function advancedExample() {
     // Create multiple sessions for different conversations
     console.log('\n💬 Creating multiple chat sessions...');
     const sessions = [];
-    
+
     for (let i = 0; i < 3; i++) {
       const session = await client.createAgentSession(config.agentId, {
         maxInteractions: 50,
-        expiresIn: 1800 // 30 minutes
+        expiresIn: 1800, // 30 minutes
       });
       sessions.push(session.data);
       console.log(`Created session ${i + 1}: ${session.data.session_id}`);
@@ -50,8 +50,11 @@ async function advancedExample() {
     console.log('\n🗣️ Starting parallel conversations...');
     const conversations = await Promise.all([
       client.chatWithAgent(sessions[0].session_token, 'Tell me a joke'),
-      client.chatWithAgent(sessions[1].session_token, 'What is the weather like?'),
-      client.chatWithAgent(sessions[2].session_token, 'Help me write an email')
+      client.chatWithAgent(
+        sessions[1].session_token,
+        'What is the weather like?'
+      ),
+      client.chatWithAgent(sessions[2].session_token, 'Help me write an email'),
     ]);
 
     conversations.forEach((conv, i) => {
@@ -67,10 +70,9 @@ async function advancedExample() {
     console.log('\n🧹 Cleaning up sessions...');
     await client.revokeAllSessions();
     console.log('All sessions revoked');
-
   } catch (error) {
     console.error('❌ Error:', error.message);
-    
+
     if (error.status === 401) {
       console.error('Authentication failed. Check your API key.');
     } else if (error.status === 404) {
@@ -87,7 +89,12 @@ async function errorHandlingExample() {
 
   try {
     // This will likely fail with invalid IDs
-    await client.executePrompt('invalid-org', 'invalid-project', 'invalid-prompt', {});
+    await client.executePrompt(
+      'invalid-org',
+      'invalid-project',
+      'invalid-prompt',
+      {}
+    );
   } catch (error) {
     console.log('\n🔧 Error handling example:');
     console.log('Status:', error.status);
@@ -100,10 +107,10 @@ async function errorHandlingExample() {
 // Run examples
 async function runExamples() {
   console.log('🚀 Running advanced LLM Crafter SDK examples...\n');
-  
+
   await advancedExample();
   await errorHandlingExample();
-  
+
   console.log('\n✅ Examples completed!');
 }
 

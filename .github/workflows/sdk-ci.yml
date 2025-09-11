@@ -1,0 +1,64 @@
+name: SDK CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'packages/js-sdk/**'
+      - '.github/workflows/sdk-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'packages/js-sdk/**'
+      - '.github/workflows/sdk-ci.yml'
+
+jobs:
+  test-sdk:
+    name: Test SDK
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint SDK
+        run: |
+          cd packages/js-sdk
+          npm run lint
+
+      - name: Build SDK
+        run: npm run sdk:build
+
+      - name: Test SDK
+        run: npm run sdk:test
+
+      - name: Test built package
+        run: |
+          cd packages/js-sdk
+          npm run test:package
+
+      - name: Test package contents
+        run: |
+          cd packages/js-sdk
+          npm run pack:test
+
+      - name: Upload build artifacts
+        if: matrix.node-version == '20' # Only upload once
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-dist
+          path: packages/js-sdk/dist/
+          retention-days: 7

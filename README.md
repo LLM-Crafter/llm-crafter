@@ -42,6 +42,41 @@ npm run dev
 
 **🎉 That's it!** The application automatically initializes with default providers for OpenAI, Anthropic, Google, and DeepSeek, so you can start creating agents immediately.
 
+## 📦 JavaScript SDK
+
+We provide a JavaScript SDK for easy integration with the LLM Crafter API:
+
+```bash
+npm install @llm-crafter/sdk
+```
+
+### Quick SDK Usage
+
+```javascript
+import { LLMCrafterClient } from '@llm-crafter/sdk';
+
+const client = new LLMCrafterClient(
+  'your-api-key',
+  'https://your-domain.com/api/v1'
+);
+
+// Execute a prompt
+const result = await client.executePrompt(
+  'org-id',
+  'project-id',
+  'prompt-name',
+  {
+    variable: 'value',
+  }
+);
+
+// Chat with an agent
+const chat = await client.startAgentChat('agent-id', 'Hello!');
+console.log(chat.response.data.response);
+```
+
+[📖 View SDK Documentation](./packages/js-sdk/README.md)
+
 ### Create Your First Agent
 
 ```bash

@@ -3,6 +3,7 @@
 ## Development
 
 ### Building the SDK
+
 ```bash
 # From root
 npm run sdk:build
@@ -13,6 +14,7 @@ npm run build
 ```
 
 ### Testing the SDK
+
 ```bash
 # Run tests
 npm run sdk:test
@@ -23,6 +25,7 @@ npm run test:package
 ```
 
 ### Development workflow
+
 ```bash
 # Watch mode for development
 npm run sdk:dev
@@ -31,6 +34,7 @@ npm run sdk:dev
 ## Publishing
 
 ### Pre-publish checklist
+
 1. ✅ Tests pass: `npm run sdk:test`
 2. ✅ Build successful: `npm run sdk:build`
 3. ✅ Package test works: `cd packages/js-sdk && npm run test:package`
@@ -38,12 +42,14 @@ npm run sdk:dev
 5. ✅ README is up to date
 
 ### Dry run
+
 ```bash
 cd packages/js-sdk
 npm run pack:test
 ```
 
 ### Publishing to npm
+
 ```bash
 cd packages/js-sdk
 
@@ -55,6 +61,7 @@ npm publish --access public
 ```
 
 ### Publishing workflow
+
 1. Update version: `npm version patch|minor|major`
 2. Build: `npm run build`
 3. Test: `npm run test && npm run test:package`
@@ -63,25 +70,34 @@ npm publish --access public
 ## Usage after publishing
 
 ### Installation
+
 ```bash
 npm install @llm-crafter/sdk
 ```
 
 ### Node.js usage
+
 ```javascript
 import { LLMCrafterClient } from '@llm-crafter/sdk';
 // or
 const { LLMCrafterClient } = require('@llm-crafter/sdk');
 
-const client = new LLMCrafterClient('your-api-key', 'https://your-domain.com/api/v1');
+const client = new LLMCrafterClient(
+  'your-api-key',
+  'https://your-domain.com/api/v1'
+);
 await client.testConnection();
 ```
 
 ### Browser usage
+
 ```html
 <script src="https://unpkg.com/@llm-crafter/sdk/dist/index.umd.js"></script>
 <script>
-  const client = new LLMCrafterSDK.LLMCrafterClient('your-api-key', 'https://your-domain.com/api/v1');
+  const client = new LLMCrafterSDK.LLMCrafterClient(
+    'your-api-key',
+    'https://your-domain.com/api/v1'
+  );
 </script>
 ```
 

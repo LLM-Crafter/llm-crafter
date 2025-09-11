@@ -27,12 +27,9 @@ export default [
       format: 'cjs',
       exports: 'named',
     },
-    plugins: [
-      ...baseConfig.plugins,
-      isProduction && terser(),
-    ].filter(Boolean),
+    plugins: [...baseConfig.plugins, isProduction && terser()].filter(Boolean),
   },
-  
+
   // ES Module build
   {
     ...baseConfig,
@@ -40,12 +37,9 @@ export default [
       file: 'dist/index.esm.js',
       format: 'esm',
     },
-    plugins: [
-      ...baseConfig.plugins,
-      isProduction && terser(),
-    ].filter(Boolean),
+    plugins: [...baseConfig.plugins, isProduction && terser()].filter(Boolean),
   },
-  
+
   // UMD build for browsers
   {
     ...baseConfig,
@@ -56,7 +50,7 @@ export default [
       name: 'LLMCrafterSDK',
       exports: 'named',
       globals: {
-        'node-fetch': 'fetch'
+        'node-fetch': 'fetch',
       },
     },
     plugins: [

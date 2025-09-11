@@ -47,7 +47,6 @@ async function basicExample() {
     // Clean up
     await client.revokeSession(agentChat.session.session_id);
     console.log('✅ Session cleaned up');
-
   } catch (error) {
     console.error('Error:', error.message);
     if (error.status) {

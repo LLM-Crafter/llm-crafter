@@ -36,12 +36,13 @@ console.log(connectionTest.success ? 'Connected!' : 'Connection failed');
 
 ```javascript
 const promptResult = await client.executePrompt(
-  'org_123',      // Organization ID
-  'proj_456',     // Project ID
-  'greeting',     // Prompt name
-  {               // Variables
+  'org_123', // Organization ID
+  'proj_456', // Project ID
+  'greeting', // Prompt name
+  {
+    // Variables
     name: 'John',
-    language: 'English'
+    language: 'English',
   }
 );
 
@@ -77,7 +78,7 @@ await client.revokeSession(agentChat.session.session_id);
 ```javascript
 const directChat = await client.chatWithAgentDirect(
   'org_123',
-  'proj_456', 
+  'proj_456',
   'agent_789',
   'Quick question!'
 );
@@ -106,7 +107,7 @@ const usage = await client.getUsage();
 ### Constructor
 
 ```javascript
-new LLMCrafterClient(apiKey, baseUrl, options)
+new LLMCrafterClient(apiKey, baseUrl, options);
 ```
 
 - `apiKey` (string): Your LLM Crafter API key
@@ -119,9 +120,11 @@ new LLMCrafterClient(apiKey, baseUrl, options)
 ### Methods
 
 #### Prompt Execution
+
 - `executePrompt(orgId, projectId, promptName, variables)` - Execute a prompt with variables
 
 #### Session Management
+
 - `createAgentSession(agentId, options)` - Create a new agent session
 - `getSessions()` - Get all active sessions
 - `getSession(sessionId)` - Get session information
@@ -129,11 +132,13 @@ new LLMCrafterClient(apiKey, baseUrl, options)
 - `revokeAllSessions()` - Revoke all sessions
 
 #### Agent Interaction
+
 - `chatWithAgent(sessionToken, message, conversationId?, userIdentifier?, dynamicContext?)` - Chat using session token
 - `executeTaskAgent(sessionToken, input, context?)` - Execute a task agent
 - `chatWithAgentDirect(orgId, projectId, agentId, message, conversationId?, userIdentifier?, dynamicContext?)` - Direct chat with API key
 
 #### Information Retrieval
+
 - `getAgent(orgId, projectId, agentId)` - Get agent information
 - `getAgents(orgId, projectId)` - List agents in a project
 - `getProject(orgId, projectId)` - Get project information
@@ -141,6 +146,7 @@ new LLMCrafterClient(apiKey, baseUrl, options)
 - `getUsage()` - Get API key usage statistics
 
 #### Convenience Methods
+
 - `startAgentChat(agentId, message, sessionOptions?)` - Create session and start chatting in one call
 - `testConnection()` - Test API key connectivity
 
@@ -150,7 +156,12 @@ The SDK automatically retries failed requests and provides detailed error inform
 
 ```javascript
 try {
-  const result = await client.executePrompt('org_123', 'proj_456', 'greeting', {});
+  const result = await client.executePrompt(
+    'org_123',
+    'proj_456',
+    'greeting',
+    {}
+  );
 } catch (error) {
   console.error('Status:', error.status);
   console.error('Code:', error.code);
@@ -166,8 +177,11 @@ For browser environments, include the UMD build:
 ```html
 <script src="https://unpkg.com/@llm-crafter/sdk/dist/index.umd.js"></script>
 <script>
-  const client = new LLMCrafterSDK.LLMCrafterClient('your-api-key', 'https://your-domain.com/api/v1');
-  
+  const client = new LLMCrafterSDK.LLMCrafterClient(
+    'your-api-key',
+    'https://your-domain.com/api/v1'
+  );
+
   client.testConnection().then(result => {
     console.log('Connection test:', result);
   });

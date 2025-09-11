@@ -2,9 +2,12 @@ import { LLMCrafterClient } from '../src/index.js';
 
 describe('LLMCrafterClient', () => {
   let client;
-  
+
   beforeEach(() => {
-    client = new LLMCrafterClient('test-api-key', 'https://api.test.com/api/v1');
+    client = new LLMCrafterClient(
+      'test-api-key',
+      'https://api.test.com/api/v1'
+    );
     fetch.mockClear();
   });
 
@@ -30,17 +33,24 @@ describe('LLMCrafterClient', () => {
     });
 
     test('should remove trailing slash from base URL', () => {
-      const clientWithSlash = new LLMCrafterClient('test-key', 'https://api.test.com/');
+      const clientWithSlash = new LLMCrafterClient(
+        'test-key',
+        'https://api.test.com/'
+      );
       expect(clientWithSlash.baseUrl).toBe('https://api.test.com');
     });
 
     test('should accept custom options', () => {
-      const customClient = new LLMCrafterClient('test-key', 'https://api.test.com', {
-        timeout: 60000,
-        retryAttempts: 5,
-        retryDelay: 2000
-      });
-      
+      const customClient = new LLMCrafterClient(
+        'test-key',
+        'https://api.test.com',
+        {
+          timeout: 60000,
+          retryAttempts: 5,
+          retryDelay: 2000,
+        }
+      );
+
       expect(customClient.timeout).toBe(60000);
       expect(customClient.retryAttempts).toBe(5);
       expect(customClient.retryDelay).toBe(2000);
@@ -52,43 +62,49 @@ describe('LLMCrafterClient', () => {
       const mockResponse = { data: { result: 'success' } };
       fetch.mockResolvedValueOnce({
         ok: true,
-        json: jest.fn().mockResolvedValueOnce(mockResponse)
+        json: jest.fn().mockResolvedValueOnce(mockResponse),
       });
 
       const result = await client._request('/test-endpoint');
 
-      expect(fetch).toHaveBeenCalledWith('https://api.test.com/api/v1/test-endpoint', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': 'test-api-key'
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.test.com/api/v1/test-endpoint',
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': 'test-api-key',
+          },
         }
-      });
+      );
       expect(result).toEqual(mockResponse);
     });
 
     test('should make successful POST request with body', async () => {
       const mockResponse = { data: { result: 'created' } };
       const requestBody = { name: 'test' };
-      
+
       fetch.mockResolvedValueOnce({
         ok: true,
-        json: jest.fn().mockResolvedValueOnce(mockResponse)
+        json: jest.fn().mockResolvedValueOnce(mockResponse),
       });
 
       const result = await client._request('/test-endpoint', {
         method: 'POST',
-        body: requestBody
+        body: requestBody,
       });
 
-      expect(fetch).toHaveBeenCalledWith('https://api.test.com/api/v1/test-endpoint', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': 'test-api-key'
-        },
-        body: JSON.stringify(requestBody)
-      });
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.test.com/api/v1/test-endpoint',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': 'test-api-key',
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
       expect(result).toEqual(mockResponse);
     });
 
@@ -97,10 +113,12 @@ describe('LLMCrafterClient', () => {
       fetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
-        json: jest.fn().mockResolvedValueOnce(errorResponse)
+        json: jest.fn().mockResolvedValueOnce(errorResponse),
       });
 
-      await expect(client._request('/test-endpoint')).rejects.toThrow('Not found');
+      await expect(client._request('/test-endpoint')).rejects.toThrow(
+        'Not found'
+      );
       expect(fetch).toHaveBeenCalledTimes(1); // No retry for 4xx errors
     });
 
@@ -110,20 +128,20 @@ describe('LLMCrafterClient', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 500,
-          json: jest.fn().mockResolvedValueOnce(errorResponse)
+          json: jest.fn().mockResolvedValueOnce(errorResponse),
         })
         .mockResolvedValueOnce({
           ok: false,
           status: 500,
-          json: jest.fn().mockResolvedValueOnce(errorResponse)
+          json: jest.fn().mockResolvedValueOnce(errorResponse),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: jest.fn().mockResolvedValueOnce({ data: { success: true } })
+          json: jest.fn().mockResolvedValueOnce({ data: { success: true } }),
         });
 
       const result = await client._request('/test-endpoint');
-      
+
       expect(fetch).toHaveBeenCalledTimes(3);
       expect(result).toEqual({ data: { success: true } });
     });
@@ -133,25 +151,27 @@ describe('LLMCrafterClient', () => {
     beforeEach(() => {
       fetch.mockResolvedValue({
         ok: true,
-        json: jest.fn().mockResolvedValue({ data: { success: true } })
+        json: jest.fn().mockResolvedValue({ data: { success: true } }),
       });
     });
 
     test('executePrompt should make correct API call', async () => {
-      await client.executePrompt('org123', 'proj456', 'greeting', { name: 'John' });
-      
+      await client.executePrompt('org123', 'proj456', 'greeting', {
+        name: 'John',
+      });
+
       expect(fetch).toHaveBeenCalledWith(
         'https://api.test.com/api/v1/external/organizations/org123/projects/proj456/prompts/greeting/execute',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ variables: { name: 'John' } })
+          body: JSON.stringify({ variables: { name: 'John' } }),
         })
       );
     });
 
     test('createAgentSession should make correct API call', async () => {
       await client.createAgentSession('agent123', { maxInteractions: 50 });
-      
+
       expect(fetch).toHaveBeenCalledWith(
         'https://api.test.com/api/v1/sessions',
         expect.objectContaining({
@@ -159,39 +179,45 @@ describe('LLMCrafterClient', () => {
           body: JSON.stringify({
             agentId: 'agent123',
             maxInteractions: 50,
-            expiresIn: 3600
-          })
+            expiresIn: 3600,
+          }),
         })
       );
     });
 
     test('chatWithAgent should make correct API call', async () => {
-      await client.chatWithAgent('session-token', 'Hello', 'conv123', 'user456', { context: 'test' });
-      
+      await client.chatWithAgent(
+        'session-token',
+        'Hello',
+        'conv123',
+        'user456',
+        { context: 'test' }
+      );
+
       expect(fetch).toHaveBeenCalledWith(
         'https://api.test.com/api/v1/external/agents/chat',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'X-Session-Token': 'session-token'
+            'X-Session-Token': 'session-token',
           }),
           body: JSON.stringify({
             message: 'Hello',
             conversationId: 'conv123',
             userIdentifier: 'user456',
-            dynamicContext: { context: 'test' }
-          })
+            dynamicContext: { context: 'test' },
+          }),
         })
       );
     });
 
     test('getUsage should make correct API call', async () => {
       await client.getUsage();
-      
+
       expect(fetch).toHaveBeenCalledWith(
         'https://api.test.com/api/v1/external/usage/api-key',
         expect.objectContaining({
-          method: 'GET'
+          method: 'GET',
         })
       );
     });
@@ -202,11 +228,11 @@ describe('LLMCrafterClient', () => {
       const usageData = { requests: 100, limit: 1000 };
       fetch.mockResolvedValueOnce({
         ok: true,
-        json: jest.fn().mockResolvedValueOnce({ data: usageData })
+        json: jest.fn().mockResolvedValueOnce({ data: usageData }),
       });
 
       const result = await client.testConnection();
-      
+
       expect(result.success).toBe(true);
       expect(result.message).toBe('API key is valid and working');
       expect(result.usage).toEqual(usageData);
@@ -216,11 +242,11 @@ describe('LLMCrafterClient', () => {
       fetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: jest.fn().mockResolvedValueOnce({ error: 'Unauthorized' })
+        json: jest.fn().mockResolvedValueOnce({ error: 'Unauthorized' }),
       });
 
       const result = await client.testConnection();
-      
+
       expect(result.success).toBe(false);
       expect(result.message).toBe('Unauthorized');
       expect(result.error).toBeDefined();
