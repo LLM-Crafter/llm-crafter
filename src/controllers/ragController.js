@@ -1,4 +1,5 @@
 const ragService = require('../services/ragService');
+const indexingJobProcessor = require('../services/indexingJobProcessor');
 const { validationResult } = require('express-validator');
 
 class RAGController {
@@ -17,7 +18,7 @@ class RAGController {
       }
 
       const { orgId, projectId } = req.params;
-      const { documents, api_key_id } = req.body;
+      const { documents, api_key_id, process_in_background = true } = req.body;
 
       if (!documents || !Array.isArray(documents)) {
         return res.status(400).json({
@@ -33,19 +34,50 @@ class RAGController {
         });
       }
 
-      const indexedIds = await ragService.indexJsonDocuments(
-        documents,
-        orgId,
-        projectId,
-        api_key_id
-      );
+      // Check if background processing is requested (default: true)
+      if (process_in_background) {
+        console.log(`📋 Queuing ${documents.length} documents for background indexing...`);
+        
+        const jobInfo = await indexingJobProcessor.queueIndexingJob(
+          documents,
+          orgId,
+          projectId,
+          api_key_id,
+          {
+            type: 'single',
+            userAgent: req.get('User-Agent'),
+            ipAddress: req.ip
+          }
+        );
 
-      res.json({
-        success: true,
-        indexed_count: indexedIds.length,
-        indexed_ids: indexedIds,
-        message: `Successfully indexed ${indexedIds.length} document chunks`,
-      });
+        res.json({
+          success: true,
+          background_processing: true,
+          job_id: jobInfo.job_id,
+          estimated_time: jobInfo.estimated_time,
+          message: `Documents queued for background indexing. Use job ID ${jobInfo.job_id} to check status.`,
+          document_count: documents.length,
+          status_endpoint: `/api/v1/organizations/${orgId}/projects/${projectId}/rag/jobs/${jobInfo.job_id}`
+        });
+      } else {
+        // Process synchronously (for smaller documents or when immediate results are needed)
+        console.log(`🔄 Processing ${documents.length} documents synchronously...`);
+        
+        const indexedIds = await ragService.indexJsonDocuments(
+          documents,
+          orgId,
+          projectId,
+          api_key_id
+        );
+
+        res.json({
+          success: true,
+          background_processing: false,
+          indexed_count: indexedIds.length,
+          indexed_ids: indexedIds,
+          message: `Successfully indexed ${indexedIds.length} document chunks`,
+        });
+      }
     } catch (error) {
       console.error('RAG indexing error:', error);
       res.status(500).json({
@@ -228,7 +260,7 @@ class RAGController {
       }
 
       const { orgId, projectId } = req.params;
-      const { document_batches, api_key_id } = req.body;
+      const { document_batches, api_key_id, process_in_background = true } = req.body;
 
       if (!document_batches || !Array.isArray(document_batches)) {
         return res.status(400).json({
@@ -237,42 +269,185 @@ class RAGController {
         });
       }
 
-      const results = {
-        total_batches: document_batches.length,
-        successful_batches: 0,
-        failed_batches: 0,
-        total_indexed: 0,
-        errors: [],
-      };
+      // Check if background processing is requested (default: true for batch operations)
+      if (process_in_background) {
+        console.log(`📋 Queuing ${document_batches.length} document batches for background indexing...`);
+        
+        const jobInfo = await indexingJobProcessor.queueIndexingJob(
+          document_batches,
+          orgId,
+          projectId,
+          api_key_id,
+          {
+            type: 'batch',
+            userAgent: req.get('User-Agent'),
+            ipAddress: req.ip
+          }
+        );
 
-      for (let i = 0; i < document_batches.length; i++) {
-        try {
-          const batch = document_batches[i];
-          const indexedIds = await ragService.indexJsonDocuments(
-            batch.documents,
-            orgId,
-            projectId,
-            api_key_id
-          );
+        res.json({
+          success: true,
+          background_processing: true,
+          job_id: jobInfo.job_id,
+          estimated_time: jobInfo.estimated_time,
+          message: `Document batches queued for background indexing. Use job ID ${jobInfo.job_id} to check status.`,
+          batch_count: document_batches.length,
+          status_endpoint: `/api/v1/organizations/${orgId}/projects/${projectId}/rag/jobs/${jobInfo.job_id}`
+        });
+      } else {
+        // Process synchronously (legacy behavior)
+        console.log(`🔄 Processing ${document_batches.length} document batches synchronously...`);
+        
+        const results = {
+          total_batches: document_batches.length,
+          successful_batches: 0,
+          failed_batches: 0,
+          total_indexed: 0,
+          errors: [],
+        };
 
-          results.successful_batches++;
-          results.total_indexed += indexedIds.length;
-        } catch (error) {
-          results.failed_batches++;
-          results.errors.push({
-            batch_index: i,
-            error: error.message,
-          });
+        for (let i = 0; i < document_batches.length; i++) {
+          try {
+            const batch = document_batches[i];
+            const indexedIds = await ragService.indexJsonDocuments(
+              batch.documents,
+              orgId,
+              projectId,
+              api_key_id
+            );
+
+            results.successful_batches++;
+            results.total_indexed += indexedIds.length;
+          } catch (error) {
+            results.failed_batches++;
+            results.errors.push({
+              batch_index: i,
+              error: error.message,
+            });
+          }
         }
+
+        res.json({
+          success: results.failed_batches === 0,
+          background_processing: false,
+          results,
+          message: `Processed ${results.total_batches} batches, indexed ${results.total_indexed} document chunks`,
+        });
+      }
+    } catch (error) {
+      console.error('RAG batch indexing error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Get indexing job status
+   * GET /api/v1/organizations/:organizationId/projects/:projectId/rag/jobs/:jobId
+   */
+  async getJobStatus(req, res) {
+    try {
+      const { jobId } = req.params;
+
+      const jobStatus = await indexingJobProcessor.getJobStatus(jobId);
+
+      if (!jobStatus) {
+        return res.status(404).json({
+          success: false,
+          error: 'Job not found',
+        });
       }
 
       res.json({
-        success: results.failed_batches === 0,
-        results,
-        message: `Processed ${results.total_batches} batches, indexed ${results.total_indexed} document chunks`,
+        success: true,
+        job: jobStatus,
       });
     } catch (error) {
-      console.error('RAG batch indexing error:', error);
+      console.error('RAG job status error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Get indexing jobs for a project
+   * GET /api/v1/organizations/:organizationId/projects/:projectId/rag/jobs
+   */
+  async getJobs(req, res) {
+    try {
+      const { orgId, projectId } = req.params;
+      const { limit = 50 } = req.query;
+
+      const jobs = await indexingJobProcessor.getJobsForProject(
+        orgId, 
+        projectId, 
+        parseInt(limit)
+      );
+
+      res.json({
+        success: true,
+        jobs,
+        total: jobs.length,
+      });
+    } catch (error) {
+      console.error('RAG jobs fetch error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Get indexing job statistics
+   * GET /api/v1/organizations/:organizationId/projects/:projectId/rag/jobs/stats
+   */
+  async getJobStats(req, res) {
+    try {
+      const { orgId, projectId } = req.params;
+
+      const stats = await indexingJobProcessor.getJobStats(orgId, projectId);
+
+      res.json({
+        success: true,
+        stats,
+      });
+    } catch (error) {
+      console.error('RAG job stats error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Cancel a pending indexing job
+   * DELETE /api/v1/organizations/:organizationId/projects/:projectId/rag/jobs/:jobId
+   */
+  async cancelJob(req, res) {
+    try {
+      const { jobId } = req.params;
+
+      const cancelled = await indexingJobProcessor.cancelJob(jobId);
+
+      if (!cancelled) {
+        return res.status(404).json({
+          success: false,
+          error: 'Job not found or cannot be cancelled',
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Job cancelled successfully',
+      });
+    } catch (error) {
+      console.error('RAG job cancellation error:', error);
       res.status(500).json({
         success: false,
         error: error.message,
@@ -289,5 +464,9 @@ ragController.searchDocuments =
   ragController.searchDocuments.bind(ragController);
 ragController.batchIndexDocuments =
   ragController.batchIndexDocuments.bind(ragController);
+ragController.getJobStatus = ragController.getJobStatus.bind(ragController);
+ragController.getJobs = ragController.getJobs.bind(ragController);
+ragController.getJobStats = ragController.getJobStats.bind(ragController);
+ragController.cancelJob = ragController.cancelJob.bind(ragController);
 
 module.exports = ragController;

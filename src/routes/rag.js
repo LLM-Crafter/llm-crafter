@@ -94,4 +94,56 @@ router.post(
   ragController.batchIndexDocuments
 );
 
+/**
+ * @route   GET /rag/jobs/:jobId
+ * @desc    Get indexing job status
+ * @access  Private (Organization Viewer)
+ */
+router.get(
+  '/jobs/:jobId',
+  auth,
+  orgAuth.hasRole('viewer'),
+  param('jobId').notEmpty().withMessage('Job ID is required'),
+  validate,
+  ragController.getJobStatus
+);
+
+/**
+ * @route   GET /rag/jobs
+ * @desc    Get indexing jobs for project
+ * @access  Private (Organization Viewer)
+ */
+router.get(
+  '/jobs',
+  auth,
+  orgAuth.hasRole('viewer'),
+  ragController.getJobs
+);
+
+/**
+ * @route   GET /rag/jobs/stats
+ * @desc    Get indexing job statistics
+ * @access  Private (Organization Viewer)
+ */
+router.get(
+  '/jobs/stats',
+  auth,
+  orgAuth.hasRole('viewer'),
+  ragController.getJobStats
+);
+
+/**
+ * @route   DELETE /rag/jobs/:jobId
+ * @desc    Cancel a pending indexing job
+ * @access  Private (Organization Member)
+ */
+router.delete(
+  '/jobs/:jobId',
+  auth,
+  orgAuth.hasRole('member'),
+  param('jobId').notEmpty().withMessage('Job ID is required'),
+  validate,
+  ragController.cancelJob
+);
+
 module.exports = router;
