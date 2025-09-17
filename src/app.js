@@ -26,6 +26,7 @@ const toolRoutes = require('./routes/tools');
 const statisticsRoutes = require('./routes/statistics');
 const sessionRoutes = require('./routes/sessions');
 const externalRoutes = require('./routes/external');
+const vectorDatabaseRoutes = require('./routes/vectorDatabases');
 
 // Middleware
 app.use(helmet());
@@ -44,7 +45,7 @@ app.use(
     },
   })
 );
-
+app.use(express.json({ limit: '50mb' }));
 // Initialize Passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
@@ -60,6 +61,7 @@ app.use('/api/v1/proxy', proxyRoutes);
 app.use('/api/v1/tools', toolRoutes);
 app.use('/api/v1/sessions', sessionRoutes);
 app.use('/api/v1/external', externalRoutes);
+app.use('/api/v1', vectorDatabaseRoutes);
 
 // Connect to database
 connectDB();
