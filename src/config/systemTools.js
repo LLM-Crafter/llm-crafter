@@ -380,6 +380,125 @@ const systemTools = [
     },
     is_system_tool: true,
   },
+  {
+    name: 'rag_search',
+    display_name: 'RAG Search',
+    description: 'Search through indexed knowledge base using semantic similarity and keyword matching',
+    category: 'knowledge',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The search query to find relevant information',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results to return',
+          default: 10,
+          minimum: 1,
+          maximum: 20,
+        },
+        threshold: {
+          type: 'number',
+          description: 'Minimum similarity threshold for results (0-1)',
+          default: 0.7,
+          minimum: 0,
+          maximum: 1,
+        },
+        search_type: {
+          type: 'string',
+          description: 'Type of search to perform',
+          enum: ['semantic', 'hybrid', 'keyword'],
+          default: 'semantic',
+        },
+        brands: {
+          type: 'array',
+          description: 'Filter results by specific brands',
+          items: { type: 'string' },
+          default: [],
+        },
+        models: {
+          type: 'array',
+          description: 'Filter results by specific models',
+          items: { type: 'string' },
+          default: [],
+        },
+        themes: {
+          type: 'array',
+          description: 'Filter results by specific themes/topics',
+          items: { type: 'string' },
+          default: [],
+        },
+        sentiment: {
+          type: 'string',
+          description: 'Filter results by sentiment',
+          enum: ['positive', 'negative', 'neutral'],
+        },
+        include_metadata: {
+          type: 'boolean',
+          description: 'Include metadata in search results',
+          default: true,
+        },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        results: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              content: { type: 'string' },
+              similarity: { type: 'number' },
+              metadata: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string' },
+                  url: { type: 'string' },
+                  title: { type: 'string' },
+                  brand: { type: 'string' },
+                  model: { type: 'string' },
+                  author: { type: 'string' },
+                  themes: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  },
+                  pros: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  },
+                  cons: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  },
+                },
+              },
+            },
+          },
+        },
+        total_results: { type: 'number' },
+        search_method: { type: 'string' },
+        execution_time_ms: { type: 'number' },
+        success: { type: 'boolean' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'ragSearchHandler',
+      config: {
+        semantic_weight: 0.7,
+        keyword_weight: 0.3,
+        include_stats: false,
+      },
+    },
+    is_system_tool: true,
+  },
 ];
 
 async function initializeSystemTools() {

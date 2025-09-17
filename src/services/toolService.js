@@ -1,5 +1,6 @@
 const Tool = require('../models/Tool');
 const OpenAIService = require('./openaiService');
+const ragService = require('./ragService');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
@@ -230,6 +231,9 @@ class ToolService {
 
     // FAQ tool
     this.registerToolHandler('faq', this.faqHandler.bind(this));
+
+    // RAG search tool
+    this.registerToolHandler('rag_search', this.ragSearchHandler.bind(this));
   }
 
   /**
@@ -1584,6 +1588,178 @@ class ToolService {
     }
 
     return 0;
+  }
+
+  /**
+   * RAG search tool handler - searches indexed knowledge base
+   */
+  /**
+   * RAG search tool handler - searches indexed knowledge base
+   */
+  async ragSearchHandler(parameters, config) {
+    const {
+      query,
+      limit = 10,
+      threshold = 0.7,
+      search_type = 'semantic', // 'semantic', 'hybrid', 'keyword'
+      brands = [],
+      models = [],
+      themes = [],
+      sentiment = null,
+      include_metadata = true,
+      organization_id,
+      project_id
+    } = parameters;
+
+    const startTime = Date.now();
+
+    // Enhanced logging for debugging
+    console.log('🔍 RAG Search Handler - Start');
+    console.log('  Query:', query);
+    console.log('  Search Type:', search_type);
+    console.log('  Limit:', limit);
+    console.log('  Threshold:', threshold);
+    console.log('  Parameters org/project:', { organization_id, project_id });
+    console.log('  Config org/project:', { 
+      org: config.organization_id, 
+      project: config.project_id,
+      api_key_id: config._agent_api_key_id 
+    });
+
+    if (!query) {
+      console.error('❌ RAG Search: Missing query parameter');
+      throw new Error('Query parameter is required for RAG search');
+    }
+
+    // Get organization and project from parameters or config
+    const organizationId = organization_id || config.organization_id;
+    const projectId = project_id || config.project_id;
+
+    console.log('  Final context:', { organizationId, projectId });
+
+    if (!organizationId || !projectId) {
+      console.error('❌ RAG Search: Missing organization/project context');
+      throw new Error('Organization and project context required for RAG search (via parameter or agent config)');
+    }
+
+    // Get API key from agent config 
+    const apiKeyId = config._agent_api_key_id;
+    if (!apiKeyId) {
+      console.error('❌ RAG Search: Missing API key');
+      throw new Error('Agent API key not configured for RAG search');
+    }
+
+    console.log('  API Key ID:', apiKeyId);
+
+    try {
+      let searchResults;
+
+      console.log(`🔍 Executing ${search_type} search...`);
+
+      switch (search_type) {
+        case 'hybrid':
+          searchResults = await ragService.hybridSearch(
+            query,
+            organizationId,
+            projectId,
+            apiKeyId,
+            {
+              limit,
+              brands,
+              models,
+              themes,
+              sentiment,
+              semanticWeight: config.semantic_weight || 0.7,
+              keywordWeight: config.keyword_weight || 0.3
+            }
+          );
+          break;
+
+        case 'keyword':
+          console.log('  📝 Keyword search - no embeddings needed');
+          const keywordResults = ragService.keywordSearch(
+            query,
+            organizationId,
+            projectId,
+            { brands, models, themes, sentiment }
+          );
+          
+          console.log('  📊 Keyword results count:', keywordResults.length);
+          
+          searchResults = {
+            query,
+            results: keywordResults.slice(0, limit).map(result => ({
+              id: result.id,
+              content: result.content,
+              similarity: result.similarity,
+              metadata: include_metadata ? result.metadata : undefined
+            })),
+            total_results: keywordResults.length,
+            search_method: 'keyword'
+          };
+          break;
+
+        default: // semantic
+          console.log('  🧠 Semantic search - generating embeddings...');
+          searchResults = await ragService.searchSimilar(
+            query,
+            organizationId,
+            projectId,
+            apiKeyId,
+            {
+              limit,
+              threshold,
+              filters: { brands, models, themes, sentiment },
+              includeMetadata: include_metadata
+            }
+          );
+          break;
+      }
+
+      console.log('  ✅ Search completed');
+      console.log('  📊 Results found:', searchResults.results?.length || 0);
+      console.log('  📊 Total available:', searchResults.total_results || 0);
+
+      // Add execution time
+      searchResults.execution_time_ms = Date.now() - startTime;
+
+      // Add knowledge base stats if requested
+      if (config.include_stats) {
+        console.log('  📈 Getting knowledge base stats...');
+        searchResults.knowledge_base_stats = ragService.getStats(organizationId, projectId);
+        console.log('  📈 Stats:', searchResults.knowledge_base_stats);
+      }
+
+      console.log('🔍 RAG Search Handler - Complete:', {
+        query,
+        results_count: searchResults.results?.length || 0,
+        execution_time: searchResults.execution_time_ms,
+        success: true
+      });
+
+      return searchResults;
+
+    } catch (error) {
+      console.error('❌ RAG search error:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        query,
+        organizationId,
+        projectId,
+        apiKeyId,
+        search_type
+      });
+      
+      return {
+        query,
+        results: [],
+        total_results: 0,
+        success: false,
+        error: error.message,
+        execution_time_ms: Date.now() - startTime
+      };
+    }
   }
 
   // ===== HELPER METHODS =====

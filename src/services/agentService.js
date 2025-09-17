@@ -792,8 +792,18 @@ Choose your action:`;
     // Start with the tool's parameters as config
     const config = { ...tool.parameters };
 
+    // Add organization and project context for all tools
+    config.organization_id = agent.organization;
+    config.project_id = agent.project;
+
     // Add agent's API key information for tools that need it
     if (agent.api_key) {
+      // Add API key ID for RAG search and other tools that need embeddings
+      if (toolName === 'rag_search') {
+        config._agent_api_key_id = agent.api_key._id;
+        config._agent_api_key = agent.api_key; // Also pass full object for backward compatibility
+      }
+
       // Add API key for summarization if enabled
       if (config.summarization?.enabled) {
         config._agent_api_key = {
