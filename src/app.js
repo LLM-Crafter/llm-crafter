@@ -72,6 +72,10 @@ initializeSystemTools().catch(console.error);
 // Initialize default providers
 initializeDefaultProviders().catch(console.error);
 
+// Initialize background job processor for RAG indexing
+console.log('🚀 Initializing RAG indexing job processor...');
+require('./services/indexingJobProcessor');
+
 // Basic route for testing
 app.get('/health', publicLimiter, (req, res) => {
   res.json({ status: 'ok', service: 'llm-crafter' });
