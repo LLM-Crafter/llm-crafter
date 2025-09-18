@@ -854,10 +854,28 @@ class RAGService {
   /**
    * Get document statistics
    */
-  getStats(organizationId, projectId) {
+  async getStats(organizationId, projectId) {
     console.log('📈 RAGService.getStats - Start');
     console.log('  Organization ID:', organizationId);
     console.log('  Project ID:', projectId);
+
+    try {
+      // Try to get stats from vector database first
+      const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+      
+      if (vectorDB && typeof vectorDB.getStats === 'function') {
+        console.log('  📊 Getting stats from vector database');
+        const stats = await vectorDB.getStats(organizationId, projectId);
+        console.log('  📊 Vector DB stats result:', stats);
+        console.log('  ✅ Stats complete (from vector DB)');
+        return stats;
+      }
+    } catch (error) {
+      console.warn('  ⚠️ Failed to get stats from vector database, falling back to memory:', error.message);
+    }
+
+    // Fallback to in-memory store
+    console.log('  📊 Getting stats from in-memory store');
     console.log('  Total documents in store:', this.vectorStore.size);
 
     const docs = Array.from(this.vectorStore.values())
@@ -868,25 +886,20 @@ class RAGService {
 
     console.log('  Documents for org/project:', docs.length);
 
-    const brands = [...new Set(docs.map(d => d.metadata.brand).filter(Boolean))];
-    const models = [...new Set(docs.map(d => d.metadata.model).filter(Boolean))];
-    const themes = [...new Set(docs.flatMap(d => d.metadata.themes || []))];
-    const types = [...new Set(docs.map(d => d.metadata.type))];
+    // Calculate date range from indexed_at field
+    const indexedDates = docs.map(d => new Date(d.metadata.indexed_at || Date.now()).getTime()).filter(t => !isNaN(t));
+    const dateRange = indexedDates.length > 0 ? {
+      oldest: Math.min(...indexedDates),
+      newest: Math.max(...indexedDates)
+    } : null;
 
     const stats = {
       total_documents: docs.length,
-      brands: brands.sort(),
-      models: models.sort(),
-      themes: themes.sort(),
-      content_types: types.sort(),
-      indexed_range: docs.length > 0 ? {
-        oldest: Math.min(...docs.map(d => new Date(d.metadata.indexed_at || Date.now()).getTime())),
-        newest: Math.max(...docs.map(d => new Date(d.metadata.indexed_at || Date.now()).getTime()))
-      } : null
+      indexed_range: dateRange
     };
 
-    console.log('  📊 Stats result:', stats);
-    console.log('  ✅ Stats complete');
+    console.log('  📊 Memory stats result:', stats);
+    console.log('  ✅ Stats complete (from memory)');
 
     return stats;
   }
@@ -919,7 +932,39 @@ class RAGService {
   /**
    * Clear all indexed data for an organization/project
    */
-  clearIndex(organizationId, projectId) {
+  async clearIndex(organizationId, projectId) {
+    console.log('🗑️ RAGService.clearIndex - Start');
+    console.log('  Organization ID:', organizationId);
+    console.log('  Project ID:', projectId);
+
+    try {
+      // Try to clear from vector database first
+      const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+      
+      if (vectorDB && typeof vectorDB.clearIndex === 'function') {
+        console.log('  🗑️ Clearing index from vector database');
+        const result = await vectorDB.clearIndex(organizationId, projectId);
+        console.log('  🗑️ Vector DB clear result:', result);
+        
+        // Also clear from memory store to keep it in sync
+        const toDeleteFromMemory = [];
+        for (const [id, doc] of this.vectorStore.entries()) {
+          if (doc.metadata.organization_id === organizationId &&
+              doc.metadata.project_id === projectId) {
+            toDeleteFromMemory.push(id);
+          }
+        }
+        toDeleteFromMemory.forEach(id => this.vectorStore.delete(id));
+        
+        console.log('  ✅ Clear complete (from vector DB)');
+        return result;
+      }
+    } catch (error) {
+      console.warn('  ⚠️ Failed to clear from vector database, falling back to memory:', error.message);
+    }
+
+    // Fallback to in-memory store only
+    console.log('  🗑️ Clearing index from in-memory store');
     const toDelete = [];
     
     for (const [id, doc] of this.vectorStore.entries()) {
@@ -931,9 +976,14 @@ class RAGService {
     
     toDelete.forEach(id => this.vectorStore.delete(id));
     
-    return {
+    const result = {
       deleted_count: toDelete.length
     };
+
+    console.log('  🗑️ Memory clear result:', result);
+    console.log('  ✅ Clear complete (from memory)');
+    
+    return result;
   }
 }
 
