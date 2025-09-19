@@ -30,21 +30,21 @@ export interface AgentSession {
   current_interactions: number;
 }
 
+export interface SessionInfo {
+  session_id: string;
+  remaining_interactions: number;
+}
+
 export interface AgentResponse {
-  response: string;
   conversation_id: string;
-  execution_id: string;
-  timestamp: string;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+  response: string;
+  suggestions: string[];
+  session_info: SessionInfo;
 }
 
 export interface StartChatResult {
   session: AgentSession;
-  response: ApiResponse<AgentResponse>;
+  response: AgentResponse;
 }
 
 export interface ConnectionTestResult {
@@ -123,13 +123,13 @@ export declare class LLMCrafterClient {
     conversationId?: string | null,
     userIdentifier?: string | null,
     dynamicContext?: Record<string, any>
-  ): Promise<ApiResponse<AgentResponse>>;
+  ): Promise<AgentResponse>;
 
   executeTaskAgent(
     sessionToken: string,
     input: string,
     context?: Record<string, any>
-  ): Promise<ApiResponse<AgentResponse>>;
+  ): Promise<AgentResponse>;
 
   chatWithAgentDirect(
     orgId: string,
@@ -139,7 +139,7 @@ export declare class LLMCrafterClient {
     conversationId?: string | null,
     userIdentifier?: string | null,
     dynamicContext?: Record<string, any>
-  ): Promise<ApiResponse<AgentResponse>>;
+  ): Promise<AgentResponse>;
 
   // Information Retrieval
   getAgent(orgId: string, projectId: string, agentId: string): Promise<ApiResponse<AgentInfo>>;

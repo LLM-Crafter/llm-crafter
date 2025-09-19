@@ -17,6 +17,17 @@
  * // Create agent session and chat
  * const session = await client.createAgentSession('agent_789');
  * const chatResult = await client.chatWithAgent(session.session_token, 'Hello!');
+ * 
+ * // chatResult contains:
+ * // {
+ * //   conversation_id: "uuid",
+ * //   response: "Agent's response text",
+ * //   suggestions: ["suggestion1", "suggestion2"],
+ * //   session_info: { session_id: "id", remaining_interactions: 99 }
+ * // }
+ * 
+ * console.log(chatResult.response); // Agent's text response
+ * console.log(chatResult.suggestions); // Suggested follow-up questions
  * ```
  */
 
@@ -72,9 +83,9 @@ class LLMCrafterClient {
     const config = {
       method: options.method || 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'X-API-Key': this.apiKey,
         ...options.headers,
+        'Content-Type': 'application/json', // Ensure this is always set
       },
       ...options,
     };
