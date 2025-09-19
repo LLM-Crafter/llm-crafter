@@ -152,6 +152,14 @@ class VectorDatabaseInterface {
   async deleteDocument(documentId) {
     throw new Error('deleteDocument method must be implemented by subclass');
   }
+
+  async getStats(organizationId, projectId) {
+    throw new Error('getStats method must be implemented by subclass');
+  }
+
+  async clearIndex(organizationId, projectId) {
+    throw new Error('clearIndex method must be implemented by subclass');
+  }
 }
 
 /**
@@ -359,6 +367,162 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
       throw error;
     }
   }
+
+  async getStats(organizationId, projectId) {
+    try {
+      // Get total document count for this org/project
+      const aggregateResult = await this.client.graphql
+        .aggregate()
+        .withClassName(this.className)
+        .withWhere({
+          operator: 'And',
+          operands: [
+            {
+              path: ['organization_id'],
+              operator: 'Equal',
+              valueText: organizationId
+            },
+            {
+              path: ['project_id'],
+              operator: 'Equal',
+              valueText: projectId
+            }
+          ]
+        })
+        .withFields('meta { count }')
+        .do();
+
+      const totalCount = aggregateResult?.data?.Aggregate?.[this.className]?.[0]?.meta?.count || 0;
+
+      // Get sample of document IDs to calculate date range from Weaviate's internal timestamps
+      let indexedRange = null;
+      if (totalCount > 0) {
+        try {
+          const sampleResult = await this.client.graphql
+            .get()
+            .withClassName(this.className)
+            .withWhere({
+              operator: 'And',
+              operands: [
+                {
+                  path: ['organization_id'],
+                  operator: 'Equal',
+                  valueText: organizationId
+                },
+                {
+                  path: ['project_id'],
+                  operator: 'Equal',
+                  valueText: projectId
+                }
+              ]
+            })
+            .withFields('_additional { id creationTimeUnix }')
+            .withLimit(100)
+            .do();
+
+          const docs = sampleResult?.data?.Get?.[this.className] || [];
+          if (docs.length > 0) {
+            const timestamps = docs
+              .map(d => d._additional?.creationTimeUnix)
+              .filter(t => t)
+              .map(t => parseInt(t));
+            
+            if (timestamps.length > 0) {
+              indexedRange = {
+                oldest: Math.min(...timestamps),
+                newest: Math.max(...timestamps)
+              };
+            }
+          }
+        } catch (timestampError) {
+          // If we can't get timestamps, that's okay, just skip the range
+          console.log('Could not retrieve timestamp info:', timestampError.message);
+        }
+      }
+
+      return {
+        total_documents: totalCount,
+        indexed_range: indexedRange
+      };
+    } catch (error) {
+      console.error('Error getting stats from Weaviate:', error);
+      throw error;
+    }
+  }
+
+  async clearIndex(organizationId, projectId) {
+    try {
+      // Get count before deletion using aggregate API directly
+      let countBefore = 0;
+      try {
+        const aggregateResult = await this.client.graphql
+          .aggregate()
+          .withClassName(this.className)
+          .withWhere({
+            operator: 'And',
+            operands: [
+              {
+                path: ['organization_id'],
+                operator: 'Equal',
+                valueText: organizationId
+              },
+              {
+                path: ['project_id'],
+                operator: 'Equal',
+                valueText: projectId
+              }
+            ]
+          })
+          .withFields('meta { count }')
+          .do();
+
+        countBefore = aggregateResult?.data?.Aggregate?.[this.className]?.[0]?.meta?.count || 0;
+        console.log(`📊 Found ${countBefore} documents to delete from Weaviate`);
+      } catch (countError) {
+        console.log('⚠️ Could not get count before deletion, proceeding with deletion anyway:', countError.message);
+        countBefore = 0;
+      }
+
+      // Delete all documents for this org/project
+      console.log(`🗑️ Deleting documents for org: ${organizationId}, project: ${projectId}`);
+      
+      // Weaviate batch deletion using the correct API
+      const deleteResult = await this.client.batch
+        .objectsBatchDeleter()
+        .withClassName(this.className)
+        .withWhere({
+          operator: 'And',
+          operands: [
+            {
+              path: ['organization_id'],
+              operator: 'Equal',
+              valueText: organizationId
+            },
+            {
+              path: ['project_id'],
+              operator: 'Equal',
+              valueText: projectId
+            }
+          ]
+        })
+        .do();
+
+      console.log('🗑️ Weaviate delete result:', deleteResult);
+
+      // If we couldn't get the count before, try to use the delete result
+      let finalCount = countBefore;
+      if (countBefore === 0 && deleteResult?.results) {
+        finalCount = deleteResult.results.successful || 0;
+      }
+
+      return {
+        deleted_count: finalCount
+      };
+    } catch (error) {
+      console.error('Error clearing index from Weaviate:', error);
+      throw error;
+    }
+  }
 }
 
 /**
@@ -418,6 +582,62 @@ class PineconeVectorDB extends VectorDatabaseInterface {
     });
     return true;
   }
+
+  async getStats(organizationId, projectId) {
+    try {
+      // Pinecone doesn't have a direct count/stats API, so we query with a large limit
+      // and analyze the results. This is not ideal for production with large datasets.
+      const queryResult = await this.index.query({
+        vector: new Array(1536).fill(0), // Zero vector for metadata-only query
+        topK: 10000, // Max limit
+        includeMetadata: true,
+        filter: {
+          organization_id: organizationId,
+          project_id: projectId
+        }
+      });
+
+      const docs = queryResult.matches || [];
+      
+      // Calculate date range from indexed_at field
+      const indexedDates = docs.map(d => new Date(d.metadata?.indexed_at || Date.now()).getTime()).filter(t => !isNaN(t));
+      const dateRange = indexedDates.length > 0 ? {
+        oldest: Math.min(...indexedDates),
+        newest: Math.max(...indexedDates)
+      } : null;
+
+      return {
+        total_documents: docs.length,
+        indexed_range: dateRange
+      };
+    } catch (error) {
+      console.error('Error getting stats from Pinecone:', error);
+      throw error;
+    }
+  }
+
+  async clearIndex(organizationId, projectId) {
+    try {
+      // Get count before deletion
+      const statsBefore = await this.getStats(organizationId, projectId);
+      const countBefore = statsBefore.total_documents;
+
+      // Delete all vectors for this org/project
+      await this.index.deleteAll({
+        filter: {
+          organization_id: organizationId,
+          project_id: projectId
+        }
+      });
+
+      return {
+        deleted_count: countBefore
+      };
+    } catch (error) {
+      console.error('Error clearing index from Pinecone:', error);
+      throw error;
+    }
+  }
 }
 
 /**
@@ -476,6 +696,37 @@ class MemoryVectorDB extends VectorDatabaseInterface {
     const initialLength = this.documents.length;
     this.documents = this.documents.filter(doc => doc.document_id !== documentId);
     return this.documents.length < initialLength;
+  }
+
+  async getStats(organizationId, projectId) {
+    const docs = this.documents.filter(doc => 
+      doc.organization_id === organizationId &&
+      doc.project_id === projectId
+    );
+
+    // Calculate date range from indexed_at field
+    const indexedDates = docs.map(d => new Date(d.indexed_at || Date.now()).getTime()).filter(t => !isNaN(t));
+    const dateRange = indexedDates.length > 0 ? {
+      oldest: Math.min(...indexedDates),
+      newest: Math.max(...indexedDates)
+    } : null;
+
+    return {
+      total_documents: docs.length,
+      indexed_range: dateRange
+    };
+  }
+
+  async clearIndex(organizationId, projectId) {
+    const initialCount = this.documents.length;
+    this.documents = this.documents.filter(doc => 
+      !(doc.organization_id === organizationId && doc.project_id === projectId)
+    );
+    const deletedCount = initialCount - this.documents.length;
+    
+    return {
+      deleted_count: deletedCount
+    };
   }
 
   cosineSimilarity(vecA, vecB) {

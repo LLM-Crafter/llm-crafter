@@ -206,7 +206,7 @@ class RAGController {
     try {
       const { orgId, projectId } = req.params;
 
-      const stats = ragService.getStats(orgId, projectId);
+      const stats = await ragService.getStats(orgId, projectId);
 
       res.json({
         success: true,
@@ -229,7 +229,7 @@ class RAGController {
     try {
       const { orgId, projectId } = req.params;
 
-      const result = ragService.clearIndex(orgId, projectId);
+      const result = await ragService.clearIndex(orgId, projectId);
 
       res.json({
         success: true,

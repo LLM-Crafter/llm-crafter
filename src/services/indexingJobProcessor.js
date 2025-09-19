@@ -12,6 +12,7 @@ class IndexingJobProcessor {
     this.config = {
       pollInterval: 5000, // Check for new jobs every 5 seconds
       maxConcurrentJobs: 3, // Process up to 3 jobs simultaneously
+      maxConcurrentDocuments: 10, // Process up to 10 documents simultaneously within a job
       retryAttempts: 3,
       retryDelay: 30000 // 30 seconds
     };
@@ -174,70 +175,177 @@ class IndexingJobProcessor {
   }
   
   /**
-   * Process batch documents
+   * Process batch documents with concurrency
    */
   async processBatchDocuments(job, results) {
     const documentBatches = job.documents;
+    const batchSize = Math.min(this.config.maxConcurrentDocuments, documentBatches.length);
     
-    for (let i = 0; i < documentBatches.length; i++) {
-      try {
-        const batch = documentBatches[i];
+    console.log(`📦 Processing ${documentBatches.length} batches with concurrency: ${batchSize}`);
+    
+    // Process batches in chunks with concurrency
+    for (let i = 0; i < documentBatches.length; i += batchSize) {
+      const chunk = documentBatches.slice(i, i + batchSize);
+      
+      // Process chunk concurrently
+      const chunkPromises = chunk.map(async (batch, chunkIndex) => {
+        const globalIndex = i + chunkIndex;
+        try {
+          console.log(`📄 Processing batch ${globalIndex + 1}/${documentBatches.length}...`);
+          
+          const indexedIds = await ragService.indexJsonDocuments(
+            batch.documents || batch,
+            job.organization_id,
+            job.project_id,
+            job.api_key_id
+          );
+          
+          console.log(`✅ Batch ${globalIndex + 1} completed: ${indexedIds.length} chunks`);
+          
+          return {
+            success: true,
+            index: globalIndex,
+            indexedIds: indexedIds
+          };
+          
+        } catch (error) {
+          console.error(`❌ Error processing batch ${globalIndex + 1}:`, error);
+          return {
+            success: false,
+            index: globalIndex,
+            error: error.message
+          };
+        }
+      });
+      
+      // Wait for chunk to complete
+      const chunkResults = await Promise.allSettled(chunkPromises);
+      
+      // Process results
+      for (const result of chunkResults) {
+        if (result.status === 'fulfilled') {
+          const batchResult = result.value;
+          
+          if (batchResult.success) {
+            results.indexed_ids.push(...batchResult.indexedIds);
+            results.total_successful++;
+            results.total_chunks += batchResult.indexedIds.length;
+          } else {
+            results.errors.push({
+              document_index: batchResult.index,
+              error: batchResult.error,
+              timestamp: new Date()
+            });
+            results.total_failed++;
+          }
+        } else {
+          // Promise was rejected
+          results.errors.push({
+            document_index: i,
+            error: result.reason?.message || 'Unknown error',
+            timestamp: new Date()
+          });
+          results.total_failed++;
+        }
+        
+        results.total_processed++;
+      }
+      
+      // Update progress after each chunk
+      await job.updateProgress({
+        processed_documents: results.total_processed,
+        successful_documents: results.total_successful,
+        failed_documents: results.total_failed,
+        indexed_chunks: results.total_chunks
+      });
+      
+      console.log(`📊 Progress: ${results.total_processed}/${documentBatches.length} batches, ${results.total_chunks} chunks indexed`);
+    }
+  }
+  
+  /**
+   * Process single document or document array with concurrency
+   */
+  async processSingleDocument(job, results) {
+    try {
+      const documents = Array.isArray(job.documents) ? job.documents : [job.documents];
+      console.log(`📄 Processing ${documents.length} documents with concurrency...`);
+      
+      // If we have multiple documents, process them with limited concurrency
+      if (documents.length > 1) {
+        const batchSize = Math.min(this.config.maxConcurrentDocuments, documents.length);
+        const allIndexedIds = [];
+        
+        // Process documents in chunks
+        for (let i = 0; i < documents.length; i += batchSize) {
+          const chunk = documents.slice(i, i + batchSize);
+          
+          // Process chunk concurrently
+          const chunkPromises = chunk.map(async (doc, chunkIndex) => {
+            const globalIndex = i + chunkIndex;
+            console.log(`📄 Processing document ${globalIndex + 1}/${documents.length}...`);
+            
+            const indexedIds = await ragService.indexJsonDocuments(
+              [doc],
+              job.organization_id,
+              job.project_id,
+              job.api_key_id
+            );
+            
+            console.log(`✅ Document ${globalIndex + 1} completed: ${indexedIds.length} chunks`);
+            return indexedIds;
+          });
+          
+          const chunkResults = await Promise.allSettled(chunkPromises);
+          
+          // Collect successful results
+          for (const result of chunkResults) {
+            if (result.status === 'fulfilled') {
+              allIndexedIds.push(...result.value);
+            }
+          }
+          
+          // Update progress after each chunk
+          const processedSoFar = Math.min(i + batchSize, documents.length);
+          await job.updateProgress({
+            processed_documents: processedSoFar,
+            successful_documents: processedSoFar,
+            failed_documents: 0,
+            indexed_chunks: allIndexedIds.length
+          });
+          
+          console.log(`📊 Progress: ${processedSoFar}/${documents.length} documents, ${allIndexedIds.length} chunks indexed`);
+        }
+        
+        results.indexed_ids = allIndexedIds;
+        results.total_processed = 1;
+        results.total_successful = 1;
+        results.total_chunks = allIndexedIds.length;
+        
+      } else {
+        // Single document processing
         const indexedIds = await ragService.indexJsonDocuments(
-          batch.documents || batch,
+          documents,
           job.organization_id,
           job.project_id,
           job.api_key_id
         );
         
-        results.indexed_ids.push(...indexedIds);
-        results.total_successful++;
-        results.total_chunks += indexedIds.length;
+        results.indexed_ids = indexedIds;
+        results.total_processed = 1;
+        results.total_successful = 1;
+        results.total_chunks = indexedIds.length;
         
-        console.log(`📄 Batch ${i + 1}/${documentBatches.length} processed: ${indexedIds.length} chunks`);
-        
-      } catch (error) {
-        console.error(`❌ Error processing batch ${i}:`, error);
-        results.errors.push({
-          document_index: i,
-          error: error.message,
-          timestamp: new Date()
-        });
-        results.total_failed++;
-      }
-      
-      results.total_processed++;
-      
-      // Update progress periodically
-      if (results.total_processed % 10 === 0 || results.total_processed === documentBatches.length) {
+        // Update progress for single document
         await job.updateProgress({
-          processed_documents: results.total_processed,
-          successful_documents: results.total_successful,
-          failed_documents: results.total_failed,
-          indexed_chunks: results.total_chunks
+          processed_documents: 1,
+          successful_documents: 1,
+          failed_documents: 0,
+          indexed_chunks: indexedIds.length
         });
       }
-    }
-  }
-  
-  /**
-   * Process single document or document array
-   */
-  async processSingleDocument(job, results) {
-    try {
-      const documents = Array.isArray(job.documents) ? job.documents : [job.documents];
-      const indexedIds = await ragService.indexJsonDocuments(
-        documents,
-        job.organization_id,
-        job.project_id,
-        job.api_key_id
-      );
       
-      results.indexed_ids = indexedIds;
-      results.total_processed = 1;
-      results.total_successful = 1;
-      results.total_chunks = indexedIds.length;
-      
-      console.log(`📄 Single document processed: ${indexedIds.length} chunks`);
+      console.log(`📄 Single document job completed: ${results.total_chunks} chunks`);
       
     } catch (error) {
       console.error('❌ Error processing single document:', error);
@@ -261,17 +369,36 @@ class IndexingJobProcessor {
     if (!job) {
       return null;
     }
-    
+
     const response = {
       job_id: job.job_id,
       type: job.type,
       status: job.status,
-      progress: job.progress,
+      progress: {
+        ...job.progress,
+        // Calculate percentage completion
+        completion_percentage: job.progress.total_documents > 0 
+          ? Math.round((job.progress.processed_documents / job.progress.total_documents) * 100)
+          : 0
+      },
       created_at: job.createdAt,
       started_at: job.started_at,
       completed_at: job.completed_at,
-      processing_time_ms: job.processing_time_ms
+      processing_time_ms: job.processing_time_ms,
+      is_active: this.jobs.has(jobId) // Check if job is currently being processed
     };
+    
+    // Add estimated completion time for running jobs
+    if (job.status === 'processing' && job.started_at) {
+      const elapsedMs = Date.now() - new Date(job.started_at).getTime();
+      const progressRatio = job.progress.processed_documents / job.progress.total_documents;
+      
+      if (progressRatio > 0) {
+        const estimatedTotalMs = elapsedMs / progressRatio;
+        const remainingMs = estimatedTotalMs - elapsedMs;
+        response.estimated_completion_time = remainingMs > 0 ? Math.round(remainingMs / 1000) + ' seconds' : 'Soon';
+      }
+    }
     
     if (job.status === 'completed') {
       response.results = {
