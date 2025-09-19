@@ -84,14 +84,18 @@ class LLMCrafterClient {
    */
   async _request(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
+    
+    // Separate headers from other options to prevent overriding
+    const { headers: optionHeaders = {}, ...otherOptions } = options;
+    
     const config = {
-      method: options.method || 'GET',
+      method: 'GET',
+      ...otherOptions, // Spread other options first
       headers: {
         'X-API-Key': this.apiKey,
-        ...options.headers,
+        ...optionHeaders,
         'Content-Type': 'application/json', // Ensure this is always set
       },
-      ...options,
     };
 
     if (config.body && typeof config.body === 'object') {
