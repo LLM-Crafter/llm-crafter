@@ -59,7 +59,7 @@ const generateSessionToken = async (req, res) => {
       is_revoked: false,
     });
 
-    const maxSessionsPerAgent = process.env.MAX_SESSIONS_PER_AGENT || 5;
+    const maxSessionsPerAgent = process.env.MAX_SESSIONS_PER_AGENT || 50;
     if (existingActiveSessions >= maxSessionsPerAgent) {
       return res.status(400).json({
         error: `Maximum number of active sessions reached for this agent (${maxSessionsPerAgent})`,

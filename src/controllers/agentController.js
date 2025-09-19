@@ -1078,9 +1078,15 @@ const executeChatbotAgentWithSession = async (req, res) => {
       dynamicContext
     );
 
+    let parsedResult = { ...result };
+    delete parsedResult.thinking_process; // Remove internal thinking process details
+    delete parsedResult.tools_used; // Remove tool call details
+    delete parsedResult.token_usage; // Remove token usage details
+    delete parsedResult.suggestion_usage; // Remove question suggestion usage details
+
     // Add session information to the response
     res.json({
-      ...result,
+      ...parsedResult,
       session_info: {
         session_id: req.sessionID,
         remaining_interactions: req.remainingInteractions,
