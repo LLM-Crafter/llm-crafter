@@ -1074,15 +1074,21 @@ const executeChatbotAgentWithSession = async (req, res) => {
       req.agent._id,
       conversationId,
       message,
-      userIdentifier || `session_${req.session._id}`,
+      userIdentifier || `session_${req.sessionID}`,
       dynamicContext
     );
 
+    let parsedResult = { ...result };
+    delete parsedResult.thinking_process; // Remove internal thinking process details
+    delete parsedResult.tools_used; // Remove tool call details
+    delete parsedResult.token_usage; // Remove token usage details
+    delete parsedResult.suggestion_usage; // Remove question suggestion usage details
+
     // Add session information to the response
     res.json({
-      ...result,
+      ...parsedResult,
       session_info: {
-        session_id: req.session._id,
+        session_id: req.sessionID,
         remaining_interactions: req.remainingInteractions,
         expires_at: req.session.expires_at,
       },
@@ -1109,7 +1115,7 @@ const executeTaskAgentWithSession = async (req, res) => {
     const result = await agentService.executeTaskAgent(
       req.agent._id,
       input,
-      `session_${req.session._id}`,
+      `session_${req.sessionID}`,
       context
     );
 
@@ -1117,9 +1123,9 @@ const executeTaskAgentWithSession = async (req, res) => {
     res.json({
       ...result,
       session_info: {
-        session_id: req.session._id,
+        session_id: req.sessionToken._id,
         remaining_interactions: req.remainingInteractions,
-        expires_at: req.session.expires_at,
+        expires_at: req.sessionToken.expires_at,
       },
     });
   } catch (error) {

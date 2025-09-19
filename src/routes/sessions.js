@@ -8,11 +8,7 @@ const { proxyLimiter, generalLimiter } = require('../middleware/rateLimiting');
 
 // Validation middleware
 const generateSessionValidation = [
-  body('agentId')
-    .notEmpty()
-    .withMessage('Agent ID is required')
-    .isMongoId()
-    .withMessage('Invalid agent ID format'),
+  body('agentId').notEmpty().withMessage('Agent ID is required'),
   body('maxInteractions')
     .optional()
     .isInt({ min: 1, max: 1000 })
