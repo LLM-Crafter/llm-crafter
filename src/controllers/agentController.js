@@ -1074,7 +1074,7 @@ const executeChatbotAgentWithSession = async (req, res) => {
       req.agent._id,
       conversationId,
       message,
-      userIdentifier || `session_${req.session._id}`,
+      userIdentifier || `session_${req.sessionID}`,
       dynamicContext
     );
 
@@ -1082,7 +1082,7 @@ const executeChatbotAgentWithSession = async (req, res) => {
     res.json({
       ...result,
       session_info: {
-        session_id: req.session._id,
+        session_id: req.sessionID,
         remaining_interactions: req.remainingInteractions,
         expires_at: req.session.expires_at,
       },
@@ -1109,7 +1109,7 @@ const executeTaskAgentWithSession = async (req, res) => {
     const result = await agentService.executeTaskAgent(
       req.agent._id,
       input,
-      `session_${req.session._id}`,
+      `session_${req.sessionID}`,
       context
     );
 
@@ -1117,9 +1117,9 @@ const executeTaskAgentWithSession = async (req, res) => {
     res.json({
       ...result,
       session_info: {
-        session_id: req.session._id,
+        session_id: req.sessionToken._id,
         remaining_interactions: req.remainingInteractions,
-        expires_at: req.session.expires_at,
+        expires_at: req.sessionToken.expires_at,
       },
     });
   } catch (error) {

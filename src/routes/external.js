@@ -25,10 +25,6 @@ const agentChatValidation = [
     .withMessage('Message is required')
     .isLength({ max: 4000 })
     .withMessage('Message must be less than 4000 characters'),
-  body('conversationId')
-    .optional()
-    .isMongoId()
-    .withMessage('Invalid conversation ID format'),
   body('userIdentifier')
     .optional()
     .isString()

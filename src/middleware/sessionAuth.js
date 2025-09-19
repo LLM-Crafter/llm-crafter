@@ -95,7 +95,7 @@ const sessionAuth = async (req, res, next) => {
     const remainingInteractions = await session.useInteraction();
 
     // Attach session data to request
-    req.session = session;
+    req.sessionToken = session;
     req.user = session.user_api_key.user;
     req.organization = session.user_api_key.organization;
     req.apiKey = session.user_api_key;
