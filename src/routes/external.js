@@ -40,8 +40,8 @@ const agentTaskValidation = [
   body('input')
     .notEmpty()
     .withMessage('Input is required')
-    .isLength({ max: 4000 })
-    .withMessage('Input must be less than 4000 characters'),
+    .isLength({ max: 26000 })
+    .withMessage('Input must be less than 12000 characters'),
   body('context')
     .optional()
     .isObject()
