@@ -32,6 +32,28 @@ Object.defineProperty(exports, '__esModule', { value: true });
  * 
  * console.log(chatResult.response); // Agent's text response
  * console.log(chatResult.suggestions); // Suggested follow-up questions
+ *
+ * // Streaming chat with session token
+ * await client.chatWithAgentStream(
+ *   session.session_token,
+ *   'Tell me a story',
+ *   null, // conversationId
+ *   null, // userIdentifier
+ *   {}, // dynamicContext
+ *   (chunk) => process.stdout.write(chunk), // onChunk
+ *   (data) => console.log('\n✓ Complete:', data), // onComplete
+ *   (error) => console.error('❌ Error:', error) // onError
+ * );
+ *
+ * // Streaming task execution
+ * await client.executeTaskAgentStream(
+ *   session.session_token,
+ *   'Analyze this data: [1,2,3,4,5]',
+ *   {}, // context
+ *   (chunk) => process.stdout.write(chunk), // onChunk
+ *   (data) => console.log('\n✓ Task Complete:', data), // onComplete
+ *   (error) => console.error('❌ Error:', error) // onError
+ * );
  * ```
  */
 
@@ -143,6 +165,82 @@ class LLMCrafterClient {
     }
 
     throw lastError;
+  }
+
+  /**
+   * Make a streaming request to the API
+   * @private
+   */
+  async _streamRequest(endpoint, options = {}, onChunk, onComplete, onError) {
+    const url = `${this.baseUrl}${endpoint}`;
+    const config = {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+        ...options.headers,
+      },
+      ...options,
+    };
+
+    if (options.body) {
+      config.body = JSON.stringify(options.body);
+    }
+
+    try {
+      const response = await fetch(url, config);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const error = new Error(errorData.error || `HTTP ${response.status}`);
+        error.status = response.status;
+        error.code = errorData.code;
+        error.response = errorData;
+        onError(error);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.type === 'response_chunk') {
+                  onChunk(data.content);
+                } else if (data.type === 'complete') {
+                  onComplete(data);
+                } else if (data.type === 'error') {
+                  const error = new Error(data.error || 'Streaming error');
+                  error.code = data.code;
+                  onError(error);
+                }
+              } catch (parseError) {
+                // Ignore malformed JSON lines
+                console.warn('Failed to parse SSE data:', line);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      onError(error);
+    }
   }
 
   // ===== PROMPT EXECUTION =====
@@ -277,6 +375,72 @@ class LLMCrafterClient {
   }
 
   /**
+   * Chat with an agent using streaming (session token)
+   * @param {string} sessionToken - Session token from createAgentSession
+   * @param {string} message - Message to send to the agent
+   * @param {string} conversationId - Optional conversation ID
+   * @param {string} userIdentifier - Optional user identifier
+   * @param {Object} dynamicContext - Optional dynamic context
+   * @param {Function} onChunk - Callback function for each chunk: (chunk: string) => void
+   * @param {Function} onComplete - Callback function when complete: (data: Object) => void
+   * @param {Function} onError - Callback function for errors: (error: Error) => void
+   * @returns {Promise<void>} Promise that resolves when streaming starts
+   */
+  async chatWithAgentStream(
+    sessionToken,
+    message,
+    conversationId = null,
+    userIdentifier = null,
+    dynamicContext = {},
+    onChunk = () => {},
+    onComplete = () => {},
+    onError = () => {}
+  ) {
+    return this._streamRequest('/external/agents/chat/stream', {
+      method: 'POST',
+      headers: {
+        'X-Session-Token': sessionToken,
+      },
+      body: {
+        message,
+        conversationId,
+        userIdentifier,
+        dynamicContext,
+      },
+    }, onChunk, onComplete, onError);
+  }
+
+  /**
+   * Execute a task agent using streaming (session token)
+   * @param {string} sessionToken - Session token from createAgentSession
+   * @param {string} input - Input for the task agent
+   * @param {Object} context - Optional context
+   * @param {Function} onChunk - Callback function for each chunk: (chunk: string) => void
+   * @param {Function} onComplete - Callback function when complete: (data: Object) => void
+   * @param {Function} onError - Callback function for errors: (error: Error) => void
+   * @returns {Promise<void>} Promise that resolves when streaming starts
+   */
+  async executeTaskAgentStream(
+    sessionToken,
+    input,
+    context = {},
+    onChunk = () => {},
+    onComplete = () => {},
+    onError = () => {}
+  ) {
+    return this._streamRequest('/external/agents/execute/stream', {
+      method: 'POST',
+      headers: {
+        'X-Session-Token': sessionToken,
+      },
+      body: {
+        input,
+        context,
+      },
+    }, onChunk, onComplete, onError);
+  }
+
+  /**
    * Chat with an agent using API key (simpler but less secure)
    * @param {string} orgId - Organization ID
    * @param {string} projectId - Project ID
@@ -307,6 +471,86 @@ class LLMCrafterClient {
           dynamicContext,
         },
       }
+    );
+  }
+
+  /**
+   * Chat with an agent using streaming (API key-based)
+   * @param {string} orgId - Organization ID
+   * @param {string} projectId - Project ID 
+   * @param {string} agentId - Agent ID
+   * @param {string} message - Message to send to the agent
+   * @param {string} conversationId - Optional conversation ID
+   * @param {string} userIdentifier - Optional user identifier
+   * @param {Object} dynamicContext - Optional dynamic context
+   * @param {Function} onChunk - Callback function for each chunk: (chunk: string) => void
+   * @param {Function} onComplete - Callback function when complete: (data: Object) => void
+   * @param {Function} onError - Callback function for errors: (error: Error) => void
+   * @returns {Promise<void>} Promise that resolves when streaming starts
+   */
+  async chatWithAgentDirectStream(
+    orgId,
+    projectId,
+    agentId,
+    message,
+    conversationId = null,
+    userIdentifier = null,
+    dynamicContext = {},
+    onChunk = () => {},
+    onComplete = () => {},
+    onError = () => {}
+  ) {
+    return this._streamRequest(
+      `/organizations/${orgId}/projects/${projectId}/agents/${agentId}/chat/stream`,
+      {
+        method: 'POST',
+        body: {
+          message,
+          conversationId,
+          userIdentifier,
+          dynamicContext,
+        },
+      },
+      onChunk,
+      onComplete,
+      onError
+    );
+  }
+
+  /**
+   * Execute a task agent using streaming (API key-based)
+   * @param {string} orgId - Organization ID
+   * @param {string} projectId - Project ID
+   * @param {string} agentId - Agent ID
+   * @param {string} input - Input for the task agent
+   * @param {Object} context - Optional context
+   * @param {Function} onChunk - Callback function for each chunk: (chunk: string) => void
+   * @param {Function} onComplete - Callback function when complete: (data: Object) => void
+   * @param {Function} onError - Callback function for errors: (error: Error) => void
+   * @returns {Promise<void>} Promise that resolves when streaming starts
+   */
+  async executeTaskAgentDirectStream(
+    orgId,
+    projectId,
+    agentId,
+    input,
+    context = {},
+    onChunk = () => {},
+    onComplete = () => {},
+    onError = () => {}
+  ) {
+    return this._streamRequest(
+      `/organizations/${orgId}/projects/${projectId}/agents/${agentId}/execute/stream`,
+      {
+        method: 'POST',
+        body: {
+          input,
+          context,
+        },
+      },
+      onChunk,
+      onComplete,
+      onError
     );
   }
 

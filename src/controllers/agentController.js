@@ -449,6 +449,154 @@ const executeTaskAgent = async (req, res) => {
   }
 };
 
+const executeTaskAgentStream = async (req, res) => {
+  try {
+    const { input, user_identifier, context } = req.body;
+
+    if (!input) {
+      return res.status(400).json({ error: 'Input is required' });
+    }
+
+    // Set up Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // Send connection established event
+    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+
+    let isResponseComplete = false;
+
+    // Stream callback function
+    const streamCallback = (chunk) => {
+      if (!isResponseComplete) {
+        const data = JSON.stringify({
+          type: 'response_chunk',
+          content: chunk
+        });
+        res.write(`data: ${data}\n\n`);
+      }
+    };
+
+    try {
+      // Execute task agent with streaming
+      const result = await agentService.executeTaskAgentStream(
+        req.params.agentId,
+        input,
+        user_identifier,
+        context,
+        streamCallback
+      );
+
+      isResponseComplete = true;
+
+      // Send completion event with metadata
+      const completionData = JSON.stringify({
+        type: 'complete',
+        execution_id: result.execution_id,
+        token_usage: result.token_usage,
+        tools_used: result.tools_used,
+        status: result.status
+      });
+      res.write(`data: ${completionData}\n\n`);
+
+      res.end();
+
+    } catch (error) {
+      console.error('Task streaming error:', error);
+      isResponseComplete = true;
+      
+      const errorData = JSON.stringify({
+        type: 'error',
+        error: error.message || 'Failed to execute task agent'
+      });
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
+    }
+
+  } catch (error) {
+    console.error('Task streaming setup error:', error);
+    res.status(500).json({ error: error.message || 'Failed to setup task agent streaming' });
+  }
+};
+
+const executeChatbotAgentStream = async (req, res) => {
+  try {
+    const { message, conversation_id, user_identifier, context } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    if (!user_identifier) {
+      return res.status(400).json({ error: 'User identifier is required' });
+    }
+
+    // Set up Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // Send connection established event
+    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+
+    let isResponseComplete = false;
+
+    // Stream callback function
+    const streamCallback = (chunk) => {
+      if (!isResponseComplete) {
+        const data = JSON.stringify({
+          type: 'response_chunk',
+          content: chunk
+        });
+        res.write(`data: ${data}\n\n`);
+      }
+    };
+
+    try {
+      // Execute agent with streaming
+      const result = await agentService.executeChatbotAgentStream(
+        req.params.agentId,
+        conversation_id,
+        message,
+        user_identifier,
+        context,
+        streamCallback
+      );
+
+      isResponseComplete = true;
+
+      // Send completion event with metadata
+      const completionData = JSON.stringify({
+        type: 'complete',
+        conversation_id: result.conversation_id,
+        token_usage: result.token_usage,
+        tools_used: result.tools_used,
+        suggestions: result.suggestions || null
+      });
+      res.write(`data: ${completionData}\n\n`);
+
+    } catch (error) {
+      console.error('Streaming chatbot execution error:', error);
+      const errorData = JSON.stringify({
+        type: 'error',
+        error: error.message || 'Failed to execute chatbot agent'
+      });
+      res.write(`data: ${errorData}\n\n`);
+    }
+
+    res.end();
+
+  } catch (error) {
+    console.error('Streaming setup error:', error);
+    res.status(500).json({ error: error.message || 'Failed to setup streaming' });
+  }
+};
+
 // ===== CONVERSATION MANAGEMENT =====
 
 const getConversations = async (req, res) => {
@@ -1138,6 +1286,166 @@ const executeTaskAgentWithSession = async (req, res) => {
 };
 
 /**
+ * Execute chatbot agent using session token with streaming (for external API access)
+ */
+const executeChatbotAgentWithSessionStream = async (req, res) => {
+  try {
+    const { message, conversationId, userIdentifier, dynamicContext } =
+      req.body;
+
+    // Set up Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // Send connection established event
+    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+
+    let isResponseComplete = false;
+
+    // Stream callback function
+    const streamCallback = (chunk) => {
+      if (!isResponseComplete) {
+        const data = JSON.stringify({
+          type: 'response_chunk',
+          content: chunk
+        });
+        res.write(`data: ${data}\n\n`);
+      }
+    };
+
+    try {
+      // Execute agent with streaming
+      const result = await agentService.executeChatbotAgentStream(
+        req.agent._id,
+        conversationId,
+        message,
+        userIdentifier || `session_${req.sessionID}`,
+        dynamicContext,
+        streamCallback
+      );
+
+      isResponseComplete = true;
+
+      // Send completion event with session info (excluding sensitive details)
+      const completionData = JSON.stringify({
+        type: 'complete',
+        conversation_id: result.conversation_id,
+        suggestions: result.suggestions,
+        session_info: {
+          session_id: req.sessionID,
+          remaining_interactions: req.remainingInteractions,
+          expires_at: req.session.expires_at,
+        }
+      });
+      res.write(`data: ${completionData}\n\n`);
+
+      res.end();
+
+    } catch (error) {
+      console.error('Session-based chatbot streaming error:', error);
+      isResponseComplete = true;
+      
+      const errorData = JSON.stringify({
+        type: 'error',
+        error: error.message || 'Failed to execute chatbot agent',
+        code: 'EXECUTION_FAILED'
+      });
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
+    }
+
+  } catch (error) {
+    console.error('Session-based chatbot streaming setup error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to setup chatbot agent streaming',
+      code: 'STREAMING_SETUP_FAILED'
+    });
+  }
+};
+
+/**
+ * Execute task agent using session token with streaming (for external API access)
+ */
+const executeTaskAgentWithSessionStream = async (req, res) => {
+  try {
+    const { input, context } = req.body;
+
+    // Set up Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // Send connection established event
+    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+
+    let isResponseComplete = false;
+
+    // Stream callback function
+    const streamCallback = (chunk) => {
+      if (!isResponseComplete) {
+        const data = JSON.stringify({
+          type: 'response_chunk',
+          content: chunk
+        });
+        res.write(`data: ${data}\n\n`);
+      }
+    };
+
+    try {
+      // Execute task agent with streaming
+      const result = await agentService.executeTaskAgentStream(
+        req.agent._id,
+        input,
+        `session_${req.sessionID}`,
+        context,
+        streamCallback
+      );
+
+      isResponseComplete = true;
+
+      // Send completion event with session info
+      const completionData = JSON.stringify({
+        type: 'complete',
+        execution_id: result.execution_id,
+        status: result.status,
+        session_info: {
+          session_id: req.sessionToken._id,
+          remaining_interactions: req.remainingInteractions,
+          expires_at: req.sessionToken.expires_at,
+        }
+      });
+      res.write(`data: ${completionData}\n\n`);
+
+      res.end();
+
+    } catch (error) {
+      console.error('Session-based task streaming error:', error);
+      isResponseComplete = true;
+      
+      const errorData = JSON.stringify({
+        type: 'error',
+        error: error.message || 'Failed to execute task agent',
+        code: 'EXECUTION_FAILED'
+      });
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
+    }
+
+  } catch (error) {
+    console.error('Session-based task streaming setup error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to setup task agent streaming',
+      code: 'STREAMING_SETUP_FAILED'
+    });
+  }
+};
+
+/**
  * Execute chatbot agent using API key (for simple external access)
  * This bypasses the session system but requires agents:chat scope
  */
@@ -1286,7 +1594,9 @@ module.exports = {
   updateAgent,
   deleteAgent,
   executeChatbotAgent,
+  executeChatbotAgentStream,
   executeTaskAgent,
+  executeTaskAgentStream,
   getConversations,
   getConversation,
   getAgentExecutions,
@@ -1301,7 +1611,9 @@ module.exports = {
   getQuestionSuggestions,
   // New external API methods
   executeChatbotAgentWithSession,
+  executeChatbotAgentWithSessionStream,
   executeTaskAgentWithSession,
+  executeTaskAgentWithSessionStream,
   executeChatbotAgentWithApiKey,
   getAgentForApiKey,
   getAgentsForApiKey,
