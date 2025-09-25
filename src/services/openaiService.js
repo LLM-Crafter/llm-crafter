@@ -248,6 +248,65 @@ class OpenAIService {
     }
   }
 
+  async generateStreamingCompletion(model, prompt, parameters, systemPrompt = null, onChunk = null) {
+    const mappedParams = this.mapParameters(parameters);
+
+    // Build messages array
+    const messages = [];
+
+    // Add system message if provided
+    if (systemPrompt && systemPrompt.trim()) {
+      messages.push({ role: 'system', content: systemPrompt.trim() });
+    }
+
+    // Add user message
+    messages.push({ role: 'user', content: prompt });
+
+    try {
+      const stream = await this.client.chat.completions.create({
+        model,
+        messages,
+        stream: true,
+        ...mappedParams,
+      });
+
+      let fullContent = '';
+      let promptTokens = 0;
+      let completionTokens = 0;
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          fullContent += delta;
+          if (onChunk) {
+            onChunk(delta);
+          }
+        }
+
+        // Collect usage info when available (usually in the last chunk)
+        if (chunk.usage) {
+          promptTokens = chunk.usage.prompt_tokens;
+          completionTokens = chunk.usage.completion_tokens;
+        }
+      }
+
+      const cost = this.calculateCost(model, promptTokens, completionTokens);
+
+      return {
+        content: fullContent,
+        finish_reason: 'stop',
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
+          cost,
+        },
+      };
+    } catch (error) {
+      throw new Error(`${this.provider} API Error: ${error.message}`);
+    }
+  }
+
   async createEmbedding(options) {
     const { model = 'text-embedding-3-small', input } = options;
 

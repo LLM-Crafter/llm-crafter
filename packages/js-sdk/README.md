@@ -86,6 +86,84 @@ const directChat = await client.chatWithAgentDirect(
 console.log('Direct chat response:', directChat.data.response);
 ```
 
+### Streaming Chat (Real-time Response)
+
+For real-time streaming responses, use the streaming methods:
+
+```javascript
+// Streaming with session token (recommended)
+const session = await client.createAgentSession('agent_789');
+
+await client.chatWithAgentStream(
+  session.session_token,
+  'Tell me a long story',
+  null, // conversationId
+  'user-123', // userIdentifier
+  {}, // dynamicContext
+  (chunk) => {
+    // Called for each piece of the response as it streams in
+    process.stdout.write(chunk);
+  },
+  (data) => {
+    // Called when the response is complete
+    console.log('\n✅ Chat completed!');
+    console.log('Session info:', data.session_info);
+  },
+  (error) => {
+    // Called if there's an error
+    console.error('❌ Streaming error:', error.message);
+  }
+);
+
+// Direct streaming with API key
+await client.chatWithAgentDirectStream(
+  'org_123',
+  'proj_456',
+  'agent_789',
+  'Stream me a response!',
+  null, // conversationId
+  'user-123', // userIdentifier
+  {}, // dynamicContext
+  (chunk) => process.stdout.write(chunk), // onChunk
+  (data) => console.log('\n✅ Complete!'), // onComplete
+  (error) => console.error('❌ Error:', error) // onError
+);
+```
+
+### Task Agent Execution
+
+```javascript
+// Regular task execution
+const taskResult = await client.executeTaskAgent(
+  session.session_token,
+  'Analyze this data: [1,2,3,4,5]'
+);
+
+console.log('Task output:', taskResult.data.output);
+
+// Streaming task execution
+await client.executeTaskAgentStream(
+  session.session_token,
+  'Process this large dataset...',
+  {}, // context
+  (chunk) => process.stdout.write(chunk), // onChunk
+  (data) => console.log('\n✅ Task completed!'), // onComplete
+  (error) => console.error('❌ Task error:', error) // onError
+);
+
+// Direct task execution with streaming
+await client.executeTaskAgentDirectStream(
+  'org_123',
+  'proj_456',
+  'agent_789',
+  'Complex analysis task',
+  {}, // context
+  (chunk) => process.stdout.write(chunk), // onChunk
+  (data) => console.log('\n✅ Analysis complete!'), // onComplete
+  (error) => console.error('❌ Analysis error:', error) // onError
+);
+```
+
 ### Get Information
 
 ```javascript

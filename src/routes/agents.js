@@ -56,6 +56,11 @@ const createAgentValidation = [
     .optional()
     .isString()
     .withMessage('Question suggestions custom prompt must be a string'),
+  // Streaming configuration validation
+  body('config.enable_streaming')
+    .optional()
+    .isBoolean()
+    .withMessage('Enable streaming must be a boolean'),
 ];
 
 const updateAgentValidation = [
@@ -105,6 +110,11 @@ const updateAgentValidation = [
     .optional()
     .isString()
     .withMessage('Question suggestions custom prompt must be a string'),
+  // Streaming configuration validation
+  body('config.enable_streaming')
+    .optional()
+    .isBoolean()
+    .withMessage('Enable streaming must be a boolean'),
 ];
 
 const chatbotExecutionValidation = [
@@ -173,12 +183,30 @@ router.post(
 );
 
 router.post(
+  '/:agentId/chat/stream',
+  auth,
+  orgAuth.hasRole('member'),
+  chatbotExecutionValidation,
+  validate,
+  agentController.executeChatbotAgentStream
+);
+
+router.post(
   '/:agentId/execute',
   auth,
   orgAuth.hasRole('member'),
   taskExecutionValidation,
   validate,
   agentController.executeTaskAgent
+);
+
+router.post(
+  '/:agentId/execute/stream',
+  auth,
+  orgAuth.hasRole('member'),
+  taskExecutionValidation,
+  validate,
+  agentController.executeTaskAgentStream
 );
 
 // ===== CONVERSATION MANAGEMENT ROUTES =====

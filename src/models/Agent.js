@@ -132,6 +132,11 @@ const agentSchema = new mongoose.Schema(
         enum: ['basic', 'detailed', 'verbose'],
         default: 'basic',
       },
+      // Streaming config
+      enable_streaming: {
+        type: Boolean,
+        default: false,
+      },
     },
     question_suggestions: {
       enabled: {

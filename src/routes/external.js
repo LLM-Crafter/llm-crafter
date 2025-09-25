@@ -94,6 +94,26 @@ router.post(
   agentController.executeTaskAgentWithSession
 );
 
+// Chat with an agent using session token (streaming)
+router.post(
+  '/agents/chat/stream',
+  proxyLimiter, // Rate limit: 60 requests per minute
+  sessionAuth,
+  agentChatValidation,
+  validate,
+  agentController.executeChatbotAgentWithSessionStream
+);
+
+// Execute a task agent using session token (streaming)
+router.post(
+  '/agents/execute/stream',
+  proxyLimiter, // Rate limit: 60 requests per minute
+  sessionAuth,
+  agentTaskValidation,
+  validate,
+  agentController.executeTaskAgentWithSessionStream
+);
+
 // Alternative: Chat with agent using API key (for simple use cases)
 // This bypasses the session system but requires agents:chat scope
 router.post(
