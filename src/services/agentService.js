@@ -51,6 +51,30 @@ class AgentService {
       await conversation.save();
     }
 
+    // Check if conversation is under human control or handoff requested
+    if (conversation && (conversation.status === 'handoff_requested' || conversation.current_handler === 'human')) {
+      // Add user message to conversation
+      await conversation.addMessage({
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date(),
+      });
+
+      // Return handoff notification instead of agent response
+      const handoffMessage = conversation.status === 'handoff_requested' 
+        ? 'Your request has been forwarded to a human operator. Please wait for assistance.'
+        : `You are currently chatting with a human operator from our support team.`;
+
+      return {
+        conversation_id: conversation._id,
+        response: handoffMessage,
+        handoff_requested: conversation.status === 'handoff_requested',
+        handoff_info: conversation.handoff_info,
+        token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost: 0 },
+        tools_used: []
+      };
+    }
+
     // Add user message to conversation
     await conversation.addMessage({
       role: 'user',
@@ -95,6 +119,11 @@ class AgentService {
     // Check if conversation needs summarization
     await this.handleConversationSummarization(conversation, agent);
 
+    // Check if handoff was requested
+    const handoffTool = response.tools_used?.find(tool => 
+      tool.tool_name === 'request_human_handoff' && tool.success
+    );
+
     const result = {
       conversation_id: conversation._id,
       response: response.content,
@@ -102,6 +131,18 @@ class AgentService {
       tools_used: response.tools_used,
       token_usage: response.token_usage,
     };
+
+    // Add handoff information to response if handoff was requested
+    if (handoffTool) {
+      result.handoff_requested = true;
+      result.handoff_info = {
+        reason: handoffTool.parameters.reason,
+        urgency: handoffTool.parameters.urgency,
+        context_summary: handoffTool.parameters.context_summary,
+        status: 'handoff_requested',
+        requested_at: new Date().toISOString()
+      };
+    }
 
     // Add suggestions to response if available
     if (suggestions) {
@@ -156,6 +197,31 @@ class AgentService {
       await conversation.save();
     }
 
+    // Check if conversation is under human control or handoff requested
+    if (conversation && (conversation.status === 'handoff_requested' || conversation.current_handler === 'human')) {
+      // Add user message to conversation
+      await conversation.addMessage({
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date(),
+      });
+
+      // Return handoff notification instead of agent response
+      const handoffMessage = conversation.status === 'handoff_requested' 
+        ? 'Your request has been forwarded to a human operator. Please wait for assistance.'
+        : `You are currently chatting with a human operator from our support team.`;
+
+      return {
+        conversation_id: conversation._id,
+        response: handoffMessage,
+        handoff_status: conversation.status,
+        current_handler: conversation.current_handler,
+        handoff_info: conversation.handoff_info,
+        token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost: 0 },
+        tools_used: []
+      };
+    }
+
     // Add user message to conversation
     await conversation.addMessage({
       role: 'user',
@@ -201,6 +267,11 @@ class AgentService {
     // Check if conversation needs summarization
     await this.handleConversationSummarization(conversation, agent);
 
+    // Check if handoff was requested
+    const handoffTool = response.tools_used?.find(tool => 
+      tool.tool_name === 'request_human_handoff' && tool.success
+    );
+
     const result = {
       conversation_id: conversation._id,
       response: response.content,
@@ -208,6 +279,18 @@ class AgentService {
       tools_used: response.tools_used,
       token_usage: response.token_usage,
     };
+
+    // Add handoff information to response if handoff was requested
+    if (handoffTool) {
+      result.handoff_requested = true;
+      result.handoff_info = {
+        reason: handoffTool.parameters.reason,
+        urgency: handoffTool.parameters.urgency,
+        context_summary: handoffTool.parameters.context_summary,
+        status: 'handoff_requested',
+        requested_at: new Date().toISOString()
+      };
+    }
 
     // Add suggestions to response if available
     if (suggestions) {
@@ -419,7 +502,7 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name)
+          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation._id)
         );
 
         // Handle tool result properly - check for success/failure
@@ -444,6 +527,15 @@ class AgentService {
 
         toolsUsed.push(toolResultForAgent);
 
+        // Check if this is a human handoff request - stop processing immediately
+        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
+          finalResponse = 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+          thinkingProcess.push({
+            step: 'human_handoff_requested',
+            reasoning: 'Human handoff was requested, stopping agent processing and waiting for human operator',
+          });
+          break;
+        }
         // Continue reasoning with tool result (success or failure)
         continue;
       } else if (parsedResponse.action === 'respond') {
@@ -591,7 +683,7 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name)
+          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation._id)
         );
 
         // Handle tool result properly - check for success/failure
@@ -616,6 +708,15 @@ class AgentService {
 
         toolsUsed.push(toolResultForAgent);
 
+        // Check if this is a human handoff request - stop processing immediately
+        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
+          finalResponse = 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+          thinkingProcess.push({
+            step: 'human_handoff_requested',
+            reasoning: 'Human handoff was requested, stopping agent processing and waiting for human operator',
+          });
+          break;
+        }
         // Continue reasoning with tool result (success or failure)
         continue;
       } else if (parsedResponse.action === 'respond') {
@@ -922,7 +1023,7 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name)
+          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation ? conversation._id : (execution ? execution._id : null))
         );
 
         // Handle tool result properly - check for success/failure
@@ -952,6 +1053,11 @@ class AgentService {
             reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
           });
 
+        // Check if this is a human handoff request - stop processing immediately
+        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
+          // For task agents, we cannot properly handle handoffs, so we log and continue
+          console.warn('Human handoff requested in task agent - functionality limited');
+        }
           await execution.addThinkingStep(
             'tool_failed',
             `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
@@ -1126,7 +1232,7 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name)
+          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation ? conversation._id : (execution ? execution._id : null))
         );
 
         // Handle tool result properly - check for success/failure
@@ -1156,6 +1262,11 @@ class AgentService {
             reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
           });
 
+        // Check if this is a human handoff request - stop processing immediately
+        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
+          // For task agents, we cannot properly handle handoffs, so we log and continue
+          console.warn('Human handoff requested in task agent - functionality limited');
+        }
           await execution.addThinkingStep(
             'tool_failed',
             `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
@@ -1522,7 +1633,7 @@ Choose your action:`;
   /**
    * Get agent-specific tool configuration
    */
-  getAgentToolConfig(agent, toolName) {
+  getAgentToolConfig(agent, toolName, conversationId = null) {
     const tool = agent.tools.find(t => t.name === toolName);
     if (!tool || !tool.parameters) {
       return {};
@@ -1534,6 +1645,13 @@ Choose your action:`;
     // Add organization and project context for all tools
     config.organization_id = agent.organization;
     config.project_id = agent.project;
+    
+    // Add conversation context for human handoff tool
+    if (toolName === 'request_human_handoff') {
+      console.log('Setting handoff config - conversationId:', conversationId, 'agent._id:', agent._id);
+      config.conversation_id = conversationId; // May be null for task agents
+      config.agent_id = agent._id;
+    }
 
     // Add agent's API key information for tools that need it
     if (agent.api_key) {

@@ -499,6 +499,48 @@ const systemTools = [
     },
     is_system_tool: true,
   },
+  {
+    name: 'request_human_handoff',
+    display_name: 'Request Human Handoff',
+    description: 'Request human operator to take over the conversation when the agent cannot adequately help the user. Use this when encountering complex issues, frustrated users, or requests requiring human judgment.',
+    category: 'communication',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Detailed explanation of why human intervention is needed'
+        },
+        urgency: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description: 'Priority level for the handoff request',
+          default: 'medium'
+        },
+        context_summary: {
+          type: 'string',
+          description: 'Brief summary of the conversation and current situation for the human operator'
+        }
+      },
+      required: ['reason'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        result: { type: 'string' },
+        handoff_requested: { type: 'boolean' },
+        conversation_status: { type: 'string' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'humanHandoffHandler',
+      config: {},
+    },
+    is_system_tool: true,
+  },
 ];
 
 async function initializeSystemTools() {

@@ -570,12 +570,13 @@ const executeChatbotAgentStream = async (req, res) => {
 
       isResponseComplete = true;
 
-      // Send completion event with metadata
+      // Send completion event with handoff info if present
       const completionData = JSON.stringify({
         type: 'complete',
         conversation_id: result.conversation_id,
         token_usage: result.token_usage,
-        tools_used: result.tools_used,
+        handoff_requested: result.handoff_requested || false,
+        handoff_info: result.handoff_info || null,
         suggestions: result.suggestions || null
       });
       res.write(`data: ${completionData}\n\n`);
@@ -1334,6 +1335,8 @@ const executeChatbotAgentWithSessionStream = async (req, res) => {
         type: 'complete',
         conversation_id: result.conversation_id,
         suggestions: result.suggestions,
+        handoff_requested: result.handoff_requested || false,
+        handoff_info: result.handoff_info || null,
         session_info: {
           session_id: req.sessionID,
           remaining_interactions: req.remainingInteractions,
