@@ -12,6 +12,8 @@ export default [
         globalThis: 'readonly',
         window: 'readonly',
         fetch: 'readonly',
+        TextDecoder: 'readonly',
+        URLSearchParams: 'readonly',
 
         // Node.js globals
         require: 'readonly',
@@ -34,6 +36,7 @@ export default [
       'no-console': 'off',
       'prefer-const': 'error',
       'no-var': 'error',
+      'no-constant-condition': ['error', { 'checkLoops': false }],
     },
   },
 ];
