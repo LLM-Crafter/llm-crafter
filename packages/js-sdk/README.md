@@ -164,6 +164,125 @@ await client.executeTaskAgentDirectStream(
 );
 ```
 
+### Human Handoff Support
+
+The SDK automatically detects when an agent requests human intervention and provides tools for handling handoff scenarios.
+
+#### Detecting Handoffs
+
+All chat methods now return handoff information in their responses:
+
+```javascript
+const chatResult = await client.chatWithAgent(
+  session.session_token,
+  'I need to speak with a human about my account'
+);
+
+// Check if handoff was requested
+if (chatResult.handoff_requested) {
+  console.log('Human handoff requested');
+  console.log('Reason:', chatResult.handoff_info.reason);
+  console.log('Urgency:', chatResult.handoff_info.urgency); // low, medium, high
+  
+  // Agent has stopped responding - need to poll for human messages
+  startPollingForHumanResponses(chatResult.conversation_id);
+}
+```
+
+#### Polling for Human Messages
+
+Use the polling methods to detect when human operators respond:
+
+```javascript
+// Method 1: Manual polling
+const pollForMessages = async (conversationId) => {
+  let lastCheck = new Date().toISOString();
+  
+  const checkMessages = async () => {
+    const result = await client.getLatestMessages(
+      session.session_token,
+      conversationId,
+      lastCheck
+    );
+    
+    if (result.data.messages.length > 0) {
+      result.data.messages.forEach(message => {
+        if (message.role === 'human_operator') {
+          console.log('Human operator:', message.content);
+        }
+        if (message.role === 'system' && message.content.includes('handed back')) {
+          console.log('Conversation returned to AI');
+          return; // Stop polling
+        }
+      });
+      lastCheck = new Date().toISOString();
+    }
+    
+    // Continue polling every 2 seconds
+    setTimeout(checkMessages, 2000);
+  };
+  
+  checkMessages();
+};
+
+// Method 2: Convenience polling (recommended)
+const stopPolling = await client.pollForHumanMessages(
+  session.session_token,
+  conversationId,
+  (message) => {
+    console.log('Human operator said:', message.content);
+    // Display message to user
+  },
+  () => {
+    console.log('Agent is back in control');
+    // Resume normal chat flow
+  },
+  { interval: 2000 } // Poll every 2 seconds
+);
+
+// Stop polling when needed
+// stopPolling();
+```
+
+#### Complete Handoff Example
+
+```javascript
+const handleChatWithHandoff = async (message) => {
+  // Send message to agent
+  const response = await client.chatWithAgent(
+    session.session_token,
+    message,
+    conversationId
+  );
+  
+  console.log('Agent:', response.response);
+  
+  // Check for handoff
+  if (response.handoff_requested) {
+    console.log(`🚨 Human handoff requested: ${response.handoff_info.reason}`);
+    console.log('⏳ Waiting for human operator...');
+    
+    // Start polling for human messages
+    const stopPolling = await client.pollForHumanMessages(
+      session.session_token,
+      response.conversation_id,
+      (humanMessage) => {
+        console.log('👤 Human operator:', humanMessage.content);
+      },
+      () => {
+        console.log('🤖 Agent is back in control');
+        // Continue normal conversation
+      }
+    );
+    
+    // Store stop function to cancel later if needed
+    return { isHandoff: true, stopPolling };
+  }
+  
+  return { isHandoff: false, response };
+};
+```
+
 ### Get Information
 
 ```javascript
@@ -223,9 +342,15 @@ new LLMCrafterClient(apiKey, baseUrl, options);
 - `getProjects(orgId)` - List accessible projects
 - `getUsage()` - Get API key usage statistics
 
+#### Conversation Polling (Human Handoff Support)
+
+- `getLatestMessages(sessionToken, conversationId, since?, includeSystem?)` - Get latest messages from a conversation (session-based)
+- `getLatestMessagesDirect(orgId, projectId, conversationId, since?, includeSystem?)` - Get latest messages (API key-based)
+
 #### Convenience Methods
 
 - `startAgentChat(agentId, message, sessionOptions?)` - Create session and start chatting in one call
+- `pollForHumanMessages(sessionToken, conversationId, onHumanMessage, onHandback, options?)` - Start polling for human operator messages during handoff
 - `testConnection()` - Test API key connectivity
 
 ## Error Handling

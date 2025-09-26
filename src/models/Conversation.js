@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const messageSchema = new mongoose.Schema({
   role: {
     type: String,
-    enum: ['user', 'assistant', 'system', 'tool'],
+    enum: ['user', 'assistant', 'system', 'tool', 'human_operator'],
     required: true,
   },
   content: {
@@ -14,6 +14,16 @@ const messageSchema = new mongoose.Schema({
   timestamp: {
     type: Date,
     default: Date.now,
+  },
+  // Handler information for tracking who sent the message
+  handler_info: {
+    agent_id: String,      // If message was from agent
+    human_operator: {      // If message was from human
+      user_id: String,
+      name: String,
+      email: String,
+      timestamp: Date
+    }
   },
   // Agent thinking process (only for assistant messages)
   thinking_process: [
@@ -76,8 +86,26 @@ const conversationSchema = new mongoose.Schema(
     messages: [messageSchema],
     status: {
       type: String,
-      enum: ['active', 'ended', 'timeout', 'error'],
-      default: 'active',
+      enum: ['active', 'ended', 'timeout', 'error', 'agent_controlled', 'human_controlled', 'handoff_requested', 'archived'],
+      default: 'agent_controlled',
+    },
+    current_handler: {
+      type: String,
+      enum: ['agent', 'human'],
+      default: 'agent',
+    },
+    handoff_info: {
+      requested_by: String,  // 'agent' or human operator user ID
+      requested_at: Date,
+      reason: String,
+      assigned_human: String, // User ID of assigned human operator
+      handed_off_at: Date,
+      handoff_message: String,
+      urgency: {
+        type: String,
+        enum: ['low', 'medium', 'high'],
+        default: 'medium'
+      }
     },
     metadata: {
       total_tokens_used: {
@@ -369,6 +397,59 @@ conversationSchema.methods.summarizeConversation = function () {
     m.is_summarized = true;
   });
 
+  return this.save();
+};
+
+// Request handoff from agent to human
+conversationSchema.methods.requestHandoff = function(requestedBy, reason, urgency = 'medium', contextSummary = '') {
+  this.status = 'handoff_requested';
+  this.handoff_info = {
+    requested_by: requestedBy,
+    requested_at: new Date(),
+    reason: reason,
+    urgency: urgency,
+    handoff_message: contextSummary
+  };
+  return this.save();
+};
+
+// Assign human operator
+conversationSchema.methods.assignHuman = function(humanUserId, humanName, humanEmail) {
+  this.status = 'human_controlled';
+  this.current_handler = 'human';
+  this.handoff_info.assigned_human = humanUserId;
+  this.handoff_info.handed_off_at = new Date();
+  
+  // Add system message about handoff
+  this.messages.push({
+    role: 'system',
+    content: `You are now connected with ${humanName} from our support team.`,
+    timestamp: new Date(),
+    handler_info: {
+      human_operator: {
+        user_id: humanUserId,
+        name: humanName,
+        email: humanEmail,
+        timestamp: new Date()
+      }
+    }
+  });
+  
+  return this.save();
+};
+
+// Hand back to agent
+conversationSchema.methods.handBackToAgent = function() {
+  this.status = 'agent_controlled';
+  this.current_handler = 'agent';
+  
+  // Add system message
+  this.messages.push({
+    role: 'system',
+    content: 'You are now back with our AI assistant.',
+    timestamp: new Date()
+  });
+  
   return this.save();
 };
 

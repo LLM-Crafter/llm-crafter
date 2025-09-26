@@ -27,11 +27,27 @@ Object.defineProperty(exports, '__esModule', { value: true });
  * //   conversation_id: "uuid",
  * //   response: "Agent's response text",
  * //   suggestions: ["suggestion1", "suggestion2"],
+ * //   handoff_requested: false, // true if human handoff requested
+ * //   handoff_info: null, // handoff details if requested
  * //   session_info: { session_id: "id", remaining_interactions: 99 }
  * // }
  * 
  * console.log(chatResult.response); // Agent's text response
  * console.log(chatResult.suggestions); // Suggested follow-up questions
+ * 
+ * // Check for human handoff
+ * if (chatResult.handoff_requested) {
+ *   console.log('Human handoff requested:', chatResult.handoff_info.reason);
+ *   // Start polling for human responses
+ *   const pollForHuman = setInterval(async () => {
+ *     const messages = await client.getLatestMessages(
+ *       session.session_token, 
+ *       chatResult.conversation_id,
+ *       new Date().toISOString()
+ *     );
+ *     // Handle human operator messages
+ *   }, 2000);
+ * }
  *
  * // Streaming chat with session token
  * await client.chatWithAgentStream(
@@ -331,7 +347,29 @@ class LLMCrafterClient {
    * @param {string} conversationId - Optional conversation ID to continue
    * @param {string} userIdentifier - Optional user identifier
    * @param {Object} dynamicContext - Optional dynamic context
-   * @returns {Promise<Object>} Agent response
+   * @returns {Promise<Object>} Agent response with handoff information
+   * @example
+   * Response format includes handoff information:
+   * ```javascript
+   * {
+   *   conversation_id: "uuid",
+   *   response: "Agent's response text",
+   *   suggestions: ["suggestion1", "suggestion2"],
+   *   handoff_requested: false, // true if agent requested human handoff
+   *   handoff_info: { // Present if handoff_requested is true
+   *     reason: "User needs complex technical support",
+   *     urgency: "medium", // "low" | "medium" | "high"
+   *     context_summary: "Brief summary for human operator",
+   *     status: "handoff_requested",
+   *     requested_at: "2024-01-01T12:00:00Z"
+   *   },
+   *   session_info: {
+   *     session_id: "session_id",
+   *     remaining_interactions: 99,
+   *     expires_at: "2024-01-01T13:00:00Z"
+   *   }
+   * }
+   * ```
    */
   async chatWithAgent(
     sessionToken,
@@ -382,9 +420,30 @@ class LLMCrafterClient {
    * @param {string} userIdentifier - Optional user identifier
    * @param {Object} dynamicContext - Optional dynamic context
    * @param {Function} onChunk - Callback function for each chunk: (chunk: string) => void
-   * @param {Function} onComplete - Callback function when complete: (data: Object) => void
+   * @param {Function} onComplete - Callback function when complete with handoff info: (data: Object) => void
    * @param {Function} onError - Callback function for errors: (error: Error) => void
    * @returns {Promise<void>} Promise that resolves when streaming starts
+   * @example
+   * The onComplete callback receives an object with handoff information:
+   * ```javascript
+   * {
+   *   conversation_id: "uuid",
+   *   suggestions: ["suggestion1", "suggestion2"],
+   *   handoff_requested: false, // true if agent requested human handoff
+   *   handoff_info: { // Present if handoff_requested is true
+   *     reason: "User needs complex technical support",
+   *     urgency: "medium",
+   *     context_summary: "Brief summary for human operator",
+   *     status: "handoff_requested",
+   *     requested_at: "2024-01-01T12:00:00Z"
+   *   },
+   *   session_info: {
+   *     session_id: "session_id",
+   *     remaining_interactions: 99,
+   *     expires_at: "2024-01-01T13:00:00Z"
+   *   }
+   * }
+   * ```
    */
   async chatWithAgentStream(
     sessionToken,
@@ -449,7 +508,25 @@ class LLMCrafterClient {
    * @param {string} conversationId - Optional conversation ID
    * @param {string} userIdentifier - Optional user identifier
    * @param {Object} dynamicContext - Optional dynamic context
-   * @returns {Promise<Object>} Agent response
+   * @returns {Promise<Object>} Agent response with handoff information
+   * @example
+   * Response includes handoff detection:
+   * ```javascript
+   * {
+   *   conversation_id: "uuid", 
+   *   response: "Agent's response text",
+   *   handoff_requested: false, // true if agent requested human handoff
+   *   handoff_info: { // Present if handoff_requested is true
+   *     reason: "User needs complex technical support",
+   *     urgency: "medium",
+   *     context_summary: "Brief summary for human operator"
+   *   },
+   *   api_key_info: {
+   *     api_key_id: "key_id",
+   *     daily_limit_remaining: 995
+   *   }
+   * }
+   * ```
    */
   async chatWithAgentDirect(
     orgId,
@@ -610,6 +687,69 @@ class LLMCrafterClient {
     return this._request('/external/usage/api-key');
   }
 
+  // ===== CONVERSATION POLLING METHODS =====
+
+  /**
+   * Get latest messages from a conversation (session-based)
+   * Useful for polling for human operator responses during handoff
+   * @param {string} sessionToken - Session token from createAgentSession
+   * @param {string} conversationId - Conversation ID to poll
+   * @param {string} since - ISO timestamp to get messages since (optional)
+   * @param {boolean} includeSystem - Whether to include system messages (default: true)
+   * @returns {Promise<Object>} Latest messages and conversation info
+   * @example
+   * ```javascript
+   * // Poll for new messages every 2 seconds during handoff
+   * const pollForMessages = async (sessionToken, conversationId, lastCheck) => {
+   *   const result = await client.getLatestMessages(sessionToken, conversationId, lastCheck);
+   *   
+   *   if (result.data.messages.length > 0) {
+   *     result.data.messages.forEach(msg => {
+   *       if (msg.role === 'human_operator') {
+   *         console.log('Human operator:', msg.content);
+   *       }
+   *     });
+   *     return new Date().toISOString(); // Update last check time
+   *   }
+   *   return lastCheck;
+   * };
+   * ```
+   */
+  async getLatestMessages(sessionToken, conversationId, since = null, includeSystem = true) {
+    const params = new URLSearchParams();
+    if (since) params.append('since', since);
+    if (includeSystem !== undefined) params.append('include_system', includeSystem.toString());
+    
+    const url = `/external/conversations/${conversationId}/messages/latest${params.toString() ? '?' + params.toString() : ''}`;
+    
+    return this._request(url, {
+      method: 'GET',
+      headers: {
+        'X-Session-Token': sessionToken,
+      },
+    });
+  }
+
+  /**
+   * Get latest messages from a conversation (API key-based)
+   * Alternative to session-based polling using direct API key authentication
+   * @param {string} orgId - Organization ID
+   * @param {string} projectId - Project ID 
+   * @param {string} conversationId - Conversation ID to poll
+   * @param {string} since - ISO timestamp to get messages since (optional)
+   * @param {boolean} includeSystem - Whether to include system messages (default: true)
+   * @returns {Promise<Object>} Latest messages and conversation info
+   */
+  async getLatestMessagesDirect(orgId, projectId, conversationId, since = null, includeSystem = true) {
+    const params = new URLSearchParams();
+    if (since) params.append('since', since);
+    if (includeSystem !== undefined) params.append('include_system', includeSystem.toString());
+    
+    const url = `/external/organizations/${orgId}/projects/${projectId}/conversations/${conversationId}/messages/latest${params.toString() ? '?' + params.toString() : ''}`;
+    
+    return this._request(url);
+  }
+
   // ===== CONVENIENCE METHODS =====
 
   /**
@@ -629,6 +769,86 @@ class LLMCrafterClient {
     return {
       session: session.data,
       response: response,
+    };
+  }
+
+  /**
+   * Start polling for human operator messages during handoff
+   * Convenience method that handles the polling loop automatically
+   * @param {string} sessionToken - Session token from createAgentSession
+   * @param {string} conversationId - Conversation ID to poll
+   * @param {Function} onHumanMessage - Callback for human messages: (message) => void
+   * @param {Function} onHandback - Callback when handed back to agent: () => void
+   * @param {Object} options - Polling options
+   * @param {number} [options.interval=2000] - Polling interval in milliseconds
+   * @param {number} [options.maxRetries=50] - Max polling attempts
+   * @returns {Promise<Function>} Stop function to cancel polling
+   * @example
+   * ```javascript
+   * const stopPolling = await client.pollForHumanMessages(
+   *   sessionToken,
+   *   conversationId,
+   *   (message) => {
+   *     console.log('Human operator:', message.content);
+   *   },
+   *   () => {
+   *     console.log('Conversation handed back to AI');
+   *   },
+   *   { interval: 2000 }
+   * );
+   * 
+   * // Stop polling when needed
+   * // stopPolling();
+   * ```
+   */
+  async pollForHumanMessages(sessionToken, conversationId, onHumanMessage, onHandback, options = {}) {
+    const { interval = 2000, maxRetries = 50 } = options;
+    let retryCount = 0;
+    let lastTimestamp = new Date().toISOString();
+    let isActive = true;
+
+    const poll = async () => {
+      if (!isActive || retryCount >= maxRetries) return;
+
+      try {
+        const result = await this.getLatestMessages(sessionToken, conversationId, lastTimestamp);
+        
+        if (result.data && result.data.messages) {
+          result.data.messages.forEach(message => {
+            if (message.role === 'human_operator' && onHumanMessage) {
+              onHumanMessage(message);
+            }
+            if (message.role === 'system' && message.content.includes('handed back to agent') && onHandback) {
+              onHandback();
+              isActive = false;
+              return;
+            }
+          });
+
+          if (result.data.messages.length > 0) {
+            lastTimestamp = new Date().toISOString();
+          }
+        }
+
+        retryCount++;
+        if (isActive) {
+          setTimeout(poll, interval);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+        retryCount++;
+        if (isActive && retryCount < maxRetries) {
+          setTimeout(poll, interval);
+        }
+      }
+    };
+
+    // Start polling
+    setTimeout(poll, interval);
+
+    // Return stop function
+    return () => {
+      isActive = false;
     };
   }
 

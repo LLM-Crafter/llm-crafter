@@ -137,6 +137,22 @@ const agentSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
+      // Human handoff configuration
+      handoff_config: {
+        allow_agent_handoff: {
+          type: Boolean,
+          default: true,
+        },
+        auto_handoff_triggers: [String], // Keywords that trigger automatic handoff
+        handoff_message_template: {
+          type: String,
+          default: 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.'
+        },
+        max_failed_attempts: {
+          type: Number,
+          default: 3, // Auto-handoff after failures
+        }
+      },
     },
     question_suggestions: {
       enabled: {

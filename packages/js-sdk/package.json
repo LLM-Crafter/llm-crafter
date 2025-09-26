@@ -1,6 +1,6 @@
 {
   "name": "@llm-crafter/sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "JavaScript SDK for LLM Crafter API - A simple client library for interacting with LLM Crafter platform",
   "type": "module",
   "main": "dist/index.cjs",

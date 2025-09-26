@@ -3,6 +3,7 @@ const { body } = require('express-validator');
 const router = express.Router();
 const proxyController = require('../controllers/proxyController');
 const agentController = require('../controllers/agentController');
+const handoffController = require('../controllers/handoffController');
 const { apiKeyAuth, flexibleAuth } = require('../middleware/apiKeyAuth');
 const {
   sessionAuth,
@@ -191,6 +192,25 @@ router.get(
       res.status(500).json({ error: 'Failed to fetch projects' });
     }
   }
+);
+
+// ===== CONVERSATION POLLING ROUTES =====
+
+// Get latest messages for conversation polling (session-based)
+router.get(
+  '/conversations/:conversationId/messages/latest',
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  flexibleSessionAuth,
+  handoffController.getLatestMessages
+);
+
+// Get latest messages for conversation polling (API key-based) 
+router.get(
+  '/organizations/:orgId/projects/:projectId/conversations/:conversationId/messages/latest',
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  apiKeyAuth(['agents:chat']),
+  validateProjectAccess,
+  handoffController.getLatestMessages
 );
 
 // ===== USAGE STATISTICS ROUTES =====
