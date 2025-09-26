@@ -52,7 +52,11 @@ class AgentService {
     }
 
     // Check if conversation is under human control or handoff requested
-    if (conversation && (conversation.status === 'handoff_requested' || conversation.current_handler === 'human')) {
+    if (
+      conversation &&
+      (conversation.status === 'handoff_requested' ||
+        conversation.current_handler === 'human')
+    ) {
       // Add user message to conversation
       await conversation.addMessage({
         role: 'user',
@@ -61,17 +65,23 @@ class AgentService {
       });
 
       // Return handoff notification instead of agent response
-      const handoffMessage = conversation.status === 'handoff_requested' 
-        ? 'Your request has been forwarded to a human operator. Please wait for assistance.'
-        : `You are currently chatting with a human operator from our support team.`;
+      const handoffMessage =
+        conversation.status === 'handoff_requested'
+          ? 'Your request has been forwarded to a human operator. Please wait for assistance.'
+          : `You are currently chatting with a human operator from our support team.`;
 
       return {
         conversation_id: conversation._id,
         response: handoffMessage,
         handoff_requested: conversation.status === 'handoff_requested',
         handoff_info: conversation.handoff_info,
-        token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost: 0 },
-        tools_used: []
+        token_usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          cost: 0,
+        },
+        tools_used: [],
       };
     }
 
@@ -120,8 +130,8 @@ class AgentService {
     await this.handleConversationSummarization(conversation, agent);
 
     // Check if handoff was requested
-    const handoffTool = response.tools_used?.find(tool => 
-      tool.tool_name === 'request_human_handoff' && tool.success
+    const handoffTool = response.tools_used?.find(
+      tool => tool.tool_name === 'request_human_handoff' && tool.success
     );
 
     const result = {
@@ -140,7 +150,7 @@ class AgentService {
         urgency: handoffTool.parameters.urgency,
         context_summary: handoffTool.parameters.context_summary,
         status: 'handoff_requested',
-        requested_at: new Date().toISOString()
+        requested_at: new Date().toISOString(),
       };
     }
 
@@ -198,7 +208,11 @@ class AgentService {
     }
 
     // Check if conversation is under human control or handoff requested
-    if (conversation && (conversation.status === 'handoff_requested' || conversation.current_handler === 'human')) {
+    if (
+      conversation &&
+      (conversation.status === 'handoff_requested' ||
+        conversation.current_handler === 'human')
+    ) {
       // Add user message to conversation
       await conversation.addMessage({
         role: 'user',
@@ -207,9 +221,10 @@ class AgentService {
       });
 
       // Return handoff notification instead of agent response
-      const handoffMessage = conversation.status === 'handoff_requested' 
-        ? 'Your request has been forwarded to a human operator. Please wait for assistance.'
-        : `You are currently chatting with a human operator from our support team.`;
+      const handoffMessage =
+        conversation.status === 'handoff_requested'
+          ? 'Your request has been forwarded to a human operator. Please wait for assistance.'
+          : `You are currently chatting with a human operator from our support team.`;
 
       return {
         conversation_id: conversation._id,
@@ -217,8 +232,13 @@ class AgentService {
         handoff_status: conversation.status,
         current_handler: conversation.current_handler,
         handoff_info: conversation.handoff_info,
-        token_usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost: 0 },
-        tools_used: []
+        token_usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          cost: 0,
+        },
+        tools_used: [],
       };
     }
 
@@ -268,8 +288,8 @@ class AgentService {
     await this.handleConversationSummarization(conversation, agent);
 
     // Check if handoff was requested
-    const handoffTool = response.tools_used?.find(tool => 
-      tool.tool_name === 'request_human_handoff' && tool.success
+    const handoffTool = response.tools_used?.find(
+      tool => tool.tool_name === 'request_human_handoff' && tool.success
     );
 
     const result = {
@@ -288,7 +308,7 @@ class AgentService {
         urgency: handoffTool.parameters.urgency,
         context_summary: handoffTool.parameters.context_summary,
         status: 'handoff_requested',
-        requested_at: new Date().toISOString()
+        requested_at: new Date().toISOString(),
       };
     }
 
@@ -502,7 +522,11 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation._id)
+          this.getAgentToolConfig(
+            agent,
+            parsedResponse.tool_name,
+            conversation._id
+          )
         );
 
         // Handle tool result properly - check for success/failure
@@ -528,11 +552,16 @@ class AgentService {
         toolsUsed.push(toolResultForAgent);
 
         // Check if this is a human handoff request - stop processing immediately
-        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
-          finalResponse = 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+        if (
+          parsedResponse.tool_name === 'request_human_handoff' &&
+          toolResult.success
+        ) {
+          finalResponse =
+            'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
           thinkingProcess.push({
             step: 'human_handoff_requested',
-            reasoning: 'Human handoff was requested, stopping agent processing and waiting for human operator',
+            reasoning:
+              'Human handoff was requested, stopping agent processing and waiting for human operator',
           });
           break;
         }
@@ -571,7 +600,12 @@ class AgentService {
   /**
    * Core agent reasoning engine with streaming support
    */
-  async executeAgentReasoningStream(agent, conversation, dynamicContext = {}, streamCallback = null) {
+  async executeAgentReasoningStream(
+    agent,
+    conversation,
+    dynamicContext = {},
+    streamCallback = null
+  ) {
     const decriptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
       decriptedApiKey,
@@ -623,7 +657,7 @@ class AgentService {
       let streamingStarted = false;
       let responseContentSent = '';
 
-      const onChunk = (chunk) => {
+      const onChunk = chunk => {
         streamBuffer += chunk;
 
         // Check if we've detected a RESPONSE action and should start streaming
@@ -639,9 +673,14 @@ class AgentService {
           }
         } else if (isStreaming && streamCallback) {
           // Use buffered approach to prevent REASONING from being streamed
-          const safeContent = this.extractSafeStreamingContent(streamBuffer, responseContentSent);
+          const safeContent = this.extractSafeStreamingContent(
+            streamBuffer,
+            responseContentSent
+          );
           if (safeContent && safeContent !== responseContentSent) {
-            const newContent = safeContent.substring(responseContentSent.length);
+            const newContent = safeContent.substring(
+              responseContentSent.length
+            );
             if (newContent) {
               streamCallback(newContent);
               responseContentSent = safeContent;
@@ -683,7 +722,11 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation._id)
+          this.getAgentToolConfig(
+            agent,
+            parsedResponse.tool_name,
+            conversation._id
+          )
         );
 
         // Handle tool result properly - check for success/failure
@@ -709,11 +752,16 @@ class AgentService {
         toolsUsed.push(toolResultForAgent);
 
         // Check if this is a human handoff request - stop processing immediately
-        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
-          finalResponse = 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+        if (
+          parsedResponse.tool_name === 'request_human_handoff' &&
+          toolResult.success
+        ) {
+          finalResponse =
+            'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
           thinkingProcess.push({
             step: 'human_handoff_requested',
-            reasoning: 'Human handoff was requested, stopping agent processing and waiting for human operator',
+            reasoning:
+              'Human handoff was requested, stopping agent processing and waiting for human operator',
           });
           break;
         }
@@ -754,7 +802,9 @@ class AgentService {
    */
   shouldStartStreaming(buffer) {
     // Look for ACTION: respond pattern
-    return buffer.includes('ACTION: respond') || buffer.includes('ACTION:respond');
+    return (
+      buffer.includes('ACTION: respond') || buffer.includes('ACTION:respond')
+    );
   }
 
   /**
@@ -767,16 +817,18 @@ class AgentService {
     const afterResponse = buffer.substring(responseIndex + 'RESPONSE:'.length);
 
     // Enhanced pattern matching to catch all field transitions and REASONING variants
-    const nextFieldMatch = afterResponse.match(/\n(ACTION|TOOL|PARAMETERS|REASONING):/i);
+    const nextFieldMatch = afterResponse.match(
+      /\n(ACTION|TOOL|PARAMETERS|REASONING):/i
+    );
     if (nextFieldMatch) {
       let content = afterResponse.substring(0, nextFieldMatch.index).trim();
-      
+
       // Double-check for any remaining REASONING traces
       const reasoningCheck = content.toLowerCase().indexOf('reasoning');
       if (reasoningCheck !== -1) {
         content = content.substring(0, reasoningCheck).trim();
       }
-      
+
       return content;
     }
 
@@ -809,13 +861,15 @@ class AgentService {
 
     // Return only the new content, but make sure it doesn't contain REASONING
     if (currentResponseContent.length > beforeResponseContent.length) {
-      const newContent = currentResponseContent.substring(beforeResponseContent.length);
-      
+      const newContent = currentResponseContent.substring(
+        beforeResponseContent.length
+      );
+
       // Double-check that the new content doesn't contain REASONING
       if (newContent.includes('REASONING:')) {
         return '';
       }
-      
+
       return newContent;
     }
 
@@ -839,11 +893,11 @@ class AgentService {
       /\nREASONING:/i,
       /\n\nREASONING:/i,
       // Also catch variations without newlines
-      /REASONING:/i
+      /REASONING:/i,
     ];
 
     let safeEndIndex = afterResponse.length;
-    
+
     for (const pattern of nextFieldPatterns) {
       const match = afterResponse.match(pattern);
       if (match && match.index !== undefined && match.index < safeEndIndex) {
@@ -852,9 +906,15 @@ class AgentService {
     }
 
     let safeContent = afterResponse.substring(0, safeEndIndex).trim();
-    
+
     // Additional safety: if the content contains any variation of "reasoning", truncate before it
-    const reasoningVariants = ['reasoning:', 'REASONING:', 'Reasoning:', 'reason:', 'REASON:'];
+    const reasoningVariants = [
+      'reasoning:',
+      'REASONING:',
+      'Reasoning:',
+      'reason:',
+      'REASON:',
+    ];
     for (const variant of reasoningVariants) {
       const reasoningIndex = safeContent.indexOf(variant);
       if (reasoningIndex !== -1) {
@@ -874,7 +934,7 @@ class AgentService {
     if (responseIndex === -1) return alreadySent;
 
     const afterResponse = buffer.substring(responseIndex + 'RESPONSE:'.length);
-    
+
     // Look for the start of any next field or REASONING patterns
     const dangerPatterns = [
       '\nACTION:',
@@ -908,9 +968,21 @@ class AgentService {
     safeContent = afterResponse.substring(0, safeEndIndex).trim();
 
     // Additional check: if the content ends with partial REASONING letters, trim them
-    const partialReasoningPatterns = ['R', 'RE', 'REA', 'REAS', 'REASO', 'REASON', 'REASONI', 'REASONIN'];
+    const partialReasoningPatterns = [
+      'R',
+      'RE',
+      'REA',
+      'REAS',
+      'REASO',
+      'REASON',
+      'REASONI',
+      'REASONIN',
+    ];
     for (const pattern of partialReasoningPatterns) {
-      if (safeContent.endsWith('\n' + pattern) || safeContent.endsWith(pattern)) {
+      if (
+        safeContent.endsWith('\n' + pattern) ||
+        safeContent.endsWith(pattern)
+      ) {
         // Remove the partial pattern
         const lastIndex = safeContent.lastIndexOf(pattern);
         if (lastIndex !== -1) {
@@ -1023,7 +1095,11 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation ? conversation._id : (execution ? execution._id : null))
+          this.getAgentToolConfig(
+            agent,
+            parsedResponse.tool_name,
+            execution ? execution._id : null
+          )
         );
 
         // Handle tool result properly - check for success/failure
@@ -1053,11 +1129,16 @@ class AgentService {
             reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
           });
 
-        // Check if this is a human handoff request - stop processing immediately
-        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
-          // For task agents, we cannot properly handle handoffs, so we log and continue
-          console.warn('Human handoff requested in task agent - functionality limited');
-        }
+          // Check if this is a human handoff request - stop processing immediately
+          if (
+            parsedResponse.tool_name === 'request_human_handoff' &&
+            toolResult.success
+          ) {
+            // For task agents, we cannot properly handle handoffs, so we log and continue
+            console.warn(
+              'Human handoff requested in task agent - functionality limited'
+            );
+          }
           await execution.addThinkingStep(
             'tool_failed',
             `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
@@ -1114,7 +1195,13 @@ class AgentService {
   /**
    * Task-specific reasoning with streaming support
    */
-  async executeTaskReasoningStream(agent, input, execution, dynamicContext = {}, streamCallback = null) {
+  async executeTaskReasoningStream(
+    agent,
+    input,
+    execution,
+    dynamicContext = {},
+    streamCallback = null
+  ) {
     const decryptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
       decryptedApiKey,
@@ -1167,7 +1254,7 @@ class AgentService {
       let streamingStarted = false;
       let responseContentSent = '';
 
-      const onChunk = (chunk) => {
+      const onChunk = chunk => {
         streamBuffer += chunk;
 
         // Check if we've detected a RESPONSE action and should start streaming
@@ -1183,9 +1270,14 @@ class AgentService {
           }
         } else if (isStreaming && streamCallback) {
           // Use buffered approach to prevent REASONING from being streamed
-          const safeContent = this.extractSafeStreamingContent(streamBuffer, responseContentSent);
+          const safeContent = this.extractSafeStreamingContent(
+            streamBuffer,
+            responseContentSent
+          );
           if (safeContent && safeContent !== responseContentSent) {
-            const newContent = safeContent.substring(responseContentSent.length);
+            const newContent = safeContent.substring(
+              responseContentSent.length
+            );
             if (newContent) {
               streamCallback(newContent);
               responseContentSent = safeContent;
@@ -1232,7 +1324,11 @@ class AgentService {
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
-          this.getAgentToolConfig(agent, parsedResponse.tool_name, conversation ? conversation._id : (execution ? execution._id : null))
+          this.getAgentToolConfig(
+            agent,
+            parsedResponse.tool_name,
+            conversation ? conversation._id : execution ? execution._id : null
+          )
         );
 
         // Handle tool result properly - check for success/failure
@@ -1262,11 +1358,16 @@ class AgentService {
             reasoning: `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`,
           });
 
-        // Check if this is a human handoff request - stop processing immediately
-        if (parsedResponse.tool_name === 'request_human_handoff' && toolResult.success) {
-          // For task agents, we cannot properly handle handoffs, so we log and continue
-          console.warn('Human handoff requested in task agent - functionality limited');
-        }
+          // Check if this is a human handoff request - stop processing immediately
+          if (
+            parsedResponse.tool_name === 'request_human_handoff' &&
+            toolResult.success
+          ) {
+            // For task agents, we cannot properly handle handoffs, so we log and continue
+            console.warn(
+              'Human handoff requested in task agent - functionality limited'
+            );
+          }
           await execution.addThinkingStep(
             'tool_failed',
             `Tool ${parsedResponse.tool_name} failed: ${toolResult.error}`
@@ -1645,10 +1746,15 @@ Choose your action:`;
     // Add organization and project context for all tools
     config.organization_id = agent.organization;
     config.project_id = agent.project;
-    
+
     // Add conversation context for human handoff tool
     if (toolName === 'request_human_handoff') {
-      console.log('Setting handoff config - conversationId:', conversationId, 'agent._id:', agent._id);
+      console.log(
+        'Setting handoff config - conversationId:',
+        conversationId,
+        'agent._id:',
+        agent._id
+      );
       config.conversation_id = conversationId; // May be null for task agents
       config.agent_id = agent._id;
     }
