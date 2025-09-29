@@ -491,6 +491,68 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 }
 ```
 
+## Web Search Configuration
+
+### Configure Web Search
+
+Configure web search provider and API key for an agent.
+
+```http
+POST /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}/web-search-config
+```
+
+**Request Body:**
+
+```json
+{
+  "provider": "brave",
+  "api_key": "your-search-api-key",
+  "default_max_results": 10
+}
+```
+
+**Parameters:**
+
+| Parameter             | Type   | Required | Description                                             |
+| --------------------- | ------ | -------- | ------------------------------------------------------- |
+| `provider`            | string | No       | Search provider: `brave` or `tavily` (default: `brave`) |
+| `api_key`             | string | No       | Search API key (will be encrypted)                      |
+| `default_max_results` | number | No       | Default maximum results (1-20, default: 5)              |
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Web search configuration updated successfully",
+  "provider": "brave",
+  "has_api_key": true,
+  "default_max_results": 10
+}
+```
+
+### Get Web Search Configuration
+
+Retrieve web search configuration for an agent.
+
+```http
+GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}/web-search-config
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "provider": "brave",
+    "default_max_results": 10,
+    "has_api_key": true
+  }
+}
+```
+
+**Note:** The actual API key is never returned for security reasons.
+
 ## Error Handling
 
 ### Common Error Responses
@@ -558,13 +620,13 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 ```javascript
 // Create agent
 const agentData = {
-  name: "content-analyzer",
-  description: "Analyzes content automatically",
-  type: "task",
-  system_prompt: "You are an expert content analyst...",
-  api_key: "key_123456",
+  name: 'content-analyzer',
+  description: 'Analyzes content automatically',
+  type: 'task',
+  system_prompt: 'You are an expert content analyst...',
+  api_key: 'key_123456',
   llm_settings: {
-    model: "gpt-4",
+    model: 'gpt-4',
     parameters: {
       temperature: 0.3,
       max_tokens: 2000,
@@ -573,12 +635,12 @@ const agentData = {
 };
 
 const createResponse = await fetch(
-  "/api/organizations/org_123/projects/proj_456/agents",
+  '/api/organizations/org_123/projects/proj_456/agents',
   {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify(agentData),
   }
@@ -586,16 +648,16 @@ const createResponse = await fetch(
 
 // Execute agent
 const executeResponse = await fetch(
-  "/api/organizations/org_123/projects/proj_456/agents/agent_789/execute",
+  '/api/organizations/org_123/projects/proj_456/agents/agent_789/execute',
   {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      prompt: "Analyze this content for sentiment and topics",
-      context: { source: "api" },
+      prompt: 'Analyze this content for sentiment and topics',
+      context: { source: 'api' },
     }),
   }
 );

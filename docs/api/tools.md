@@ -45,7 +45,7 @@ GET /api/tools/system
       {
         "name": "web_search",
         "display_name": "Web Search",
-        "description": "Search the web for information using a search engine",
+        "description": "Search the web for information using a search engine (Brave Search or Tavily)",
         "category": "web",
         "parameters_schema": {
           "type": "object",
@@ -57,7 +57,15 @@ GET /api/tools/system
             "max_results": {
               "type": "number",
               "description": "Maximum number of results to return",
-              "default": 5
+              "default": 5,
+              "minimum": 1,
+              "maximum": 20
+            },
+            "provider": {
+              "type": "string",
+              "description": "Search provider to use (brave or tavily)",
+              "enum": ["brave", "tavily"],
+              "default": "brave"
             }
           },
           "required": ["query"]
@@ -66,8 +74,11 @@ GET /api/tools/system
           "type": "object",
           "properties": {
             "query": { "type": "string" },
+            "provider": { "type": "string" },
             "results": { "type": "array" },
-            "total_results": { "type": "number" }
+            "total_results": { "type": "number" },
+            "search_time_ms": { "type": "number" },
+            "error": { "type": "string" }
           }
         },
         "is_system_tool": true
@@ -519,7 +530,8 @@ POST /api/tools/execute
   "tool_name": "web_search",
   "parameters": {
     "query": "artificial intelligence trends 2024",
-    "max_results": 5
+    "max_results": 5,
+    "provider": "brave"
   },
   "organization_id": "org_123456"
 }
@@ -540,6 +552,7 @@ POST /api/tools/execute
       },
       "result": {
         "query": "artificial intelligence trends 2024",
+        "provider": "brave",
         "results": [
           {
             "title": "Top AI Trends for 2024",

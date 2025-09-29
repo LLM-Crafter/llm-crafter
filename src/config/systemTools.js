@@ -4,7 +4,7 @@ const systemTools = [
   {
     name: 'web_search',
     display_name: 'Web Search',
-    description: 'Search the web for information using a search engine',
+    description: 'Search the web for information using a search engine (Brave Search or Tavily)',
     category: 'web',
     parameters_schema: {
       type: 'object',
@@ -17,6 +17,14 @@ const systemTools = [
           type: 'number',
           description: 'Maximum number of results to return',
           default: 5,
+          minimum: 1,
+          maximum: 20,
+        },
+        provider: {
+          type: 'string',
+          description: 'Search provider to use (brave or tavily)',
+          enum: ['brave', 'tavily'],
+          default: 'brave',
         },
       },
       required: ['query'],
@@ -26,6 +34,7 @@ const systemTools = [
       type: 'object',
       properties: {
         query: { type: 'string' },
+        provider: { type: 'string' },
         results: {
           type: 'array',
           items: {
@@ -39,12 +48,15 @@ const systemTools = [
         },
         total_results: { type: 'number' },
         search_time_ms: { type: 'number' },
+        error: { type: 'string' },
       },
     },
     implementation: {
       type: 'internal',
       handler: 'webSearchHandler',
-      config: {},
+      config: {
+        search_provider: 'brave',
+      },
     },
     is_system_tool: true,
   },

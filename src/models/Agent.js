@@ -146,12 +146,13 @@ const agentSchema = new mongoose.Schema(
         auto_handoff_triggers: [String], // Keywords that trigger automatic handoff
         handoff_message_template: {
           type: String,
-          default: 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.'
+          default:
+            'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.',
         },
         max_failed_attempts: {
           type: Number,
           default: 3, // Auto-handoff after failures
-        }
+        },
       },
     },
     question_suggestions: {
@@ -299,6 +300,37 @@ agentSchema.methods.getQuestionSuggestions = function () {
     api_key: this.question_suggestions.api_key,
     model: this.question_suggestions.model,
     custom_prompt: this.question_suggestions.custom_prompt,
+  };
+};
+
+// Method to configure web search tool
+agentSchema.methods.configureWebSearch = function (config) {
+  const webSearchTool = this.tools.find(tool => tool.name === 'web_search');
+  if (!webSearchTool) {
+    throw new Error('Web search tool not found in agent tools');
+  }
+
+  // Merge new configuration with existing parameters
+  webSearchTool.parameters = {
+    ...webSearchTool.parameters,
+    ...config,
+  };
+
+  return this.save();
+};
+
+// Method to get web search configuration
+agentSchema.methods.getWebSearchConfig = function () {
+  const webSearchTool = this.tools.find(tool => tool.name === 'web_search');
+  if (!webSearchTool) {
+    return null;
+  }
+
+  return {
+    provider: webSearchTool.parameters?.provider || 'brave',
+    default_max_results: webSearchTool.parameters?.default_max_results || 5,
+    // Don't expose the actual API key, only whether it's configured
+    has_api_key: !!webSearchTool.parameters?.encrypted_api_key,
   };
 };
 

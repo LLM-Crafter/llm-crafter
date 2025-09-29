@@ -1,6 +1,7 @@
 const Tool = require('../models/Tool');
 const OpenAIService = require('./openaiService');
 const ragService = require('./ragService');
+const InternetSearchService = require('./internetSearchService');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
@@ -198,6 +199,7 @@ const LANGUAGE_ABBREVIATIONS = {
 class ToolService {
   constructor() {
     this.toolHandlers = new Map();
+    this.internetSearchService = new InternetSearchService();
     this.initializeSystemTools();
   }
 
@@ -236,7 +238,10 @@ class ToolService {
     this.registerToolHandler('rag_search', this.ragSearchHandler.bind(this));
 
     // Human handoff tool
-    this.registerToolHandler('request_human_handoff', this.humanHandoffHandler.bind(this));
+    this.registerToolHandler(
+      'request_human_handoff',
+      this.humanHandoffHandler.bind(this)
+    );
   }
 
   /**
@@ -376,26 +381,69 @@ class ToolService {
    * Web search tool handler
    */
   async webSearchHandler(parameters, config) {
-    const { query, max_results = 5 } = parameters;
+    const { query, max_results = 5, provider = 'brave' } = parameters;
 
     if (!query) {
       throw new Error('Query parameter is required for web search');
     }
 
-    // This is a placeholder implementation
-    // In a real implementation, you would integrate with a search API like Google, Bing, or DuckDuckGo
-    return {
-      query,
-      results: [
-        {
-          title: 'Example Search Result',
-          url: 'https://example.com',
-          snippet: `This is a placeholder search result for query: ${query}`,
-        },
-      ],
-      total_results: 1,
-      search_time_ms: 100,
-    };
+    // Get encrypted API key from agent tool config
+    let searchApiKey = null;
+    if (config.encrypted_api_key) {
+      try {
+        const encryptionUtil = require('../utils/encryption');
+        searchApiKey = encryptionUtil.decrypt(config.encrypted_api_key);
+      } catch (error) {
+        console.warn('Failed to decrypt search API key:', error.message);
+      }
+    }
+
+    // If no API key found, fall back to placeholder implementation
+    if (!searchApiKey) {
+      console.log(
+        'No search API key configured, using placeholder implementation'
+      );
+      return {
+        query,
+        provider: 'placeholder',
+        results: [
+          {
+            title: 'Example Search Result',
+            url: 'https://example.com',
+            snippet: `This is a placeholder search result for query: ${query}. Configure a search API key to enable real search.`,
+          },
+        ],
+        total_results: 1,
+        search_time_ms: 100,
+      };
+    }
+
+    try {
+      // Use provider from config first, then from parameters
+      const searchProvider = config.provider || provider;
+      const maxResults = config.default_max_results || max_results;
+
+      // Use the internet search service with the configured provider
+      const searchOptions = {
+        provider: searchProvider,
+        max_results: maxResults,
+        api_key: searchApiKey,
+      };
+
+      return await this.internetSearchService.search(query, searchOptions);
+    } catch (error) {
+      console.error('Internet search failed:', error.message);
+
+      // Return error information but don't fail completely
+      return {
+        query,
+        provider: config.search_provider || provider,
+        results: [],
+        total_results: 0,
+        search_time_ms: 0,
+        error: error.message,
+      };
+    }
   }
 
   /**
@@ -1611,7 +1659,7 @@ class ToolService {
       sentiment = null,
       include_metadata = true,
       organization_id,
-      project_id
+      project_id,
     } = parameters;
 
     const startTime = Date.now();
@@ -1623,10 +1671,10 @@ class ToolService {
     console.log('  Limit:', limit);
     console.log('  Threshold:', threshold);
     console.log('  Parameters org/project:', { organization_id, project_id });
-    console.log('  Config org/project:', { 
-      org: config.organization_id, 
+    console.log('  Config org/project:', {
+      org: config.organization_id,
       project: config.project_id,
-      api_key_id: config._agent_api_key_id 
+      api_key_id: config._agent_api_key_id,
     });
 
     if (!query) {
@@ -1642,10 +1690,12 @@ class ToolService {
 
     if (!organizationId || !projectId) {
       console.error('❌ RAG Search: Missing organization/project context');
-      throw new Error('Organization and project context required for RAG search (via parameter or agent config)');
+      throw new Error(
+        'Organization and project context required for RAG search (via parameter or agent config)'
+      );
     }
 
-    // Get API key from agent config 
+    // Get API key from agent config
     const apiKeyId = config._agent_api_key_id;
     if (!apiKeyId) {
       console.error('❌ RAG Search: Missing API key');
@@ -1673,7 +1723,7 @@ class ToolService {
               themes,
               sentiment,
               semanticWeight: config.semantic_weight || 0.7,
-              keywordWeight: config.keyword_weight || 0.3
+              keywordWeight: config.keyword_weight || 0.3,
             }
           );
           break;
@@ -1686,19 +1736,19 @@ class ToolService {
             projectId,
             { brands, models, themes, sentiment }
           );
-          
+
           console.log('  📊 Keyword results count:', keywordResults.length);
-          
+
           searchResults = {
             query,
             results: keywordResults.slice(0, limit).map(result => ({
               id: result.id,
               content: result.content,
               similarity: result.similarity,
-              metadata: include_metadata ? result.metadata : undefined
+              metadata: include_metadata ? result.metadata : undefined,
             })),
             total_results: keywordResults.length,
-            search_method: 'keyword'
+            search_method: 'keyword',
           };
           break;
 
@@ -1713,7 +1763,7 @@ class ToolService {
               limit,
               threshold,
               filters: { brands, models, themes, sentiment },
-              includeMetadata: include_metadata
+              includeMetadata: include_metadata,
             }
           );
           break;
@@ -1729,7 +1779,10 @@ class ToolService {
       // Add knowledge base stats if requested
       if (config.include_stats) {
         console.log('  📈 Getting knowledge base stats...');
-        searchResults.knowledge_base_stats = ragService.getStats(organizationId, projectId);
+        searchResults.knowledge_base_stats = ragService.getStats(
+          organizationId,
+          projectId
+        );
         console.log('  📈 Stats:', searchResults.knowledge_base_stats);
       }
 
@@ -1737,11 +1790,10 @@ class ToolService {
         query,
         results_count: searchResults.results?.length || 0,
         execution_time: searchResults.execution_time_ms,
-        success: true
+        success: true,
       });
 
       return searchResults;
-
     } catch (error) {
       console.error('❌ RAG search error:', error);
       console.error('❌ Error details:', {
@@ -1751,16 +1803,16 @@ class ToolService {
         organizationId,
         projectId,
         apiKeyId,
-        search_type
+        search_type,
       });
-      
+
       return {
         query,
         results: [],
         total_results: 0,
         success: false,
         error: error.message,
-        execution_time_ms: Date.now() - startTime
+        execution_time_ms: Date.now() - startTime,
       };
     }
   }
@@ -1770,60 +1822,80 @@ class ToolService {
    */
   async humanHandoffHandler(parameters, config) {
     const { reason, urgency = 'medium', context_summary } = parameters;
-    
+
     if (!reason) {
       throw new Error('Reason parameter is required for human handoff request');
     }
 
-    console.log('Human handoff request received:', { reason, urgency, context_summary });
+    console.log('Human handoff request received:', {
+      reason,
+      urgency,
+      context_summary,
+    });
     console.log('Tool config keys:', Object.keys(config));
 
     try {
       // Import Conversation model
       const Conversation = require('../models/Conversation');
-      
+
       // Get conversation context from config (should be passed from agent execution)
       const { conversation_id, agent_id } = config;
-      
-      console.log('Extracted from config - conversation_id:', conversation_id, 'agent_id:', agent_id);
-      
+
+      console.log(
+        'Extracted from config - conversation_id:',
+        conversation_id,
+        'agent_id:',
+        agent_id
+      );
+
       if (!conversation_id) {
         // For now, we'll create a record anyway but log the limitation
-        console.warn('No conversation ID provided for handoff request - creating generic handoff record');
-        
+        console.warn(
+          'No conversation ID provided for handoff request - creating generic handoff record'
+        );
+
         // We could store this in a separate handoff requests collection for manual review
-        console.log(`HANDOFF REQUEST: Agent requested human intervention. Reason: ${reason}, Urgency: ${urgency}`);
-        
+        console.log(
+          `HANDOFF REQUEST: Agent requested human intervention. Reason: ${reason}, Urgency: ${urgency}`
+        );
+
         return {
           success: true,
-          result: 'Human handoff request logged (conversation ID not available)',
+          result:
+            'Human handoff request logged (conversation ID not available)',
           handoff_requested: true,
           conversation_status: 'handoff_requested',
-          note: 'This handoff request was logged but could not be linked to a specific conversation'
+          note: 'This handoff request was logged but could not be linked to a specific conversation',
         };
       }
-      
+
       // Find the conversation
       const conversation = await Conversation.findById(conversation_id);
       if (!conversation) {
         throw new Error('Conversation not found for handoff request');
       }
-      
+
       // Request handoff
-      await conversation.requestHandoff('agent', reason, urgency, context_summary);
-      
+      await conversation.requestHandoff(
+        'agent',
+        reason,
+        urgency,
+        context_summary
+      );
+
       // Add agent's transition message
       await conversation.addMessage({
         role: 'assistant',
-        content: 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.',
-        handler_info: { agent_id: agent_id || 'unknown' }
+        content:
+          'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.',
+        handler_info: { agent_id: agent_id || 'unknown' },
       });
-      
+
       return {
         success: true,
         result: 'Human handoff requested successfully',
         handoff_requested: true,
-        conversation_status: 'handoff_requested'
+        conversation_status: 'handoff_requested',
       };
     } catch (error) {
       console.error('Human handoff request failed:', error.message);
