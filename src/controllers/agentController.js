@@ -62,7 +62,7 @@ const createAgent = async (req, res) => {
       return {
         name: tool.name,
         description: tool.description,
-        parameters: tool.parameters_schema, // For new agents, use schema defaults
+        parameters: {}, // Initialize with empty object for configuration
         enabled: true,
       };
     });
@@ -263,10 +263,10 @@ const updateAgent = async (req, res) => {
         return {
           name: tool.name,
           description: tool.description,
-          // Preserve existing parameters if tool was already configured, otherwise use schema default
+          // Preserve existing parameters if tool was already configured, otherwise use empty object
           parameters: existingTool
             ? existingTool.parameters
-            : tool.parameters_schema,
+            : {},
           enabled: existingTool ? existingTool.enabled : true,
         };
       });
