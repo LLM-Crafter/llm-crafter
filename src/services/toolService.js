@@ -1,6 +1,7 @@
 const Tool = require('../models/Tool');
 const OpenAIService = require('./openaiService');
 const ragService = require('./ragService');
+const InternetSearchService = require('./internetSearchService');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
@@ -198,6 +199,7 @@ const LANGUAGE_ABBREVIATIONS = {
 class ToolService {
   constructor() {
     this.toolHandlers = new Map();
+    this.internetSearchService = new InternetSearchService();
     this.initializeSystemTools();
   }
 
@@ -376,26 +378,68 @@ class ToolService {
    * Web search tool handler
    */
   async webSearchHandler(parameters, config) {
-    const { query, max_results = 5 } = parameters;
+    const { query, max_results = 5, provider = 'brave' } = parameters;
 
     if (!query) {
       throw new Error('Query parameter is required for web search');
     }
 
-    // This is a placeholder implementation
-    // In a real implementation, you would integrate with a search API like Google, Bing, or DuckDuckGo
-    return {
-      query,
-      results: [
-        {
-          title: 'Example Search Result',
-          url: 'https://example.com',
-          snippet: `This is a placeholder search result for query: ${query}`,
-        },
-      ],
-      total_results: 1,
-      search_time_ms: 100,
-    };
+    // Get API key from agent config or tool config
+    let apiKeyId = config.search_api_key_id || config._agent_api_key_id;
+    let searchApiKey = null;
+
+    // If API key ID is provided, fetch and decrypt the key
+    if (apiKeyId) {
+      try {
+        const apiKey = await ApiKey.findById(apiKeyId);
+        if (apiKey && apiKey.is_active) {
+          searchApiKey = apiKey.getDecryptedKey();
+        }
+      } catch (error) {
+        console.warn('Failed to get search API key:', error.message);
+      }
+    }
+
+    // If no API key found, fall back to placeholder implementation
+    if (!searchApiKey) {
+      console.log('No search API key configured, using placeholder implementation');
+      return {
+        query,
+        provider: 'placeholder',
+        results: [
+          {
+            title: 'Example Search Result',
+            url: 'https://example.com',
+            snippet: `This is a placeholder search result for query: ${query}. Configure a search API key to enable real search.`,
+          },
+        ],
+        total_results: 1,
+        search_time_ms: 100,
+      };
+    }
+
+    try {
+      // Use the internet search service with the configured provider
+      const searchOptions = {
+        provider: config.search_provider || provider,
+        max_results,
+        api_key: searchApiKey
+      };
+
+      return await this.internetSearchService.search(query, searchOptions);
+    } catch (error) {
+      console.error('Internet search failed:', error.message);
+      
+      // Return error information but don't fail completely
+      return {
+        query,
+        provider: config.search_provider || provider,
+        results: [],
+        total_results: 0,
+        search_time_ms: 0,
+        error: error.message
+      };
+    }
   }
 
   /**
