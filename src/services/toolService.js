@@ -211,7 +211,10 @@ class ToolService {
     this.registerToolHandler('web_search', this.webSearchHandler.bind(this));
 
     // Webpage scraper tool
-    this.registerToolHandler('webpage_scraper', this.webpageScraperHandler.bind(this));
+    this.registerToolHandler(
+      'webpage_scraper',
+      this.webpageScraperHandler.bind(this)
+    );
 
     // Calculator tool
     this.registerToolHandler('calculator', this.calculatorHandler.bind(this));
@@ -461,9 +464,9 @@ class ToolService {
 
     const startTime = Date.now();
 
-    // Get encrypted API key from agent tool config for Tavily
+    // Get encrypted API key from agent tool config
     let scraperApiKey = null;
-    if (config.encrypted_api_key && provider === 'tavily') {
+    if (config.encrypted_api_key) {
       try {
         const encryptionUtil = require('../utils/encryption');
         scraperApiKey = encryptionUtil.decrypt(config.encrypted_api_key);
@@ -474,12 +477,16 @@ class ToolService {
 
     try {
       const scrapeProvider = config.provider || provider;
-      
+
       if (scrapeProvider === 'local') {
         return await this.localWebpageScraper(url, startTime);
       } else if (scrapeProvider === 'tavily') {
         if (!scraperApiKey) {
-          throw new Error('Tavily API key is required for Tavily scraper');
+          // Fall back to local scraper if no API key is configured
+          console.log(
+            'No Tavily API key configured, falling back to local scraper'
+          );
+          return await this.localWebpageScraper(url, startTime);
         }
         return await this.tavilyWebpageScraper(url, scraperApiKey, startTime);
       } else {
@@ -520,10 +527,10 @@ class ToolService {
           },
         };
 
-        const req = protocol.request(parsedUrl, options, (res) => {
+        const req = protocol.request(parsedUrl, options, res => {
           let data = '';
 
-          res.on('data', (chunk) => {
+          res.on('data', chunk => {
             data += chunk;
           });
 
@@ -547,7 +554,7 @@ class ToolService {
           });
         });
 
-        req.on('error', (error) => {
+        req.on('error', error => {
           reject(new Error(`Request failed: ${error.message}`));
         });
 
@@ -571,7 +578,7 @@ class ToolService {
       const https = require('https');
 
       const postData = JSON.stringify({
-        url: url,
+        urls: [url],
       });
 
       const options = {
@@ -580,42 +587,56 @@ class ToolService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
           'Content-Length': Buffer.byteLength(postData),
-          'X-API-KEY': apiKey,
         },
         timeout: 30000,
       };
 
-      const req = https.request(options, (res) => {
+      const req = https.request(options, res => {
         let data = '';
 
-        res.on('data', (chunk) => {
+        res.on('data', chunk => {
           data += chunk;
         });
 
         res.on('end', () => {
           try {
             const result = JSON.parse(data);
-            
-            if (res.statusCode === 200 && result.content) {
+
+            if (
+              res.statusCode === 200 &&
+              result.results &&
+              result.results.length > 0
+            ) {
+              const extractedContent = result.results[0];
               resolve({
                 url,
                 provider: 'tavily',
-                content: result.content,
-                title: result.title || '',
+                content:
+                  extractedContent.raw_content ||
+                  extractedContent.content ||
+                  '',
+                title: extractedContent.title || '',
                 success: true,
                 scrape_time_ms: Date.now() - startTime,
               });
             } else {
-              reject(new Error(result.error || `HTTP ${res.statusCode}: ${res.statusMessage}`));
+              reject(
+                new Error(
+                  result.error || `HTTP ${res.statusCode}: ${res.statusMessage}`
+                )
+              );
             }
           } catch (error) {
-            reject(new Error(`Failed to parse Tavily response: ${error.message}`));
+            reject(
+              new Error(`Failed to parse Tavily response: ${error.message}`)
+            );
           }
         });
       });
 
-      req.on('error', (error) => {
+      req.on('error', error => {
         reject(new Error(`Tavily request failed: ${error.message}`));
       });
 
