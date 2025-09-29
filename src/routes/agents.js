@@ -359,6 +359,18 @@ const webSearchConfigValidation = [
     .withMessage('Default max results must be between 1 and 20'),
 ];
 
+const webpageScraperConfigValidation = [
+  body('provider')
+    .optional()
+    .isIn(['local', 'tavily'])
+    .withMessage('Provider must be local or tavily'),
+  body('api_key')
+    .optional()
+    .isString()
+    .isLength({ min: 1 })
+    .withMessage('API key must be a non-empty string'),
+];
+
 router.put(
   '/:agentId/question-suggestions',
   auth,
@@ -391,6 +403,24 @@ router.get(
   auth,
   orgAuth.hasRole('viewer'),
   agentController.getWebSearchConfig
+);
+
+// ===== WEBPAGE SCRAPER CONFIGURATION ROUTES =====
+
+router.post(
+  '/:agentId/webpage-scraper-config',
+  auth,
+  orgAuth.hasRole('member'),
+  webpageScraperConfigValidation,
+  validate,
+  agentController.configureWebpageScraper
+);
+
+router.get(
+  '/:agentId/webpage-scraper-config',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getWebpageScraperConfig
 );
 
 module.exports = router;

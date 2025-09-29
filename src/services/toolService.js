@@ -210,6 +210,12 @@ class ToolService {
     // Web search tool
     this.registerToolHandler('web_search', this.webSearchHandler.bind(this));
 
+    // Webpage scraper tool
+    this.registerToolHandler(
+      'webpage_scraper',
+      this.webpageScraperHandler.bind(this)
+    );
+
     // Calculator tool
     this.registerToolHandler('calculator', this.calculatorHandler.bind(this));
 
@@ -444,6 +450,225 @@ class ToolService {
         error: error.message,
       };
     }
+  }
+
+  /**
+   * Webpage scraper tool handler
+   */
+  async webpageScraperHandler(parameters, config) {
+    const { url, provider = 'local' } = parameters;
+
+    if (!url) {
+      throw new Error('URL parameter is required for webpage scraper');
+    }
+
+    const startTime = Date.now();
+
+    // Get encrypted API key from agent tool config
+    let scraperApiKey = null;
+    if (config.encrypted_api_key) {
+      try {
+        const encryptionUtil = require('../utils/encryption');
+        scraperApiKey = encryptionUtil.decrypt(config.encrypted_api_key);
+      } catch (error) {
+        console.warn('Failed to decrypt scraper API key:', error.message);
+      }
+    }
+
+    try {
+      const scrapeProvider = config.provider || provider;
+
+      if (scrapeProvider === 'local') {
+        return await this.localWebpageScraper(url, startTime);
+      } else if (scrapeProvider === 'tavily') {
+        if (!scraperApiKey) {
+          // Fall back to local scraper if no API key is configured
+          console.log(
+            'No Tavily API key configured, falling back to local scraper'
+          );
+          return await this.localWebpageScraper(url, startTime);
+        }
+        return await this.tavilyWebpageScraper(url, scraperApiKey, startTime);
+      } else {
+        throw new Error(`Unsupported scraper provider: ${scrapeProvider}`);
+      }
+    } catch (error) {
+      console.error('Webpage scraper error:', error);
+      return {
+        url,
+        provider: config.provider || provider,
+        content: '',
+        title: '',
+        success: false,
+        error: error.message,
+        scrape_time_ms: Date.now() - startTime,
+      };
+    }
+  }
+
+  /**
+   * Local webpage scraper implementation
+   */
+  async localWebpageScraper(url, startTime) {
+    return new Promise((resolve, reject) => {
+      const https = require('https');
+      const http = require('http');
+      const { URL } = require('url');
+
+      try {
+        const parsedUrl = new URL(url);
+        const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+        const options = {
+          method: 'GET',
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; LLM-Crafter-Scraper/1.0)',
+          },
+        };
+
+        const req = protocol.request(parsedUrl, options, res => {
+          let data = '';
+
+          res.on('data', chunk => {
+            data += chunk;
+          });
+
+          res.on('end', () => {
+            try {
+              // Extract text content from HTML
+              const textContent = this.extractTextFromHtml(data);
+              const title = this.extractTitleFromHtml(data);
+
+              resolve({
+                url,
+                provider: 'local',
+                content: textContent,
+                title: title,
+                success: true,
+                scrape_time_ms: Date.now() - startTime,
+              });
+            } catch (error) {
+              reject(new Error(`Failed to parse HTML: ${error.message}`));
+            }
+          });
+        });
+
+        req.on('error', error => {
+          reject(new Error(`Request failed: ${error.message}`));
+        });
+
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timeout'));
+        });
+
+        req.end();
+      } catch (error) {
+        reject(new Error(`Invalid URL: ${error.message}`));
+      }
+    });
+  }
+
+  /**
+   * Tavily webpage scraper implementation using extract API
+   */
+  async tavilyWebpageScraper(url, apiKey, startTime) {
+    return new Promise((resolve, reject) => {
+      const https = require('https');
+
+      const postData = JSON.stringify({
+        urls: [url],
+      });
+
+      const options = {
+        hostname: 'api.tavily.com',
+        path: '/extract',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Length': Buffer.byteLength(postData),
+        },
+        timeout: 30000,
+      };
+
+      const req = https.request(options, res => {
+        let data = '';
+
+        res.on('data', chunk => {
+          data += chunk;
+        });
+
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+
+            if (
+              res.statusCode === 200 &&
+              result.results &&
+              result.results.length > 0
+            ) {
+              const extractedContent = result.results[0];
+              resolve({
+                url,
+                provider: 'tavily',
+                content:
+                  extractedContent.raw_content ||
+                  extractedContent.content ||
+                  '',
+                title: extractedContent.title || '',
+                success: true,
+                scrape_time_ms: Date.now() - startTime,
+              });
+            } else {
+              reject(
+                new Error(
+                  result.error || `HTTP ${res.statusCode}: ${res.statusMessage}`
+                )
+              );
+            }
+          } catch (error) {
+            reject(
+              new Error(`Failed to parse Tavily response: ${error.message}`)
+            );
+          }
+        });
+      });
+
+      req.on('error', error => {
+        reject(new Error(`Tavily request failed: ${error.message}`));
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Tavily request timeout'));
+      });
+
+      req.write(postData);
+      req.end();
+    });
+  }
+
+  /**
+   * Extract text content from HTML
+   */
+  extractTextFromHtml(html) {
+    // Simple HTML to text conversion - remove all HTML tags
+    return html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove script tags and content
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove style tags and content
+      .replace(/<[^>]*>/g, '') // Remove all HTML tags
+      .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
+      .trim();
+  }
+
+  /**
+   * Extract title from HTML
+   */
+  extractTitleFromHtml(html) {
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    return titleMatch ? titleMatch[1].trim() : '';
   }
 
   /**

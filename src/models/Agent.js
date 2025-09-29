@@ -334,4 +334,34 @@ agentSchema.methods.getWebSearchConfig = function () {
   };
 };
 
+// Method to configure webpage scraper tool
+agentSchema.methods.configureWebpageScraper = function (config) {
+  const webpageScraperTool = this.tools.find(tool => tool.name === 'webpage_scraper');
+  if (!webpageScraperTool) {
+    throw new Error('Webpage scraper tool not found in agent tools');
+  }
+
+  // Merge new configuration with existing parameters
+  webpageScraperTool.parameters = {
+    ...webpageScraperTool.parameters,
+    ...config,
+  };
+
+  return this.save();
+};
+
+// Method to get webpage scraper configuration
+agentSchema.methods.getWebpageScraperConfig = function () {
+  const webpageScraperTool = this.tools.find(tool => tool.name === 'webpage_scraper');
+  if (!webpageScraperTool) {
+    return null;
+  }
+
+  return {
+    provider: webpageScraperTool.parameters?.provider || 'local',
+    // Don't expose the actual API key, only whether it's configured
+    has_api_key: !!webpageScraperTool.parameters?.encrypted_api_key,
+  };
+};
+
 module.exports = mongoose.model('Agent', agentSchema);
