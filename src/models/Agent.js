@@ -146,12 +146,13 @@ const agentSchema = new mongoose.Schema(
         auto_handoff_triggers: [String], // Keywords that trigger automatic handoff
         handoff_message_template: {
           type: String,
-          default: 'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.'
+          default:
+            'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.',
         },
         max_failed_attempts: {
           type: Number,
           default: 3, // Auto-handoff after failures
-        }
+        },
       },
     },
     question_suggestions: {
@@ -329,7 +330,7 @@ agentSchema.methods.getWebSearchConfig = function () {
     provider: webSearchTool.parameters?.provider || 'brave',
     default_max_results: webSearchTool.parameters?.default_max_results || 5,
     // Don't expose the actual API key, only whether it's configured
-    has_api_key: !!(webSearchTool.parameters?.encrypted_api_key),
+    has_api_key: !!webSearchTool.parameters?.encrypted_api_key,
   };
 };
 

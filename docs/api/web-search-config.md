@@ -30,12 +30,14 @@ POST /api/organizations/{orgId}/projects/{projectId}/agents/{agentId}/web-search
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {jwt_token}
 Content-Type: application/json
 ```
 
 **Request Body:**
+
 ```json
 {
   "provider": "brave",
@@ -46,13 +48,14 @@ Content-Type: application/json
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `provider` | string | No | Search provider: `brave` or `tavily` (default: `brave`) |
-| `api_key` | string | No | Search API key (will be encrypted) |
-| `default_max_results` | number | No | Default maximum results (1-20, default: 5) |
+| Parameter             | Type   | Required | Description                                             |
+| --------------------- | ------ | -------- | ------------------------------------------------------- |
+| `provider`            | string | No       | Search provider: `brave` or `tavily` (default: `brave`) |
+| `api_key`             | string | No       | Search API key (will be encrypted)                      |
+| `default_max_results` | number | No       | Default maximum results (1-20, default: 5)              |
 
 **Response (200 OK):**
+
 ```json
 {
   "message": "Web search configuration updated successfully",
@@ -71,11 +74,13 @@ GET /api/organizations/{orgId}/projects/{projectId}/agents/{agentId}/web-search-
 ```
 
 **Headers:**
+
 ```
 Authorization: Bearer {jwt_token}
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -138,7 +143,7 @@ const agent = new Agent('agent_789');
 await agent.configureWebSearch({
   provider: 'brave',
   api_key: 'BSAabc123...',
-  default_max_results: 10
+  default_max_results: 10,
 });
 
 // Get current configuration
@@ -192,13 +197,15 @@ Example agent execution:
 ```
 
 The tool will automatically use:
+
 - The agent's configured search provider
-- The agent's encrypted API key  
+- The agent's encrypted API key
 - The agent's default max results (if not specified in parameters)
 
 ## Error Responses
 
 ### Agent Not Found
+
 ```json
 {
   "error": "Agent not found"
@@ -206,6 +213,7 @@ The tool will automatically use:
 ```
 
 ### Missing Web Search Tool
+
 ```json
 {
   "error": "Agent does not have web_search tool configured"
@@ -213,6 +221,7 @@ The tool will automatically use:
 ```
 
 ### Invalid Provider
+
 ```json
 {
   "error": "Provider must be brave or tavily"
@@ -220,6 +229,7 @@ The tool will automatically use:
 ```
 
 ### Insufficient Permissions
+
 ```json
 {
   "error": "Insufficient permissions"
@@ -231,6 +241,7 @@ The tool will automatically use:
 To add web search to an existing agent:
 
 1. **Add the web search tool** to your agent:
+
    ```json
    {
      "tools": [

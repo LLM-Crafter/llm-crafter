@@ -31,7 +31,7 @@ When you configure web search for an agent, the configuration is stored directly
 
 ```json
 {
-  "_id": "agent_456", 
+  "_id": "agent_456",
   "name": "AI Research Bot",
   "tools": [
     {
@@ -56,7 +56,7 @@ When you configure web search for an agent, the configuration is stored directly
   "name": "Demo Assistant",
   "tools": [
     {
-      "name": "web_search", 
+      "name": "web_search",
       "description": "Search the web for information using a search engine (Brave Search or Tavily)",
       "parameters": {
         "provider": "brave",
@@ -70,11 +70,11 @@ When you configure web search for an agent, the configuration is stored directly
 
 ## Configuration Parameters
 
-| Parameter | Type | Description | Example |
-|-----------|------|-------------|---------|
-| `provider` | string | Search provider to use (`brave` or `tavily`) | `"brave"` |
-| `encrypted_api_key` | string | Base64 encrypted API key for the search provider | `"U2FsdGVkX1+..."` |
-| `default_max_results` | number | Default maximum results to return (1-20) | `10` |
+| Parameter             | Type   | Description                                      | Example            |
+| --------------------- | ------ | ------------------------------------------------ | ------------------ |
+| `provider`            | string | Search provider to use (`brave` or `tavily`)     | `"brave"`          |
+| `encrypted_api_key`   | string | Base64 encrypted API key for the search provider | `"U2FsdGVkX1+..."` |
+| `default_max_results` | number | Default maximum results to return (1-20)         | `10`               |
 
 ## Security Notes
 
@@ -98,6 +98,7 @@ If no `encrypted_api_key` is present, the web search tool will:
 If you were previously storing search configuration in other ways:
 
 ### From Global Configuration
+
 ```json
 // OLD: Global search config
 {
@@ -107,12 +108,13 @@ If you were previously storing search configuration in other ways:
 
 // NEW: Per-agent tool config
 {
-  "provider": "brave", 
+  "provider": "brave",
   "encrypted_api_key": "U2FsdGVkX1+..."
 }
 ```
 
 ### From External API Key References
+
 ```json
 // OLD: Reference to ApiKey model
 {
@@ -132,30 +134,40 @@ If you were previously storing search configuration in other ways:
 When the agent uses the web search tool, it will automatically use the configured settings:
 
 ### With API Key Configured
+
 ```javascript
 // Agent executes search
-const result = await toolService.executeTool('web_search', {
-  query: 'latest AI developments'
-}, {
-  provider: 'brave',  // from tool config
-  encrypted_api_key: 'U2FsdGVkX1+...',  // from tool config
-  default_max_results: 10  // from tool config
-});
+const result = await toolService.executeTool(
+  'web_search',
+  {
+    query: 'latest AI developments',
+  },
+  {
+    provider: 'brave', // from tool config
+    encrypted_api_key: 'U2FsdGVkX1+...', // from tool config
+    default_max_results: 10, // from tool config
+  }
+);
 
 // Real search results returned
 console.log(result.results); // Array of search results
 ```
 
 ### Without API Key Configured
+
 ```javascript
 // Agent executes search without API key
-const result = await toolService.executeTool('web_search', {
-  query: 'latest AI developments'
-}, {
-  provider: 'brave',
-  default_max_results: 10
-  // No encrypted_api_key
-});
+const result = await toolService.executeTool(
+  'web_search',
+  {
+    query: 'latest AI developments',
+  },
+  {
+    provider: 'brave',
+    default_max_results: 10,
+    // No encrypted_api_key
+  }
+);
 
 // Placeholder results returned
 console.log(result.provider); // 'placeholder'
@@ -165,42 +177,45 @@ console.log(result.results[0].snippet); // "Configure a search API key to enable
 ## Database Queries
 
 ### Find Agents with Search Configured
+
 ```javascript
 // Find agents with web search API keys configured
 const agentsWithSearch = await Agent.find({
   'tools.name': 'web_search',
-  'tools.parameters.encrypted_api_key': { $exists: true }
+  'tools.parameters.encrypted_api_key': { $exists: true },
 });
 ```
 
 ### Find Agents by Search Provider
+
 ```javascript
 // Find agents using Brave Search
 const braveAgents = await Agent.find({
   'tools.name': 'web_search',
-  'tools.parameters.provider': 'brave'
+  'tools.parameters.provider': 'brave',
 });
 
-// Find agents using Tavily Search  
+// Find agents using Tavily Search
 const tavilyAgents = await Agent.find({
   'tools.name': 'web_search',
-  'tools.parameters.provider': 'tavily'
+  'tools.parameters.provider': 'tavily',
 });
 ```
 
 ### Update Search Configuration
+
 ```javascript
 // Update search provider for an agent
 await Agent.updateOne(
-  { 
+  {
     _id: 'agent_123',
-    'tools.name': 'web_search'
+    'tools.name': 'web_search',
   },
   {
     $set: {
       'tools.$.parameters.provider': 'tavily',
-      'tools.$.parameters.default_max_results': 8
-    }
+      'tools.$.parameters.default_max_results': 8,
+    },
   }
 );
 ```

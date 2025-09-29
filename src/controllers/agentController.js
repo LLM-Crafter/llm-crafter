@@ -462,19 +462,24 @@ const executeTaskAgentStream = async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization'
+    );
 
     // Send connection established event
-    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+    res.write(
+      'data: {"type": "connected", "message": "Stream established"}\n\n'
+    );
 
     let isResponseComplete = false;
 
     // Stream callback function
-    const streamCallback = (chunk) => {
+    const streamCallback = chunk => {
       if (!isResponseComplete) {
         const data = JSON.stringify({
           type: 'response_chunk',
-          content: chunk
+          content: chunk,
         });
         res.write(`data: ${data}\n\n`);
       }
@@ -498,27 +503,27 @@ const executeTaskAgentStream = async (req, res) => {
         execution_id: result.execution_id,
         token_usage: result.token_usage,
         tools_used: result.tools_used,
-        status: result.status
+        status: result.status,
       });
       res.write(`data: ${completionData}\n\n`);
 
       res.end();
-
     } catch (error) {
       console.error('Task streaming error:', error);
       isResponseComplete = true;
-      
+
       const errorData = JSON.stringify({
         type: 'error',
-        error: error.message || 'Failed to execute task agent'
+        error: error.message || 'Failed to execute task agent',
       });
       res.write(`data: ${errorData}\n\n`);
       res.end();
     }
-
   } catch (error) {
     console.error('Task streaming setup error:', error);
-    res.status(500).json({ error: error.message || 'Failed to setup task agent streaming' });
+    res
+      .status(500)
+      .json({ error: error.message || 'Failed to setup task agent streaming' });
   }
 };
 
@@ -539,19 +544,24 @@ const executeChatbotAgentStream = async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization'
+    );
 
     // Send connection established event
-    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+    res.write(
+      'data: {"type": "connected", "message": "Stream established"}\n\n'
+    );
 
     let isResponseComplete = false;
 
     // Stream callback function
-    const streamCallback = (chunk) => {
+    const streamCallback = chunk => {
       if (!isResponseComplete) {
         const data = JSON.stringify({
           type: 'response_chunk',
-          content: chunk
+          content: chunk,
         });
         res.write(`data: ${data}\n\n`);
       }
@@ -577,24 +587,24 @@ const executeChatbotAgentStream = async (req, res) => {
         token_usage: result.token_usage,
         handoff_requested: result.handoff_requested || false,
         handoff_info: result.handoff_info || null,
-        suggestions: result.suggestions || null
+        suggestions: result.suggestions || null,
       });
       res.write(`data: ${completionData}\n\n`);
-
     } catch (error) {
       console.error('Streaming chatbot execution error:', error);
       const errorData = JSON.stringify({
         type: 'error',
-        error: error.message || 'Failed to execute chatbot agent'
+        error: error.message || 'Failed to execute chatbot agent',
       });
       res.write(`data: ${errorData}\n\n`);
     }
 
     res.end();
-
   } catch (error) {
     console.error('Streaming setup error:', error);
-    res.status(500).json({ error: error.message || 'Failed to setup streaming' });
+    res
+      .status(500)
+      .json({ error: error.message || 'Failed to setup streaming' });
   }
 };
 
@@ -1299,19 +1309,24 @@ const executeChatbotAgentWithSessionStream = async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization'
+    );
 
     // Send connection established event
-    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+    res.write(
+      'data: {"type": "connected", "message": "Stream established"}\n\n'
+    );
 
     let isResponseComplete = false;
 
     // Stream callback function
-    const streamCallback = (chunk) => {
+    const streamCallback = chunk => {
       if (!isResponseComplete) {
         const data = JSON.stringify({
           type: 'response_chunk',
-          content: chunk
+          content: chunk,
         });
         res.write(`data: ${data}\n\n`);
       }
@@ -1341,30 +1356,28 @@ const executeChatbotAgentWithSessionStream = async (req, res) => {
           session_id: req.sessionID,
           remaining_interactions: req.remainingInteractions,
           expires_at: req.session.expires_at,
-        }
+        },
       });
       res.write(`data: ${completionData}\n\n`);
 
       res.end();
-
     } catch (error) {
       console.error('Session-based chatbot streaming error:', error);
       isResponseComplete = true;
-      
+
       const errorData = JSON.stringify({
         type: 'error',
         error: error.message || 'Failed to execute chatbot agent',
-        code: 'EXECUTION_FAILED'
+        code: 'EXECUTION_FAILED',
       });
       res.write(`data: ${errorData}\n\n`);
       res.end();
     }
-
   } catch (error) {
     console.error('Session-based chatbot streaming setup error:', error);
     res.status(500).json({
       error: error.message || 'Failed to setup chatbot agent streaming',
-      code: 'STREAMING_SETUP_FAILED'
+      code: 'STREAMING_SETUP_FAILED',
     });
   }
 };
@@ -1381,19 +1394,24 @@ const executeTaskAgentWithSessionStream = async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization'
+    );
 
     // Send connection established event
-    res.write('data: {"type": "connected", "message": "Stream established"}\n\n');
+    res.write(
+      'data: {"type": "connected", "message": "Stream established"}\n\n'
+    );
 
     let isResponseComplete = false;
 
     // Stream callback function
-    const streamCallback = (chunk) => {
+    const streamCallback = chunk => {
       if (!isResponseComplete) {
         const data = JSON.stringify({
           type: 'response_chunk',
-          content: chunk
+          content: chunk,
         });
         res.write(`data: ${data}\n\n`);
       }
@@ -1420,30 +1438,28 @@ const executeTaskAgentWithSessionStream = async (req, res) => {
           session_id: req.sessionToken._id,
           remaining_interactions: req.remainingInteractions,
           expires_at: req.sessionToken.expires_at,
-        }
+        },
       });
       res.write(`data: ${completionData}\n\n`);
 
       res.end();
-
     } catch (error) {
       console.error('Session-based task streaming error:', error);
       isResponseComplete = true;
-      
+
       const errorData = JSON.stringify({
         type: 'error',
         error: error.message || 'Failed to execute task agent',
-        code: 'EXECUTION_FAILED'
+        code: 'EXECUTION_FAILED',
       });
       res.write(`data: ${errorData}\n\n`);
       res.end();
     }
-
   } catch (error) {
     console.error('Session-based task streaming setup error:', error);
     res.status(500).json({
       error: error.message || 'Failed to setup task agent streaming',
-      code: 'STREAMING_SETUP_FAILED'
+      code: 'STREAMING_SETUP_FAILED',
     });
   }
 };
@@ -1620,7 +1636,7 @@ const configureWebSearch = async (req, res) => {
     const config = {};
     if (provider) config.provider = provider;
     if (default_max_results) config.default_max_results = default_max_results;
-    
+
     // If API key is provided, encrypt it and store directly in tool config
     if (api_key) {
       const encryptionUtil = require('../utils/encryption');
