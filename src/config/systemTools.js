@@ -61,6 +61,49 @@ const systemTools = [
     is_system_tool: true,
   },
   {
+    name: 'webpage_scraper',
+    display_name: 'Webpage Scraper',
+    description: 'Scrape content from web pages using local scraper or Tavily extract API',
+    category: 'web',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'The URL of the webpage to scrape',
+        },
+        provider: {
+          type: 'string',
+          description: 'Scraper provider to use (local or tavily)',
+          enum: ['local', 'tavily'],
+          default: 'local',
+        },
+      },
+      required: ['url'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        provider: { type: 'string' },
+        content: { type: 'string' },
+        title: { type: 'string' },
+        success: { type: 'boolean' },
+        error: { type: 'string' },
+        scrape_time_ms: { type: 'number' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'webpageScraperHandler',
+      config: {
+        provider: 'local',
+      },
+    },
+    is_system_tool: true,
+  },
+  {
     name: 'calculator',
     display_name: 'Calculator',
     description: 'Perform mathematical calculations and evaluate expressions',

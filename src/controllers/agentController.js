@@ -1686,6 +1686,84 @@ const getWebSearchConfig = async (req, res) => {
   }
 };
 
+// ===== WEBPAGE SCRAPER CONFIGURATION =====
+
+const configureWebpageScraper = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if agent has webpage_scraper tool
+    const hasWebpageScraperTool = agent.tools.some(
+      tool => tool.name === 'webpage_scraper'
+    );
+    if (!hasWebpageScraperTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have webpage_scraper tool configured' });
+    }
+
+    const { provider, api_key } = req.body;
+
+    // Prepare config object
+    const config = {};
+    if (provider) config.provider = provider;
+
+    // If API key is provided, encrypt it and store directly in tool config
+    if (api_key) {
+      const encryptionUtil = require('../utils/encryption');
+      config.encrypted_api_key = encryptionUtil.encrypt(api_key);
+    }
+
+    await agent.configureWebpageScraper(config);
+
+    res.json({
+      message: 'Webpage scraper configuration updated successfully',
+      provider: provider || 'local',
+      has_api_key: !!api_key,
+    });
+  } catch (error) {
+    console.error('Configure webpage scraper error:', error);
+    res.status(500).json({ error: 'Failed to configure webpage scraper' });
+  }
+};
+
+const getWebpageScraperConfig = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const webpageScraperConfig = agent.getWebpageScraperConfig();
+    if (!webpageScraperConfig) {
+      return res
+        .status(404)
+        .json({ error: 'Agent does not have webpage_scraper tool configured' });
+    }
+
+    res.json({
+      success: true,
+      data: webpageScraperConfig,
+    });
+  } catch (error) {
+    console.error('Get webpage scraper config error:', error);
+    res.status(500).json({ error: 'Failed to get webpage scraper configuration' });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -1718,4 +1796,6 @@ module.exports = {
   getAgentsForApiKey,
   configureWebSearch,
   getWebSearchConfig,
+  configureWebpageScraper,
+  getWebpageScraperConfig,
 };
