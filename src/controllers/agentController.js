@@ -1590,6 +1590,86 @@ const getAgentsForApiKey = async (req, res) => {
   }
 };
 
+// ===== WEB SEARCH CONFIGURATION =====
+
+const configureWebSearch = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if agent has web_search tool
+    const hasWebSearchTool = agent.tools.some(
+      tool => tool.name === 'web_search'
+    );
+    if (!hasWebSearchTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have web_search tool configured' });
+    }
+
+    const { provider, api_key, default_max_results } = req.body;
+
+    // Prepare config object
+    const config = {};
+    if (provider) config.provider = provider;
+    if (default_max_results) config.default_max_results = default_max_results;
+    
+    // If API key is provided, encrypt it and store directly in tool config
+    if (api_key) {
+      const encryptionUtil = require('../utils/encryption');
+      config.encrypted_api_key = encryptionUtil.encrypt(api_key);
+    }
+
+    await agent.configureWebSearch(config);
+
+    res.json({
+      message: 'Web search configuration updated successfully',
+      provider: provider || 'brave',
+      has_api_key: !!api_key,
+      default_max_results: default_max_results || 5,
+    });
+  } catch (error) {
+    console.error('Configure web search error:', error);
+    res.status(500).json({ error: 'Failed to configure web search' });
+  }
+};
+
+const getWebSearchConfig = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const webSearchConfig = agent.getWebSearchConfig();
+    if (!webSearchConfig) {
+      return res
+        .status(404)
+        .json({ error: 'Agent does not have web_search tool configured' });
+    }
+
+    res.json({
+      success: true,
+      data: webSearchConfig,
+    });
+  } catch (error) {
+    console.error('Get web search config error:', error);
+    res.status(500).json({ error: 'Failed to get web search configuration' });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -1620,4 +1700,6 @@ module.exports = {
   executeChatbotAgentWithApiKey,
   getAgentForApiKey,
   getAgentsForApiKey,
+  configureWebSearch,
+  getWebSearchConfig,
 };

@@ -302,4 +302,35 @@ agentSchema.methods.getQuestionSuggestions = function () {
   };
 };
 
+// Method to configure web search tool
+agentSchema.methods.configureWebSearch = function (config) {
+  const webSearchTool = this.tools.find(tool => tool.name === 'web_search');
+  if (!webSearchTool) {
+    throw new Error('Web search tool not found in agent tools');
+  }
+
+  // Merge new configuration with existing parameters
+  webSearchTool.parameters = {
+    ...webSearchTool.parameters,
+    ...config,
+  };
+
+  return this.save();
+};
+
+// Method to get web search configuration
+agentSchema.methods.getWebSearchConfig = function () {
+  const webSearchTool = this.tools.find(tool => tool.name === 'web_search');
+  if (!webSearchTool) {
+    return null;
+  }
+
+  return {
+    provider: webSearchTool.parameters?.provider || 'brave',
+    default_max_results: webSearchTool.parameters?.default_max_results || 5,
+    // Don't expose the actual API key, only whether it's configured
+    has_api_key: !!(webSearchTool.parameters?.encrypted_api_key),
+  };
+};
+
 module.exports = mongoose.model('Agent', agentSchema);

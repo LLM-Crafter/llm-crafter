@@ -491,6 +491,68 @@ GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}
 }
 ```
 
+## Web Search Configuration
+
+### Configure Web Search
+
+Configure web search provider and API key for an agent.
+
+```http
+POST /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}/web-search-config
+```
+
+**Request Body:**
+
+```json
+{
+  "provider": "brave",
+  "api_key": "your-search-api-key",
+  "default_max_results": 10
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `provider` | string | No | Search provider: `brave` or `tavily` (default: `brave`) |
+| `api_key` | string | No | Search API key (will be encrypted) |
+| `default_max_results` | number | No | Default maximum results (1-20, default: 5) |
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Web search configuration updated successfully",
+  "provider": "brave",
+  "has_api_key": true,
+  "default_max_results": 10
+}
+```
+
+### Get Web Search Configuration
+
+Retrieve web search configuration for an agent.
+
+```http
+GET /api/organizations/{organization_id}/projects/{project_id}/agents/{agent_id}/web-search-config
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "provider": "brave",
+    "default_max_results": 10,
+    "has_api_key": true
+  }
+}
+```
+
+**Note:** The actual API key is never returned for security reasons.
+
 ## Error Handling
 
 ### Common Error Responses

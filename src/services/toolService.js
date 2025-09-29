@@ -384,19 +384,14 @@ class ToolService {
       throw new Error('Query parameter is required for web search');
     }
 
-    // Get API key from agent config or tool config
-    let apiKeyId = config.search_api_key_id || config._agent_api_key_id;
+    // Get encrypted API key from agent tool config
     let searchApiKey = null;
-
-    // If API key ID is provided, fetch and decrypt the key
-    if (apiKeyId) {
+    if (config.encrypted_api_key) {
       try {
-        const apiKey = await ApiKey.findById(apiKeyId);
-        if (apiKey && apiKey.is_active) {
-          searchApiKey = apiKey.getDecryptedKey();
-        }
+        const encryptionUtil = require('../utils/encryption');
+        searchApiKey = encryptionUtil.decrypt(config.encrypted_api_key);
       } catch (error) {
-        console.warn('Failed to get search API key:', error.message);
+        console.warn('Failed to decrypt search API key:', error.message);
       }
     }
 
@@ -419,10 +414,14 @@ class ToolService {
     }
 
     try {
+      // Use provider from config first, then from parameters
+      const searchProvider = config.provider || provider;
+      const maxResults = config.default_max_results || max_results;
+      
       // Use the internet search service with the configured provider
       const searchOptions = {
-        provider: config.search_provider || provider,
-        max_results,
+        provider: searchProvider,
+        max_results: maxResults,
         api_key: searchApiKey
       };
 

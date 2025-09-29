@@ -343,6 +343,22 @@ const questionSuggestionsValidation = [
     .withMessage('Custom prompt must be a string'),
 ];
 
+const webSearchConfigValidation = [
+  body('provider')
+    .optional()
+    .isIn(['brave', 'tavily'])
+    .withMessage('Provider must be brave or tavily'),
+  body('api_key')
+    .optional()
+    .isString()
+    .isLength({ min: 1 })
+    .withMessage('API key must be a non-empty string'),
+  body('default_max_results')
+    .optional()
+    .isInt({ min: 1, max: 20 })
+    .withMessage('Default max results must be between 1 and 20'),
+];
+
 router.put(
   '/:agentId/question-suggestions',
   auth,
@@ -357,6 +373,24 @@ router.get(
   auth,
   orgAuth.hasRole('viewer'),
   agentController.getQuestionSuggestions
+);
+
+// ===== WEB SEARCH CONFIGURATION ROUTES =====
+
+router.post(
+  '/:agentId/web-search-config',
+  auth,
+  orgAuth.hasRole('member'),
+  webSearchConfigValidation,
+  validate,
+  agentController.configureWebSearch
+);
+
+router.get(
+  '/:agentId/web-search-config',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getWebSearchConfig
 );
 
 module.exports = router;
