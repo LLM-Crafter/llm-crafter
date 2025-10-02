@@ -130,7 +130,7 @@ Content-Type: application/json
   "whatsapp": {
     "enabled": true,
     "provider": "twilio",
-    "account_sid": "AC1234567890abcdef1234567890abcdef",
+    "account_sid": "XXXX",
     "auth_token": "your_twilio_auth_token",
     "phone_number": "+14155551234",
     "verify_token": "optional_webhook_verification_token"
@@ -235,7 +235,7 @@ Content-Type: application/json
     "provider": "ses",
     "region": "us-east-1",
     "access_key_id": "AKIAIOSFODNN7EXAMPLE",
-    "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "secret_access_key": "XXXXX",
     "from_email": "bot@example.com",
     "from_name": "My Support Bot"
   }
