@@ -1,4 +1,5 @@
 const OpenAIService = require('./openaiService');
+const APIKey = require('../models/ApiKey');
 
 class SummarizationService {
   /**
@@ -7,10 +8,18 @@ class SummarizationService {
   async summarizeConversation(messages, agent, existingSummary = null) {
     try {
       // Use the agent's API key for summarization
-      const openai = new OpenAIService(
-        agent.api_key.key,
-        agent.api_key.provider.name
+      console.log(agent);
+      const apiKey = await APIKey.findById(agent.api_key._id).populate(
+        'provider'
       );
+      let decryptedKey;
+      try {
+        decryptedKey = apiKey.getDecryptedKey();
+      } catch (error) {
+        console.error('Failed to decrypt API key:', error);
+      }
+
+      const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
 
       // Select a fast, cost-effective model for summarization
       const summaryModel = this.selectSummaryModel(agent.llm_settings.model);
@@ -21,7 +30,7 @@ class SummarizationService {
       // Use lower temperature for more consistent summaries
       const summaryParams = {
         temperature: 0.3,
-        max_tokens: 800, // Limit summary length
+        max_tokens: 6000, // Limit summary length
         top_p: 0.9,
       };
 

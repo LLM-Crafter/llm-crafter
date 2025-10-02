@@ -28,6 +28,7 @@ const sessionRoutes = require('./routes/sessions');
 const externalRoutes = require('./routes/external');
 const vectorDatabaseRoutes = require('./routes/vectorDatabases');
 const handoffRoutes = require('./routes/handoff');
+const channelRoutes = require('./routes/channels');
 
 // Middleware
 app.use(helmet());
@@ -42,8 +43,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    },
   })
 );
 app.use(express.json({ limit: '50mb' }));
@@ -64,13 +65,18 @@ app.use('/api/v1/sessions', sessionRoutes);
 app.use('/api/v1/external', externalRoutes);
 app.use('/api/v1', vectorDatabaseRoutes);
 app.use('/api/v1/handoffs', handoffRoutes);
+app.use('/api/v1/channels', channelRoutes);
 
 // Conversations routes (for polling latest messages)
 const conversationRouter = express.Router();
 const handoffController = require('./controllers/handoffController');
 const auth = require('./middleware/auth');
 
-conversationRouter.get('/conversations/:conversationId/messages/latest', auth, handoffController.getLatestMessages);
+conversationRouter.get(
+  '/conversations/:conversationId/messages/latest',
+  auth,
+  handoffController.getLatestMessages
+);
 app.use('/api/v1', conversationRouter);
 
 // Connect to database
