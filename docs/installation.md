@@ -87,13 +87,13 @@ For containerized deployment:
 #### 1. Create docker-compose.yml
 
 ```yaml
-version: "3.8"
+version: '3.8'
 
 services:
   llm-crafter:
     build: .
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - NODE_ENV=production
       - MONGODB_URI=mongodb://mongodb:27017/llm-crafter
@@ -107,7 +107,7 @@ services:
     image: mongo:6.0
     restart: always
     ports:
-      - "27017:27017"
+      - '27017:27017'
     volumes:
       - mongodb_data:/data/db
     environment:
@@ -416,4 +416,4 @@ Once installation is complete:
 
 1. Follow the [Getting Started Guide](/getting-started) to create your first agent
 2. Read about [Configuration](/configuration) options
-3. Explore the [API Reference](/api/) for integration details
+3. Explore the [API Reference](/api/index) for integration details

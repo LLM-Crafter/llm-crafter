@@ -253,11 +253,11 @@ For real-time features like streaming responses:
 ### Connection
 
 ```javascript
-const ws = new WebSocket("ws://localhost:3000/ws");
+const ws = new WebSocket('ws://localhost:3000/ws');
 ws.send(
   JSON.stringify({
-    type: "authenticate",
-    token: "your-jwt-token",
+    type: 'authenticate',
+    token: 'your-jwt-token',
   })
 );
 ```
@@ -267,10 +267,10 @@ ws.send(
 ```javascript
 ws.send(
   JSON.stringify({
-    type: "agent_chat",
-    agent_id: "agent_123",
-    message: "Hello, how can you help me?",
-    user_identifier: "user_456",
+    type: 'agent_chat',
+    agent_id: 'agent_123',
+    message: 'Hello, how can you help me?',
+    user_identifier: 'user_456',
   })
 );
 ```
@@ -284,24 +284,24 @@ npm install llm-crafter-sdk
 ```
 
 ```javascript
-import { LLMCrafter } from "llm-crafter-sdk";
+import { LLMCrafter } from 'llm-crafter-sdk';
 
 const client = new LLMCrafter({
-  baseUrl: "http://localhost:3000/api/v1",
-  apiKey: "your-jwt-token",
+  baseUrl: 'http://localhost:3000/api/v1',
+  apiKey: 'your-jwt-token',
 });
 
 // Create an agent
 const agent = await client.agents.create({
-  name: "my-agent",
-  type: "chatbot",
-  systemPrompt: "You are a helpful assistant",
+  name: 'my-agent',
+  type: 'chatbot',
+  systemPrompt: 'You are a helpful assistant',
 });
 
 // Chat with the agent
 const response = await client.agents.chat(agent.id, {
-  message: "Hello!",
-  userIdentifier: "user123",
+  message: 'Hello!',
+  userIdentifier: 'user123',
 });
 ```
 
@@ -383,9 +383,9 @@ curl -X POST http://localhost:3000/api/v1/organizations/{orgId}/projects/{projec
 
 ## Testing
 
-### API Testing with Postman
+## API Testing
 
-Import the [Postman Collection](./postman/llm-crafter.json) for easy API testing.
+You can test the API using tools like Postman, curl, or any HTTP client. See the examples in each endpoint section.
 
 ### Integration Testing
 
@@ -475,13 +475,13 @@ try {
 } catch (error) {
   if (error.status === 400) {
     // Handle validation errors
-    console.error("Validation error:", error.details);
+    console.error('Validation error:', error.details);
   } else if (error.status === 429) {
     // Handle rate limiting
-    console.error("Rate limited, retry after:", error.retryAfter);
+    console.error('Rate limited, retry after:', error.retryAfter);
   } else {
     // Handle other errors
-    console.error("API error:", error.message);
+    console.error('API error:', error.message);
   }
 }
 ```
@@ -496,7 +496,7 @@ async function apiCallWithRetry(apiCall, maxRetries = 3) {
     } catch (error) {
       if (error.status === 429 && i < maxRetries - 1) {
         const delay = Math.pow(2, i) * 1000; // Exponential backoff
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
       throw error;
@@ -540,4 +540,4 @@ GET /api/v1/organizations/{orgId}/projects/{projectId}/agents?limit=50
 
 ## Changelog
 
-See [CHANGELOG.md](../CHANGELOG.md) for detailed version history and breaking changes.
+Check the GitHub repository for detailed version history and breaking changes.

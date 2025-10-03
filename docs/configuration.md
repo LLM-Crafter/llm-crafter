@@ -50,166 +50,37 @@ MAX_LOG_SIZE=10m                    # Max log file size
 MAX_LOG_FILES=5                     # Max number of log files
 ```
 
-### LLM Provider Configuration
-
-```bash
-# OpenAI
-OPENAI_API_KEY=sk-your-key         # Default OpenAI API key
-OPENAI_ORG_ID=org-your-org         # OpenAI organization ID (optional)
-
-# Anthropic
-ANTHROPIC_API_KEY=your-key         # Default Anthropic API key
-
-# Custom Providers
-CUSTOM_PROVIDER_URL=https://api.example.com  # Custom LLM provider URL
-CUSTOM_PROVIDER_KEY=your-key       # Custom provider API key
-```
-
-## Database Configuration
-
-### MongoDB Options
-
-```javascript
-// Database connection options (set via MONGODB_URI query parameters)
-const mongoOptions = {
-  // Connection options
-  maxPoolSize: 10, // Maximum connection pool size
-  minPoolSize: 5, // Minimum connection pool size
-  maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
-  serverSelectionTimeoutMS: 5000, // How long to try selecting a server
-
-  // Reliability options
-  retryWrites: true, // Retry writes on network errors
-  retryReads: true, // Retry reads on network errors
-  heartbeatFrequencyMS: 10000, // Heartbeat every 10 seconds
-
-  // Authentication
-  authSource: "admin", // Authentication database
-  authMechanism: "SCRAM-SHA-256", // Authentication mechanism
-};
-```
-
-Example connection strings:
-
-```bash
-# Basic connection
-MONGODB_URI=mongodb://localhost:27017/llm-crafter
-
-# With authentication
-MONGODB_URI=mongodb://user:pass@localhost:27017/llm-crafter?authSource=admin
-
-# MongoDB Atlas
-MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/llm-crafter?retryWrites=true
-
-# Replica set
-MONGODB_URI=mongodb://host1:27017,host2:27017,host3:27017/llm-crafter?replicaSet=rs0
-```
-
-### Database Indexes
-
-LLM Crafter automatically creates the following indexes for optimal performance:
-
-```javascript
-// Agent indexes
-db.agents.createIndex({ project: 1, name: 1 }, { unique: true });
-db.agents.createIndex({ organization: 1 });
-
-// Conversation indexes
-db.conversations.createIndex({ agent: 1, user_identifier: 1 });
-db.conversations.createIndex({ agent: 1, status: 1 });
-db.conversations.createIndex({ "metadata.last_activity": 1 });
-
-// Execution indexes
-db.agentexecutions.createIndex({ agent: 1, status: 1 });
-db.agentexecutions.createIndex({ agent: 1, createdAt: -1 });
-db.agentexecutions.createIndex({ status: 1, createdAt: 1 });
-
-// Organization indexes
-db.organizations.createIndex({ "members.user": 1 });
-db.organizations.createIndex({ name: 1 }, { unique: true });
-```
-
 ## Runtime Configuration
 
 ### System Tools Configuration
 
-Configure built-in system tools in `src/config/systemTools.js`:
+LLM Crafter provides 11 built-in system tools in `src/config/systemTools.js`:
 
-```javascript
-const systemToolsConfig = {
-  web_search: {
-    enabled: true,
-    max_results: 10,
-    timeout: 30000, // 30 seconds
-    search_engine: "google", // google|bing|duckduckgo
-    safe_search: true,
-  },
+**Available Tools:**
 
-  calculator: {
-    enabled: true,
-    precision: 10, // Decimal precision
-    max_computation_time: 5000, // 5 seconds
-  },
+1. **web_search** - Search the web using Brave Search or Tavily
+2. **webpage_scraper** - Scrape content from web pages
+3. **calculator** - Perform mathematical calculations
+4. **llm_prompt** - Execute prompts using LLM providers
+5. **current_time** - Get current date and time in various formats
+6. **json_processor** - Parse, validate, and manipulate JSON data
+7. **api_caller** - Make HTTP requests to pre-configured API endpoints
+8. **faq** - Answer questions using pre-configured FAQs
+9. **rag_search** - Search indexed knowledge base using semantic similarity
+10. **request_human_handoff** - Request human operator intervention
+11. **webpage_scraper** - Extract content from web pages
 
-  api_caller: {
-    enabled: true,
-    timeout: 30000, // Default request timeout
-    max_redirects: 5, // Max HTTP redirects
-    max_response_size: "10mb", // Max response size
-  },
+**Tool Categories:**
 
-  json_processor: {
-    enabled: true,
-    max_depth: 10, // Max JSON nesting depth
-    max_size: "1mb", // Max JSON size
-  },
-};
-```
+- Web: `web_search`, `webpage_scraper`
+- Computation: `calculator`
+- LLM: `llm_prompt`
+- Utility: `current_time`
+- Data: `json_processor`
+- Communication: `api_caller`, `request_human_handoff`
+- Knowledge: `faq`, `rag_search`
 
-### LLM Model Configuration
-
-Configure default model settings and mappings:
-
-```javascript
-const modelConfig = {
-  // Default models for different providers
-  defaults: {
-    openai: "gpt-4o-mini",
-    anthropic: "claude-3-haiku-20240307",
-    custom: "custom-model-v1",
-  },
-
-  // Model aliases for easy switching
-  aliases: {
-    fast: "gpt-4o-mini",
-    smart: "gpt-4o",
-    reasoning: "o1-mini",
-    creative: "gpt-4o",
-  },
-
-  // Model-specific parameters
-  parameters: {
-    "gpt-4o": {
-      max_tokens: 4096,
-      temperature: 0.7,
-      top_p: 1.0,
-    },
-    "gpt-4o-mini": {
-      max_tokens: 16384,
-      temperature: 0.7,
-      top_p: 1.0,
-    },
-  },
-
-  // Summarization model mappings
-  summarization: {
-    "gpt-4o": "gpt-4o-mini",
-    "gpt-5": "gpt-5-mini",
-    o3: "o3-mini",
-    o1: "o1-mini",
-  },
-};
-```
+These tools are automatically initialized at startup and available to all agents. See [System Tools Documentation](/features/system-tools) for detailed usage and configuration.
 
 ### Conversation Summarization Configuration
 
@@ -228,7 +99,7 @@ const summarizationConfig = {
   parameters: {
     max_tokens: 800, // Max tokens for summary
     temperature: 0.3, // Low temperature for consistency
-    model_selection: "auto", // auto|specific_model
+    model_selection: 'auto', // auto|specific_model
   },
 
   // Performance settings
@@ -242,34 +113,89 @@ const summarizationConfig = {
 
 ## Provider Configuration
 
-### Adding Custom LLM Providers
+### Default LLM Providers
 
-Add custom LLM providers by extending the provider system:
+LLM Crafter comes with pre-configured providers in `src/config/defaultProviders.js`. These providers are automatically initialized on server startup:
 
 ```javascript
-// src/config/providers.js
-const customProviders = [
+// src/config/defaultProviders.js
+const defaultProviders = [
   {
-    name: "huggingface",
-    display_name: "Hugging Face",
-    api_base_url: "https://api-inference.huggingface.co/models",
-    auth_type: "bearer_token",
+    name: 'openai',
     models: [
-      {
-        id: "microsoft/DialoGPT-large",
-        name: "DialoGPT Large",
-        type: "chat",
-        context_length: 2048,
-      },
+      'gpt-5',
+      'gpt-5-mini',
+      'gpt-4.1',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'o3-deep-research',
+      'o3-pro',
+      'o3-mini',
+      'o4-mini',
+      'text-embedding-3-large',
+      'text-embedding-3-small',
+      // ... and more
     ],
-    request_format: {
-      messages_key: "inputs",
-      model_key: null,
-      parameters_key: "parameters",
-    },
+  },
+  {
+    name: 'anthropic',
+    models: [
+      'claude-opus-4-1-20250805',
+      'claude-sonnet-4-20250514',
+      'claude-3-7-sonnet-20250219',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022',
+      // ... and more
+    ],
+  },
+  {
+    name: 'google',
+    models: [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-8b',
+      // ... and more
+    ],
+  },
+  {
+    name: 'deepseek',
+    models: [
+      'DeepSeek-V3',
+      'DeepSeek-R1',
+      'deepseek-llm-67b-chat',
+      'DeepSeek-VL',
+      'DeepSeek-Math',
+      'DeepSeek-Prover',
+      // ... and more
+    ],
   },
 ];
 ```
+
+The system automatically updates existing providers with new models while preserving any custom models you've added via the API.
+
+### Adding Custom Providers
+
+To add a custom LLM provider, edit `src/config/defaultProviders.js` and add your provider to the `defaultProviders` array:
+
+```javascript
+const defaultProviders = [
+  // ... existing providers
+  {
+    name: 'your-custom-provider',
+    models: [
+      'model-name-1',
+      'model-name-2',
+      // Add all supported models
+    ],
+  },
+];
+```
+
+After adding a custom provider, restart the server to initialize it automatically.
 
 ### API Key Management
 
@@ -278,8 +204,8 @@ Configure how API keys are managed:
 ```javascript
 const apiKeyConfig = {
   encryption: {
-    algorithm: "aes-256-gcm", // Encryption algorithm
-    key_derivation: "pbkdf2", // Key derivation method
+    algorithm: 'aes-256-gcm', // Encryption algorithm
+    key_derivation: 'pbkdf2', // Key derivation method
     iterations: 100000, // PBKDF2 iterations
   },
 
@@ -300,180 +226,93 @@ const apiKeyConfig = {
 };
 ```
 
-## Performance Tuning
-
-### Memory Configuration
-
-```bash
-# Node.js memory settings
-NODE_OPTIONS="--max-old-space-size=2048"  # Max heap size (2GB)
-UV_THREADPOOL_SIZE=16                      # UV thread pool size
-```
-
-### Connection Pooling
-
-```javascript
-// MongoDB connection pool settings
-const mongoConfig = {
-  maxPoolSize: 10, // Max connections in pool
-  minPoolSize: 5, // Min connections in pool
-  maxIdleTimeMS: 30000, // Close idle connections after 30s
-  waitQueueTimeoutMS: 5000, // Max time to wait for connection
-  serverSelectionTimeoutMS: 5000, // Max time to select server
-};
-```
-
-### Caching Configuration
-
-```javascript
-const cacheConfig = {
-  // In-memory caching
-  memory: {
-    enabled: true,
-    max_size: "100mb", // Max memory cache size
-    ttl: 300000, // Cache TTL (5 minutes)
-  },
-
-  // Redis caching (optional)
-  redis: {
-    enabled: false,
-    url: "redis://localhost:6379",
-    prefix: "llm-crafter:",
-    ttl: 3600, // Cache TTL (1 hour)
-  },
-};
-```
-
-## Monitoring Configuration
-
-### Health Checks
-
-```javascript
-const healthConfig = {
-  endpoints: {
-    basic: "/health", // Basic health check
-    detailed: "/health/detailed", // Detailed system status
-    ready: "/ready", // Readiness probe
-  },
-
-  checks: {
-    database: true, // Check database connectivity
-    external_apis: true, // Check external API availability
-    memory_usage: true, // Check memory usage
-    disk_space: true, // Check disk space
-  },
-
-  thresholds: {
-    memory_warning: 0.8, // Warn at 80% memory usage
-    memory_critical: 0.95, // Critical at 95% memory usage
-    response_time: 5000, // Max response time (5s)
-  },
-};
-```
-
-### Metrics Collection
-
-```javascript
-const metricsConfig = {
-  enabled: true,
-
-  collection: {
-    requests: true, // Collect request metrics
-    response_times: true, // Collect response time metrics
-    errors: true, // Collect error metrics
-    llm_usage: true, // Collect LLM usage metrics
-  },
-
-  export: {
-    prometheus: {
-      enabled: false,
-      endpoint: "/metrics",
-      prefix: "llm_crafter_",
-    },
-    json: {
-      enabled: true,
-      endpoint: "/metrics/json",
-    },
-  },
-};
-```
-
 ## Security Configuration
 
-### Authentication Settings
+Configure authentication methods and security features using environment variables defined in `src/config/passport.js`.
 
-```javascript
-const authConfig = {
-  jwt: {
-    secret: process.env.JWT_SECRET,
-    algorithm: "HS256",
-    expiresIn: "24h",
-    issuer: "llm-crafter",
-    audience: "llm-crafter-users",
-  },
-
-  password: {
-    min_length: 8,
-    require_uppercase: true,
-    require_lowercase: true,
-    require_numbers: true,
-    require_symbols: false,
-    bcrypt_rounds: 12,
-  },
-
-  session: {
-    timeout: 86400000, // 24 hours
-    max_concurrent: 5, // Max concurrent sessions per user
-    secure_cookies: process.env.NODE_ENV === "production",
-  },
-};
-```
-
-### API Security
-
-```javascript
-const securityConfig = {
-  cors: {
-    origin: process.env.CORS_ORIGIN || false,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  },
-
-  rate_limiting: {
-    enabled: true,
-    max_requests: 100,
-    window_ms: 900000, // 15 minutes
-    skip_successful: false,
-    headers: true,
-  },
-
-  helmet: {
-    enabled: true,
-    content_security_policy: false, // Disable for API
-    cross_origin_embedder_policy: false,
-  },
-};
-```
-
-## Validation
-
-Validate your configuration with the built-in health check:
+### Core Authentication
 
 ```bash
-# Check configuration validity
-curl http://localhost:3000/health/detailed
+# JWT Secret (Required)
+# Secret key for signing JWT tokens
+JWT_SECRET=your-secure-jwt-secret-key-min-32-characters
+
+# Session Secret (Optional)
+# Secret key for session management (falls back to JWT_SECRET if not set)
+SESSION_SECRET=your-secure-session-secret-key
+
+# Encryption Key (Required for API Keys)
+# 32-character key for encrypting sensitive data (API keys, credentials)
+ENCRYPTION_KEY=your-32-character-encryption-key
 ```
 
-This returns detailed system status including:
+### Email Domain Restrictions
 
-- Database connectivity
-- Environment configuration
-- System resource usage
-- External service availability
+```bash
+# Allowed Email Domains (Optional)
+# Comma-separated list of allowed email domains for registration
+# If not set, all email domains are allowed
+ALLOWED_EMAIL_DOMAINS=company.com,partner.com,example.org
+```
+
+### Google OAuth
+
+```bash
+# Google OAuth Credentials (Optional)
+# Enable Google authentication by providing these credentials
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_CALLBACK_URL=/auth/google/callback  # Default callback URL
+```
+
+To obtain Google OAuth credentials:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable Google+ API
+4. Create OAuth 2.0 credentials
+5. Add authorized redirect URI: `http://localhost:3000/auth/google/callback`
+
+### GitHub OAuth
+
+```bash
+# GitHub OAuth Credentials (Optional)
+# Enable GitHub authentication by providing these credentials
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+GITHUB_CALLBACK_URL=/auth/github/callback  # Default callback URL
+```
+
+To obtain GitHub OAuth credentials:
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Create a new OAuth App
+3. Set Authorization callback URL: `http://localhost:3000/auth/github/callback`
+4. Copy the Client ID and generate a Client Secret
+
+### Authentication Methods
+
+The system supports three authentication methods configured in `src/config/passport.js`:
+
+1. **Local Strategy** (Email/Password)
+
+   - Always enabled
+   - Requires strong passwords (8+ characters, uppercase, lowercase, number)
+   - Uses bcrypt for password hashing
+
+2. **Google OAuth**
+
+   - Enabled when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set
+   - Automatically creates user accounts from Google profiles
+   - Supports email domain restrictions
+
+3. **GitHub OAuth**
+   - Enabled when `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set
+   - Automatically creates user accounts from GitHub profiles
+   - Supports email domain restrictions
 
 ## Next Steps
 
 - Review [Getting Started](/getting-started) for first-time setup
 - Explore [Agent Types](/features/agent-types) to understand agent configuration
-- Check [API Reference](/api/) for endpoint-specific configuration options
+- Check [API Reference](/api/index) for endpoint-specific configuration options

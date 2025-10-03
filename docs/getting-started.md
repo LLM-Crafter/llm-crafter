@@ -38,8 +38,6 @@ JWT_SECRET=your-super-secret-jwt-key
 PORT=3000
 NODE_ENV=development
 
-# Optional: Default provider keys (can also be added via API)
-OPENAI_API_KEY=your-openai-api-key
 ```
 
 ### 4. Start the Database
@@ -75,9 +73,31 @@ curl -X POST http://localhost:3000/api/v1/auth/register \
   -d '{
     "name": "John Doe",
     "email": "john@example.com",
-    "password": "secure-password"
+    "password": "MyS3cur3K3y!"
   }'
 ```
+
+**Response:**
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "user_123",
+    "name": "John Doe",
+    "email": "john@example.com"
+  }
+}
+```
+
+**Note:** Password must contain:
+
+- At least 8 characters
+- One uppercase letter
+- One lowercase letter
+- One number
+- One special character
+- Cannot contain common words (password, admin, user, pass, etc.)
 
 ### Step 2: Login and Get Token
 
@@ -86,7 +106,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "john@example.com",
-    "password": "secure-password"
+    "password": "MyS3cur3K3y!"
   }'
 ```
 
@@ -222,6 +242,6 @@ Error: connect ECONNREFUSED 127.0.0.1:27017
 
 ### Getting Help
 
-- Check the [API Reference](/api/) for detailed endpoint documentation
-- Review [Examples](/examples/) for common use cases
+- Check the [API Reference](/api/index) for detailed endpoint documentation
+- Review [Examples](/examples/weather-agent) for common use cases
 - Open an issue on GitHub for bugs or feature requests

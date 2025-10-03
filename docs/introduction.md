@@ -1,123 +1,180 @@
 # What is LLM Crafter?
 
-LLM Crafter is a comprehensive platform designed to streamline the development, management, and execution of Large Language Model (LLM) applications. It provides a structured approach to building AI-powered solutions with intelligent agents, conversation management, and powerful tool integrations.
+LLM Crafter is a platform for building and deploying AI-powered applications using Large Language Models (LLMs). Manage agents, workflows, and prompts through a RESTful API or web interface. Deploy across multiple channels, integrate with external services, and leverage powerful built-in tools.
 
-## Key Features
+## Core Capabilities
 
-### 🤖 Intelligent Agents
+### 🤖 Agents & Workflows
 
-- **Chatbot Agents**: Create conversational AI with memory and context
-- **Task Agents**: Build single-purpose AI workers for specific tasks
-- **Custom System Prompts**: Fine-tune agent behavior and personality
-- **Tool Integration**: Equip agents with powerful capabilities
+Build and orchestrate AI-powered solutions:
 
-### 💬 Advanced Conversation Management
+- **Chatbot Agents**: Conversational AI with memory and context preservation
+- **Task Agents**: Automated workers for specific jobs
+- **Workflows**: Multi-step processes combining agents and tools
+- **Custom System Prompts**: Fine-tune behavior and personality
+- **Multi-Channel Support**: Deploy across WhatsApp, Telegram, Email, and Website
 
-- **Automatic Summarization**: Reduce token usage by up to 70%
-- **Context Preservation**: Maintain important information across long conversations
-- **Memory Management**: Intelligent conversation history optimization
-- **Multi-turn Conversations**: Support for complex, extended interactions
+### 📝 Prompt Management
 
-### 🛠️ Comprehensive Tool System
+Version control and manage your prompts:
 
-- **System Tools**: Built-in tools for web search, calculations, time, JSON processing
-- **API Caller**: Easy integration with external APIs and services
+- **Prompt Versioning**: Track changes and rollback when needed
+- **Template System**: Reusable prompt templates
+- **Variable Substitution**: Dynamic prompt generation
+- **A/B Testing**: Compare prompt performance
+- **Execution History**: Track usage and results
+
+### 🔌 LLM Proxy
+
+Unified interface for multiple LLM providers:
+
+- **Provider Abstraction**: Single API for OpenAI, Anthropic, and custom providers
+- **Automatic Fallback**: Switch providers on failure
+- **Cost Tracking**: Monitor usage and spending per provider
+- **Rate Limiting**: Control API usage and costs
+- **Model Selection**: Choose optimal models for different tasks
+
+### � Multi-Channel Communication
+
+Deploy your agents across multiple communication channels:
+
+- **WhatsApp**: Via Twilio, Meta Cloud API, or 360Dialog
+- **Telegram**: Native bot integration
+- **Email**: SMTP, SendGrid, Mailgun, AWS SES
+- **Website**: Built-in web widget
+- **Unified Conversations**: All channels share the same conversation history
+
+### 🛠️ Powerful Tools
+
+Extend functionality with built-in and 3rd party integrations:
+
+- **Built-in Tools**: Web search, calculations, time, JSON processing, FAQ
+- **API Caller Tool**: Integrate with any 3rd party API or service
 - **Custom Tools**: Develop and deploy your own specialized tools
 - **Tool Chaining**: Combine multiple tools for complex workflows
+- **RAG Support**: Vector database integration for knowledge retrieval
+
+### 💬 Conversation Management
+
+Handle complex interactions across channels:
+
+- **Automatic Summarization**: Reduce token usage by up to 70%
+- **Context Preservation**: Maintain conversation history across channels
+- **Memory Optimization**: Intelligent conversation history management
+- **Multi-turn Support**: Handle complex, extended interactions
+- **User Identification**: Track conversations per user across channels
 
 ### 📊 Organization & Project Management
 
 - **Multi-tenant Architecture**: Support for multiple organizations
-- **Project-based Organization**: Logical grouping of agents and resources
+- **Project-based Organization**: Logical grouping of agents, prompts, and workflows
 - **Role-based Access Control**: Admin, member, and viewer permissions
-- **Team Collaboration**: Share agents and projects across teams
+- **Team Collaboration**: Share resources across teams
 
 ### 🔐 Security & Authentication
 
-- **JWT-based Authentication**: Secure user sessions
-- **API Key Management**: Secure storage and management of LLM provider keys
-- **Organization Isolation**: Complete data separation between organizations
-- **Provider Support**: Integration with OpenAI, Anthropic, and custom providers
+- **JWT-based Authentication**: Secure API access
+- **OAuth Support**: Google and GitHub authentication
+- **API Key Management**: Encrypted storage of provider credentials
+- **Organization Isolation**: Multi-tenant data separation
+- **Provider Support**: OpenAI, Anthropic, and custom LLM providers
 
-## Use Cases
+## Common Use Cases
 
-### Customer Support Automation
+### Customer Support
 
-Create intelligent chatbots that can:
+- Multi-channel support bots (WhatsApp, Telegram, Email, Website)
+- Knowledge base integration with RAG
+- Conversation handoff to human agents
+- Automated ticket creation via API calls
 
-- Answer common questions
-- Access knowledge bases
-- Escalate complex issues
-- Maintain conversation context
+### Business Automation
 
-### Business Process Automation
+- Document processing workflows
+- API orchestration and data synchronization
+- Automated report generation
+- Multi-step approval processes
 
-Build task agents that can:
+### Research & Analysis
 
-- Process documents
-- Make API calls
-- Perform calculations
-- Generate reports
+- Web search and information gathering
+- Data analysis and summarization
+- Multi-source research compilation
+- Insight generation from documents
 
-### Research and Analysis
+### Prompt Engineering
 
-Develop agents that can:
-
-- Search the web
-- Analyze data
-- Summarize findings
-- Generate insights
-
-### Content Creation
-
-Create agents for:
-
-- Writing assistance
-- Content generation
-- Translation
-- Editing and proofreading
+- Version control for prompts
+- A/B testing different prompt strategies
+- Template management for common tasks
+- Performance tracking and optimization
 
 ## Architecture Overview
 
-LLM Crafter follows a modular, scalable architecture:
+LLM Crafter follows a modular, API-first architecture:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   API Layer     │    │   Database      │
-│   Applications  │◄──►│   Express.js    │◄──►│   MongoDB       │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
+│   Channels      │    │   API Layer     │    │   Database      │
+│   (WhatsApp,    │◄──►│   Express.js    │◄──►│   MongoDB       │
+│   Telegram,     │    │   REST API      │    │                 │
+│   Email, Web)   │    └─────────────────┘    └─────────────────┘
+└─────────────────┘             │
                         ┌─────────────────┐
                         │   Services      │
                         │   - Agents      │
+                        │   - Workflows   │
+                        │   - Prompts     │
+                        │   - LLM Proxy   │
                         │   - Tools       │
-                        │   - OpenAI      │
-                        │   - Summarize   │
+                        │   - Vector DB   │
                         └─────────────────┘
 ```
 
-## Why Choose LLM Crafter?
+## Access Methods
 
-### Performance Optimized
+### RESTful API
 
-- **Token Efficiency**: Intelligent conversation summarization
-- **Cost Optimization**: Automatic model selection for different tasks
-- **Response Speed**: Optimized prompt processing and caching
+Full-featured API for programmatic access:
 
-### Developer Friendly
+```bash
+# Create an agent
+POST /api/v1/organizations/{orgId}/projects/{projectId}/agents
 
-- **RESTful API**: Clean, well-documented endpoints
-- **TypeScript Support**: Type-safe development experience
-- **Extensible Architecture**: Easy to add new tools and features
-- **Comprehensive Logging**: Detailed execution tracking and debugging
+# Execute a prompt
+POST /api/v1/organizations/{orgId}/projects/{projectId}/prompts/{promptName}/execute
 
-### Production Ready
+# Configure channels
+PUT /api/v1/channels/organizations/{orgId}/projects/{projectId}/agents/{agentId}/channels
+```
 
-- **Scalable Design**: Handle multiple organizations and users
-- **Error Handling**: Robust error recovery and reporting
-- **Monitoring**: Built-in metrics and performance tracking
-- **Security**: Enterprise-grade authentication and authorization
+See the [API Reference](/api/index) for complete documentation.
+
+### Web Interface
+
+Visual interface for managing resources:
+
+- **LLM Crafter UI**: [https://github.com/LLM-Crafter/llm-crafter-ui](https://github.com/LLM-Crafter/llm-crafter-ui)
+- Manage agents, workflows, and prompts visually
+- Monitor conversations and analytics
+- Configure channels and integrations
+- Test and debug in real-time
 
 ## Getting Started
 
-Ready to build your first LLM application? Check out our [Getting Started Guide](/getting-started) to create your first organization, project, and agent in minutes.
+Create your first AI solution in minutes:
+
+1. **[Install](/installation)** - Set up LLM Crafter locally or via Docker
+2. **[Configure](/configuration)** - Add your LLM provider API keys
+3. **[Create Resources](/getting-started)** - Build agents, workflows, or prompts
+4. **[Deploy Channels](/features/multi-channel)** - Connect to WhatsApp, Telegram, or Email (optional)
+5. **[Add Tools](/features/system-tools)** - Enhance with web search, API calls, and more
+
+## What You Can Build
+
+- **Conversational AI**: Multi-channel chatbots with memory and context
+- **Workflow Automation**: Multi-step processes with decision logic
+- **API Orchestration**: Connect and coordinate multiple services
+- **Knowledge Systems**: RAG-powered information retrieval
+- **Prompt Libraries**: Version-controlled prompt templates
+- **LLM Gateway**: Unified interface for multiple providers

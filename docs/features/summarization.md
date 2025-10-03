@@ -1,190 +1,136 @@
-# Conversation Summarization
+# Automatic Conversation Summarization
 
-One of LLM Crafter's most powerful features is automatic conversation summarization, which reduces token usage by up to 70% while preserving important context and information.
+LLM Crafter provides automatic conversation summarization to maintain context while optimizing token usage and costs.
 
 ## Overview
 
-As conversations grow longer, they consume more tokens and increase costs. LLM Crafter automatically summarizes conversations to maintain context while dramatically reducing the number of tokens needed for each interaction.
+The summarization system automatically:
 
-### Key Benefits
-
-- **70% Token Reduction**: Dramatically lower API costs for long conversations
-- **Faster Responses**: 30-50% faster response times
-- **Context Preservation**: Important information is retained
-- **Automatic Processing**: No manual intervention required
-- **Cost Optimization**: Uses efficient models for summarization
+- Triggers when conversations reach specific thresholds
+- Extracts structured information (topics, decisions, issues, preferences)
+- Uses cost-effective models to generate summaries
+- Performs incremental updates to existing summaries
+- Tracks token savings and performance metrics
 
 ## How It Works
 
 ### Automatic Triggers
 
-Summarization is triggered automatically based on:
+The system checks three conditions to determine when to summarize:
 
-1. **Message Count**: Every 15 messages after the last summary
-2. **Token Threshold**: When conversation context exceeds 4,000 tokens
-3. **Time-based**: After periods of inactivity (configurable)
+1. **Metadata Flag**: `requires_summarization` is set to `true`
+2. **Message Threshold**: 15+ messages since last summary
+3. **No Summary**: 20+ total messages with no existing summary
 
-### Summarization Process
+### Message Selection
 
-```mermaid
-graph TD
-    A[New Message] --> B{Check Triggers}
-    B -->|15+ Messages| C[Create Summary]
-    B -->|4000+ Tokens| C
-    B -->|Time Threshold| C
-    B -->|No Trigger| D[Continue Normal]
-    C --> E[LLM Summarization]
-    E --> F[Structured Summary]
-    F --> G[Update Conversation]
-    G --> H[Mark Messages as Summarized]
-```
+**Logic:**
+
+- If summary exists: Process messages after `last_summary_index`
+- If no summary: Process all messages except the last 5 (keep recent context)
+- If fewer than 10 messages: Skip summarization (insufficient data)
 
 ### Summary Structure
 
-Summaries are created in a structured format that preserves the most important information:
+Summaries extract five types of information:
 
-```json
-{
-  "key_topics": [
-    "e-commerce website setup",
-    "bookstore specialization",
-    "Shopify platform selection",
-    "rare books and collectibles"
-  ],
-  "important_decisions": [
-    "Budget set at $5000",
-    "Shopify chosen as platform",
-    "Focus on rare books and collectibles",
-    "Square POS integration needed"
-  ],
-  "unresolved_issues": [
-    "Specific Square integration method",
-    "Website design details",
-    "Authentication certificate process"
-  ],
-  "user_preferences": {
-    "budget": "$5000",
-    "platform": "Shopify",
-    "business_type": "rare books and collectibles",
-    "pos_system": "Square",
-    "design_preference": "minimalist"
-  },
-  "context_data": {
-    "business_focus": "rare books and collectibles",
-    "has_physical_store": true,
-    "current_pos": "Square"
-  }
-}
-```
+- **key_topics**: Main subjects discussed (max 5 topics)
+- **important_decisions**: Concrete decisions made or agreed upon
+- **unresolved_issues**: Questions or problems that need follow-up
+- **user_preferences**: User's stated preferences, constraints, or requirements
+- **context_data**: Important facts, numbers, names, or references
 
 ## Model Selection
 
 LLM Crafter automatically selects cost-effective models for summarization:
 
-| Agent Model | Summarization Model | Savings            |
-| ----------- | ------------------- | ------------------ |
-| gpt-4o      | gpt-4o-mini         | 95% cost reduction |
-| gpt-5       | gpt-5-mini          | 95% cost reduction |
-| o3          | o3-mini             | 90% cost reduction |
-| o1          | o1-mini             | 90% cost reduction |
+| Agent Model   | Summarization Model | Cost Savings      |
+| ------------- | ------------------- | ----------------- |
+| gpt-4o        | gpt-4o-mini         | ~95%              |
+| gpt-5         | gpt-5-mini          | ~95%              |
+| gpt-4-turbo   | gpt-4o-mini         | ~95%              |
+| o3            | o3-mini             | ~90%              |
+| o1            | o1-mini             | ~90%              |
+| deepseek-chat | deepseek-chat       | Already efficient |
 
-### Custom Model Configuration
+Default fallback: `gpt-4o-mini`
 
-You can configure summarization models per agent:
+## Summarization Parameters
 
-```bash
-POST /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/api-config
-```
+The summarization process uses these optimized parameters:
 
-```json
-{
-  "summarization": {
-    "enabled": true,
-    "model": "gpt-3.5-turbo",
-    "max_tokens": 200,
-    "min_size": 800,
-    "focus": "customer preferences and key decisions"
-  }
-}
-```
+- **temperature**: 0.3 (lower for consistency)
+- **max_tokens**: 6000 (limit summary length)
+- **top_p**: 0.9 (slightly reduced for focus)
 
-## API Integration
+## Incremental Summarization
+
+When a summary already exists:
+
+1. Existing summary is included in the prompt context
+2. Only new messages (since last summary) are analyzed
+3. LLM merges new information with existing summary
+4. Preserves important historical context while adding new details
+
+Benefits:
+
+- Maintains continuity across multiple summarization events
+- Prevents information loss
+- Reduces token usage (only summarize new messages)
+
+## Conversation Updates
+
+After summarization, the conversation metadata is updated with:
+
+- `has_summary`: Boolean flag indicating summary exists
+- `messages_count`: Total messages in conversation
+- `messages_since_last_summary`: Messages added since last summary
+- `last_summary_index`: Index of last message included in summary
+- `summary_version`: Incremental version number
+- `requires_summarization`: Flag to force summarization
+- `estimated_token_savings`: Estimated tokens saved
+
+## Integration Flow
+
+The summarization system integrates into the agent service:
+
+1. Check if summarization is needed
+2. Get messages to summarize
+3. Call summarization service with existing summary
+4. Update conversation with new summary
+5. Log metrics for monitoring
+6. Return result (or null on failure)
+
+Error handling: Failures don't stop conversation execution.
+
+## API Endpoints
 
 ### Manual Summarization
 
 Force summarization of a conversation:
 
-```bash
-POST /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversations/{conversationId}/summarize
 ```
-
-**Response:**
-
-```json
-{
-  "message": "Conversation summarized successfully",
-  "summary": {
-    "key_topics": ["..."],
-    "important_decisions": ["..."],
-    "unresolved_issues": ["..."],
-    "user_preferences": {},
-    "context_data": {}
-  },
-  "summary_status": {
-    "has_summary": true,
-    "messages_count": 25,
-    "last_summary_index": 19,
-    "summary_version": 1,
-    "requires_summarization": false,
-    "estimated_token_savings": 1250
-  }
-}
+POST /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversations/{conversationId}/summarize
 ```
 
 ### Get Summary Status
 
 Check if a conversation has been summarized:
 
-```bash
+```
 GET /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversations/{conversationId}/summary
 ```
 
-**Response:**
-
-```json
-{
-  "summary": {
-    "key_topics": ["..."],
-    "important_decisions": ["..."],
-    "unresolved_issues": ["..."],
-    "user_preferences": {},
-    "context_data": {}
-  },
-  "summary_status": {
-    "has_summary": true,
-    "messages_count": 25,
-    "messages_since_last_summary": 5,
-    "last_summary_index": 19,
-    "summary_version": 1,
-    "requires_summarization": false,
-    "estimated_token_savings": 1250
-  }
-}
-```
-
-## Configuration Options
+## Configuration
 
 ### Global Configuration
 
-Set system-wide summarization defaults in your environment:
+Environment variables for system-wide defaults:
 
-```bash
-# Summarization triggers
+```
 SUMMARIZATION_MESSAGE_THRESHOLD=15
 SUMMARIZATION_TOKEN_THRESHOLD=4000
-SUMMARIZATION_TIME_THRESHOLD=3600000  # 1 hour
-
-# Performance settings
+SUMMARIZATION_TIME_THRESHOLD=3600000
 SUMMARIZATION_MODEL=gpt-4o-mini
 SUMMARIZATION_MAX_TOKENS=800
 SUMMARIZATION_TEMPERATURE=0.3
@@ -192,325 +138,92 @@ SUMMARIZATION_TEMPERATURE=0.3
 
 ### Agent-Level Configuration
 
-Configure summarization per agent:
-
-```json
-{
-  "summarization": {
-    "enabled": true,
-    "model": "gpt-3.5-turbo",
-    "max_tokens": 150,
-    "min_size": 800,
-    "focus": "customer service interactions and resolution status",
-    "triggers": {
-      "message_count": 10,
-      "token_threshold": 3000,
-      "time_threshold": 1800000
-    }
-  }
-}
-```
-
-### Endpoint-Specific Rules
-
-For agents using the API caller tool, configure summarization per endpoint:
-
-```json
-{
-  "summarization": {
-    "enabled": true,
-    "endpoint_rules": {
-      "get_weather": {
-        "max_tokens": 100,
-        "focus": "current temperature, weather condition, wind, humidity"
-      },
-      "get_user_profile": {
-        "max_tokens": 80,
-        "focus": "user preferences, account status, recent activity"
-      }
-    }
-  }
-}
-```
-
-## Performance Metrics
-
-### Token Savings Example
-
-Before summarization (typical 20-message conversation):
-
-```json
-{
-  "original_tokens": 3500,
-  "estimated_cost": "$0.0175"
-}
-```
-
-After summarization:
-
-```json
-{
-  "summary_tokens": 200,
-  "context_tokens": 800,
-  "total_tokens": 1000,
-  "estimated_cost": "$0.005",
-  "savings": {
-    "tokens": 2500,
-    "percentage": "71%",
-    "cost_reduction": "$0.0125"
-  }
-}
-```
-
-### Response Time Improvement
-
-```json
-{
-  "without_summarization": {
-    "average_response_time": "2.5s",
-    "token_processing_time": "1.8s"
-  },
-  "with_summarization": {
-    "average_response_time": "1.5s",
-    "token_processing_time": "0.8s",
-    "improvement": "40% faster"
-  }
-}
-```
-
-## Monitoring and Analytics
-
-### Summarization Metrics
-
-The system logs detailed metrics for monitoring:
-
-```json
-{
-  "conversation_id": "conv_123",
-  "messages_summarized": 15,
-  "total_messages": 25,
-  "summary_version": 1,
-  "tokens_used": 250,
-  "cost": 0.001,
-  "model_used": "gpt-4o-mini",
-  "processing_time_ms": 1200,
-  "token_savings": 1250,
-  "compression_ratio": 0.71
-}
-```
-
-### Dashboard Metrics
-
-Track summarization performance across your organization:
-
-- **Total Token Savings**: Cumulative tokens saved
-- **Cost Reduction**: Monthly cost savings from summarization
-- **Conversation Length**: Average messages per conversation
-- **Summarization Rate**: Percentage of conversations summarized
-- **Performance Impact**: Response time improvements
+Configure summarization per agent using the agent configuration API.
 
 ## Best Practices
 
-### Summarization Focus
+### Focus by Use Case
 
-Configure summarization to focus on what matters for your use case:
+**Customer Support:**
+Focus on customer issue description, troubleshooting steps, resolution status, and satisfaction.
 
-#### Customer Support
+**Sales Conversations:**
+Focus on customer needs, budget, decision timeline, objections, and next steps.
 
-```json
-{
-  "focus": "customer issue description, troubleshooting steps taken, resolution status, and customer satisfaction"
-}
-```
+**Technical Consultations:**
+Focus on technical requirements, proposed solutions, limitations, and implementation decisions.
 
-#### Sales Conversations
+### Performance Optimization
 
-```json
-{
-  "focus": "customer needs, budget, decision timeline, objections raised, and next steps"
-}
-```
-
-#### Technical Consultations
-
-```json
-{
-  "focus": "technical requirements, proposed solutions, limitations, and implementation decisions"
-}
-```
-
-### Token Optimization
-
-#### Aggressive Summarization (High Volume)
-
-```json
-{
-  "triggers": {
-    "message_count": 10,
-    "token_threshold": 2000
-  },
-  "max_tokens": 100
-}
-```
-
-#### Conservative Summarization (Quality Focus)
-
-```json
-{
-  "triggers": {
-    "message_count": 20,
-    "token_threshold": 5000
-  },
-  "max_tokens": 300
-}
-```
+1. Adjust message thresholds based on conversation patterns
+2. Use efficient models for routine summaries
+3. Keep message truncation at 500 characters
+4. Always include existing summary for continuity
+5. Never let summarization failures stop conversations
 
 ### Quality Assurance
 
-#### Monitor Summary Quality
+1. Validate JSON responses
+2. Monitor parsing errors
+3. Review generated summaries periodically
+4. Update prompts based on usage patterns
+5. Track token savings and compression ratios
 
-- Review summaries periodically
-- Check for information loss
-- Adjust focus parameters as needed
+## Performance Example
 
-#### A/B Testing
+**Before Summarization:**
 
-- Test different summarization settings
-- Compare customer satisfaction metrics
-- Measure response quality impact
+- Conversation: 25 messages, 4,500 tokens
+- Context per request: 4,500 tokens
 
-## Error Handling
+**After Summarization:**
 
-### Fallback Strategies
-
-If LLM summarization fails, the system provides fallbacks:
-
-1. **Simple Text Summary**: Basic extraction of key information
-2. **Truncation**: Remove oldest messages while preserving recent context
-3. **No Summarization**: Continue without summarization if fallbacks fail
-
-### Error Recovery
-
-```json
-{
-  "error_handling": {
-    "retry_attempts": 3,
-    "fallback_enabled": true,
-    "continue_on_failure": true,
-    "alert_on_failure": true
-  }
-}
-```
-
-## Advanced Features
-
-### Incremental Summarization
-
-For very long conversations, summaries can be updated incrementally:
-
-```json
-{
-  "incremental_mode": {
-    "enabled": true,
-    "update_interval": 10,
-    "max_increments": 5
-  }
-}
-```
-
-### Custom Summarization Prompts
-
-Customize the summarization prompt for specific domains:
-
-```json
-{
-  "custom_prompt": "Analyze this customer support conversation and extract: 1) The customer's main issue, 2) Steps taken to resolve it, 3) Current status, 4) Any follow-up needed. Focus on actionable information for the next support agent."
-}
-```
-
-### Multi-Language Support
-
-Summarization works across multiple languages:
-
-```json
-{
-  "language_settings": {
-    "detect_language": true,
-    "preserve_language": true,
-    "translation_summaries": false
-  }
-}
-```
-
-## Testing and Validation
-
-### Test Summarization
-
-Use the test script to validate summarization:
-
-```bash
-node test-conversation-summarization.js
-```
-
-This script simulates a long conversation and demonstrates:
-
-- Token savings calculation
-- Summary structure
-- Performance improvements
-
-### Validate Results
-
-Check summarization quality:
-
-```bash
-# Get conversation summary
-curl -X GET "http://localhost:3000/api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/conversations/{conversationId}/summary" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Review summary content
-# Verify key information is preserved
-# Check token savings metrics
-```
+- Summary: 200 tokens
+- Recent messages: 5 messages, 800 tokens
+- Context per request: 1,000 tokens
+- Token savings: 3,500 tokens (78% reduction)
+- Cost savings: ~$0.035 per request (GPT-4 pricing)
 
 ## Troubleshooting
 
-### Common Issues
+### Summaries not generating
 
-#### Summarization Not Triggering
+- Check `metadata.requires_summarization` flag
+- Check message count thresholds
+- Verify agent API key is valid
+- Review error logs for parsing failures
 
-- Check message count threshold
-- Verify token threshold settings
-- Ensure agent has valid API key
+### Poor summary quality
 
-#### Poor Summary Quality
+- Adjust system prompt focus areas
+- Increase `max_tokens` parameter
+- Review message truncation settings
+- Try different summarization models
 
-- Adjust focus parameters
-- Increase max_tokens for summaries
-- Review and refine system prompts
+### High costs
 
-#### High Costs
+- Verify model selection mapping
+- Check summarization triggers (too frequent?)
+- Adjust message thresholds
+- Monitor token usage metrics
 
-- Verify summarization model selection
-- Check if summarization is actually reducing tokens
-- Monitor actual vs. estimated savings
+### Context loss
 
-### Debug Mode
+- Enable incremental summarization
+- Review `last_summary_index` tracking
+- Verify existing summary is included in prompts
+- Check parse validation is not failing
 
-Enable detailed logging for troubleshooting:
+## Summary
 
-```bash
-LOG_LEVEL=debug npm start
-```
+LLM Crafter's automatic summarization system:
 
-This provides detailed information about:
+- Reduces token usage by 70-90% for long conversations
+- Maintains context through structured information extraction
+- Optimizes costs by using efficient models
+- Scales automatically with configurable triggers
+- Preserves quality through incremental updates
+- Tracks performance with detailed metrics
+- Handles errors gracefully without breaking conversations
 
-- Summarization triggers
-- Token calculations
-- Model selection
-- Processing times
-
-## Next Steps
-
-- Review [API Integration Examples](/examples/conversations) for implementation details
-- Learn about [Agent Configuration](/concepts/agents) to optimize performance
-- Explore [Cost Optimization Strategies](/development/cost-optimization) for maximum savings
+By intelligently summarizing conversations, LLM Crafter enables agents to handle longer, more complex interactions while keeping costs manageable and response times fast.

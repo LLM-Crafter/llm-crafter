@@ -1,8 +1,21 @@
 # Authentication
 
-LLM Crafter implements a comprehensive authentication and authorization system to secure access to agents, projects, and resources. The platform supports multiple authentication methods and fine-grained access controls.
+LLM Crafter implements a comprehensive authentication and authorization system to secure access to agents, projects, and resources. The platform supports multiple authentication methods, OAuth integration, and fine-grained role-based access controls.
 
 ## Authentication Methods
+
+LLM Crafter supports flexible authentication configuration via the `AUTH_METHODS` environment variable:
+
+```bash
+# Enable both email/password and OAuth (default)
+AUTH_METHODS=emailpassword,oauth
+
+# Only email/password
+AUTH_METHODS=emailpassword
+
+# Only OAuth
+AUTH_METHODS=oauth
+```
 
 ### JWT Token Authentication
 
@@ -10,10 +23,10 @@ The primary authentication method uses JSON Web Tokens (JWT) for secure, statele
 
 **How it works:**
 
-1. User provides credentials (email/password)
+1. User authenticates via email/password or OAuth provider
 2. Server validates credentials and generates a JWT token
-3. Token is included in subsequent requests
-4. Server validates token on each request
+3. Token is included in subsequent requests via Authorization header
+4. Server validates token on each request using the `auth` middleware
 
 **Token Format:**
 
@@ -21,41 +34,86 @@ The primary authentication method uses JSON Web Tokens (JWT) for secure, statele
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
+**Token Configuration:**
+
+```bash
+JWT_SECRET=your-super-secret-jwt-key-here
+JWT_EXPIRES_IN=24h  # Default token expiration
+```
+
+### OAuth Authentication
+
+LLM Crafter supports OAuth 2.0 authentication with multiple providers:
+
+- **Google OAuth**: Sign in with Google account
+- **GitHub OAuth**: Sign in with GitHub account
+
+**OAuth Configuration:**
+
+```bash
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/google/callback
+
+# GitHub OAuth
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+GITHUB_CALLBACK_URL=http://localhost:3000/api/v1/auth/github/callback
+
+# Frontend URL for OAuth redirects
+FRONTEND_URL=http://localhost:3000
+```
+
 ### API Key Authentication
 
-For programmatic access and integration with external systems.
+For programmatic access and agent execution from external systems.
 
 **Features:**
 
-- Long-lived tokens for automated systems
-- Scoped permissions for specific resources
-- Easy revocation and rotation
-- Usage tracking and monitoring
+- Project-scoped API keys for LLM providers
+- Used for agent execution with specific models
+- Encrypted storage using AES-256-GCM
+- Management via API endpoints
+
+See [API Keys documentation](/api/api-keys) for details.
 
 ## User Management
+
+### Get Password Policy
+
+Get the current password requirements before registration:
+
+```http
+GET /api/v1/auth/password-policy
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "minLength": 8,
+    "requireUppercase": true,
+    "requireLowercase": true,
+    "requireNumbers": true,
+    "requireSpecialChars": true,
+    "commonPasswordCheck": true
+  }
+}
+```
 
 ### User Registration
 
 ```http
-POST /api/auth/register
+POST /api/v1/auth/register
 Content-Type: application/json
 
 {
   "name": "John Doe",
   "email": "john@example.com",
-  "password": "securePassword123"
-}
-```
-
-### User Login
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "email": "john@example.com",
-  "password": "securePassword123"
+  "password": "MyS3cur3K3y!"
 }
 ```
 
@@ -67,258 +125,706 @@ Content-Type: application/json
   "user": {
     "id": "user_123",
     "name": "John Doe",
-    "email": "john@example.com"
+    "email": "john@example.com",
+    "emailVerified": false,
+    "isOAuthUser": false,
+    "avatar": null
+  },
+  "passwordStrength": "strong",
+  "warnings": []
+}
+```
+
+**Validation:**
+
+- Email must be valid format
+- Name: 2-100 characters
+- Password must meet policy requirements (see password policy endpoint)
+- Domain restrictions apply if `ALLOWED_EMAIL_DOMAINS` is set
+
+**Error Response:**
+
+```json
+{
+  "error": "Password does not meet security requirements",
+  "details": [
+    "Password must contain at least one uppercase letter",
+    "Password must contain at least one special character"
+  ],
+  "policy": {
+    "minLength": 8,
+    "requireUppercase": true,
+    "requireLowercase": true,
+    "requireNumbers": true,
+    "requireSpecialChars": true
   }
 }
 ```
 
-### Token Refresh
+### User Login
 
 ```http
-POST /api/auth/refresh
-Authorization: Bearer {current_token}
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "MyS3cur3K3y!"
+}
 ```
 
-## Authorization Levels
+**Response:**
 
-### Organization-Level Access
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "user_123",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "emailVerified": false,
+    "isOAuthUser": false,
+    "avatar": null
+  }
+}
+```
 
-Users can be members of multiple organizations with different roles:
+**Error Cases:**
 
-- **Owner**: Full control over organization and all projects
-- **Admin**: Manage projects and users within organization
-- **Member**: Access to assigned projects
-- **Viewer**: Read-only access to shared resources
+- `401 Unauthorized`: Invalid credentials
+- `400 Bad Request`: OAuth-only user attempting email/password login
+- `400 Bad Request`: Email/password authentication disabled
 
-### Project-Level Access
-
-Within each organization, users have specific project permissions:
-
-- **Project Owner**: Full control over the project
-- **Contributor**: Can create and modify agents and tools
-- **Viewer**: Read-only access to project resources
-
-### Resource-Level Access
-
-Fine-grained permissions for specific resources:
-
-- **Agent Access**: Create, read, update, delete agents
-- **Tool Access**: Manage tools and configurations
-- **Execution Access**: Run agents and view results
-- **API Access**: Use API endpoints and keys
-
-## Security Features
-
-### Password Security
-
-- **Minimum Requirements**: 8 characters, mixed case, numbers
-- **Hashing**: bcrypt with salt for secure password storage
-- **Password Reset**: Secure reset flow with time-limited tokens
-- **Account Lockout**: Protection against brute force attacks
-
-### Token Security
-
-- **Expiration**: Configurable token lifetime (default: 24 hours)
-- **Secure Generation**: Cryptographically secure random tokens
-- **Blacklisting**: Revoked tokens are maintained in blacklist
-- **Refresh Mechanism**: Seamless token renewal
-
-### Session Management
-
-- **Single Sign-On**: Optional SSO integration
-- **Session Timeout**: Automatic logout after inactivity
-- **Concurrent Sessions**: Control over multiple active sessions
-- **Device Tracking**: Monitor and manage device access
-
-## API Key Management
-
-### Creating API Keys
+### Get User Profile
 
 ```http
-POST /api/auth/api-keys
+GET /api/v1/auth/profile
+Authorization: Bearer {jwt_token}
+```
+
+**Response:**
+
+```json
+{
+  "id": "user_123",
+  "email": "john@example.com",
+  "name": "John Doe",
+  "emailVerified": true,
+  "isOAuthUser": false,
+  "avatar": "https://...",
+  "primaryOAuthProvider": null,
+  "connectedProviders": [],
+  "security": {
+    "shouldUpdatePassword": false,
+    "passwordStrength": "strong"
+  }
+}
+```
+
+### Update User Profile
+
+```http
+PUT /api/v1/auth/profile
 Authorization: Bearer {jwt_token}
 Content-Type: application/json
 
 {
-  "name": "Production Integration",
-  "permissions": ["agents:read", "agents:execute"],
-  "expires_at": "2024-12-31T23:59:59Z"
+  "name": "John Smith",
+  "password": "NewS3cur3P@ss!"  // Optional
 }
 ```
 
-### Using API Keys
+**Response:**
 
-```http
-GET /api/organizations/org_123/agents
-X-API-Key: ak_1234567890abcdef...
+```json
+{
+  "id": "user_123",
+  "email": "john@example.com",
+  "name": "John Smith",
+  "security": {
+    "shouldUpdatePassword": false,
+    "passwordStrength": "strong"
+  }
+}
 ```
 
-### Key Rotation
+## OAuth Integration
+
+### Get Available OAuth Providers
 
 ```http
-PUT /api/auth/api-keys/{key_id}/rotate
+GET /api/v1/auth/oauth/providers
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "providers": [
+      {
+        "name": "google",
+        "displayName": "Google",
+        "authUrl": "/api/v1/auth/google"
+      },
+      {
+        "name": "github",
+        "displayName": "GitHub",
+        "authUrl": "/api/v1/auth/github"
+      }
+    ],
+    "authMethods": {
+      "enabledMethods": ["emailpassword", "oauth"],
+      "emailPasswordEnabled": true,
+      "oauthEnabled": true
+    },
+    "domainRestricted": true,
+    "allowedDomains": ["example.com", "company.com"]
+  }
+}
+```
+
+### Google OAuth Flow
+
+**1. Initiate OAuth:**
+
+```http
+GET /api/v1/auth/google
+```
+
+Redirects to Google OAuth consent screen.
+
+**2. OAuth Callback:**
+
+```http
+GET /api/v1/auth/google/callback?code={auth_code}
+```
+
+On success, redirects to: `{FRONTEND_URL}/auth/success?token={jwt_token}`
+
+On failure, redirects to: `{FRONTEND_URL}/auth/error?message={error_message}`
+
+### GitHub OAuth Flow
+
+**1. Initiate OAuth:**
+
+```http
+GET /api/v1/auth/github
+```
+
+Redirects to GitHub OAuth authorization page.
+
+**2. OAuth Callback:**
+
+```http
+GET /api/v1/auth/github/callback?code={auth_code}
+```
+
+On success, redirects to: `{FRONTEND_URL}/auth/success?token={jwt_token}`
+
+On failure, redirects to: `{FRONTEND_URL}/auth/error?message={error_message}`
+
+### Unlink OAuth Provider
+
+Users can disconnect OAuth providers if they have alternative authentication methods:
+
+```http
+DELETE /api/v1/auth/oauth/{provider}
 Authorization: Bearer {jwt_token}
 ```
+
+**Example:**
+
+```http
+DELETE /api/v1/auth/oauth/google
+Authorization: Bearer {jwt_token}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "google account unlinked successfully"
+}
+```
+
+**Error Cases:**
+
+- `400 Bad Request`: Cannot unlink the only authentication method
+- `404 Not Found`: Provider not found or not connected
+
+## Authorization Levels
+
+### Organization Roles
+
+LLM Crafter uses role-based access control (RBAC) within organizations. Users have one of three roles:
+
+| Role       | Permissions                                                        | Access Level |
+| ---------- | ------------------------------------------------------------------ | ------------ |
+| **admin**  | Full control over organization, projects, and members              | Level 3      |
+| **member** | Create and manage agents, execute agents, manage project resources | Level 2      |
+| **viewer** | Read-only access to agents, conversations, and project data        | Level 1      |
+
+**Role Hierarchy:**
+
+The system uses a hierarchical role system where higher roles inherit permissions from lower roles:
+
+- `admin` (3) ≥ `member` (2) ≥ `viewer` (1)
+
+### Organization Authorization Middleware
+
+The `organizationAuth` middleware provides three authorization methods:
+
+#### 1. `isMember` - Check Organization Membership
+
+```javascript
+router.get('/resource', auth, orgAuth.isMember, handler);
+```
+
+Verifies user is a member of the organization (any role). Sets `req.userRole` to the user's role.
+
+#### 2. `isAdmin` - Require Admin Role
+
+```javascript
+router.delete('/resource', auth, orgAuth.isAdmin, handler);
+```
+
+Requires user to have admin role in the organization.
+
+#### 3. `hasRole(minimumRole)` - Role-Based Access
+
+```javascript
+// Requires at least viewer role
+router.get('/agents', auth, orgAuth.hasRole('viewer'), handler);
+
+// Requires at least member role
+router.post('/agents', auth, orgAuth.hasRole('member'), handler);
+
+// Requires admin role
+router.delete('/org', auth, orgAuth.hasRole('admin'), handler);
+```
+
+Checks if user's role meets or exceeds the minimum required role based on hierarchy.
+
+## Security Features
+
+### Domain Restrictions
+
+Restrict user registration to specific email domains:
+
+```bash
+# Only allow users from these domains
+ALLOWED_EMAIL_DOMAINS=company.com,partner.org
+```
+
+When configured:
+
+- Registration validates email domain
+- OAuth users must have email from allowed domains
+- Returns error: `DOMAIN_NOT_ALLOWED` if domain is not permitted
+
+### Password Security
+
+**Password Policy Requirements:**
+
+- Minimum 8 characters
+- At least one uppercase letter
+- At least one lowercase letter
+- At least one number
+- At least one special character
+- Cannot contain common words (password, admin, user, etc.)
+
+**Implementation:**
+
+- Hashing: bcrypt with automatic salting
+- Strength scoring: weak, medium, strong, very strong
+- Common password detection
+- Detailed validation feedback on registration
+
+### Token Security
+
+- **Algorithm**: HS256 (HMAC with SHA-256)
+- **Expiration**: Configurable via `JWT_EXPIRES_IN` (default: 24h)
+- **Secret**: Must be set via `JWT_SECRET` environment variable
+- **Validation**: Every request validates token signature and expiration
+- **User Lookup**: Token contains `userId`, user fetched from database on each request
+
+### Session Management
+
+- **Stateless**: JWT-based authentication, no server-side sessions
+- **OAuth Sessions**: Managed by Passport.js for OAuth flows
+- **Security Headers**: CORS, rate limiting applied per route
+
+## Rate Limiting
+
+LLM Crafter implements comprehensive rate limiting to protect against abuse:
+
+### Authentication Endpoints
+
+**Auth Limiter** (5 requests per 15 minutes):
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/google`
+- `POST /api/v1/auth/github`
+- `PUT /api/v1/auth/profile`
+
+**Login Limiter** (3 failed attempts per 15 minutes):
+
+- `POST /api/v1/auth/login`
+
+**General Limiter** (100 requests per 15 minutes):
+
+- `GET /api/v1/auth/profile`
+- `GET /api/v1/auth/password-policy`
+- `GET /api/v1/auth/oauth/providers`
+- `DELETE /api/v1/auth/oauth/:provider`
+
+**Slow Down Middleware**:
+
+- Progressive delays after 2 requests
+- Applied to login and registration
 
 ## Middleware Integration
 
 ### Authentication Middleware
 
-The `auth` middleware validates JWT tokens:
+The `auth` middleware validates JWT tokens on protected routes:
 
 ```javascript
 const auth = async (req, res, next) => {
   try {
-    const token = req.header("Authorization")?.replace("Bearer ", "");
+    const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
-      return res.status(401).json({ error: "Authentication required" });
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId);
 
     if (!user) {
-      return res.status(401).json({ error: "User not found" });
+      return res.status(401).json({ error: 'User not found' });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: "Invalid token" });
+    res.status(401).json({ error: 'Invalid token' });
   }
 };
 ```
 
-### Organization Authorization
-
-The `organizationAuth` middleware checks organization membership:
+**Usage:**
 
 ```javascript
-const orgAuth = async (req, res, next) => {
-  try {
-    const { organizationId } = req.params;
-    const user = req.user;
+router.get('/protected-route', auth, handler);
+```
 
-    const organization = await Organization.findById(organizationId);
+### Organization Authorization Middleware
+
+The `organizationAuth` middleware provides role-based access control:
+
+```javascript
+const organizationAuth = {
+  // Check if user is a member (any role)
+  isMember: async (req, res, next) => {
+    const organization = await Organization.findOne({
+      _id: req.params.orgId,
+      'members.user': req.user._id,
+    });
+
     if (!organization) {
-      return res.status(404).json({ error: "Organization not found" });
+      return res.status(403).json({
+        error: 'Access denied: Not a member of this organization',
+      });
     }
 
-    const membership = organization.members.find(
-      (member) => member.user.toString() === user._id.toString()
-    );
-
-    if (!membership) {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
-    req.organization = organization;
-    req.userRole = membership.role;
+    req.userRole = organization.members.find(m => m.user === req.user._id).role;
     next();
-  } catch (error) {
-    res.status(500).json({ error: "Authorization check failed" });
-  }
+  },
+
+  // Check if user is an admin
+  isAdmin: async (req, res, next) => {
+    const organization = await Organization.findOne({
+      _id: req.params.orgId,
+      'members.user': req.user._id,
+      'members.role': 'admin',
+    });
+
+    if (!organization) {
+      return res.status(403).json({
+        error: 'Access denied: Admin rights required',
+      });
+    }
+
+    req.userRole = 'admin';
+    next();
+  },
+
+  // Check if user has minimum role
+  hasRole: minimumRole => {
+    const roleHierarchy = {
+      admin: 3,
+      member: 2,
+      viewer: 1,
+    };
+
+    return async (req, res, next) => {
+      const organization = await Organization.findOne({
+        _id: req.params.orgId,
+        'members.user': req.user._id,
+      });
+
+      if (!organization) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const userRole = organization.members.find(
+        m => m.user === req.user._id
+      ).role;
+
+      if (roleHierarchy[userRole] >= roleHierarchy[minimumRole]) {
+        req.userRole = userRole;
+        next();
+      } else {
+        res.status(403).json({
+          error: `Access denied: ${minimumRole} role required`,
+        });
+      }
+    };
+  },
 };
+```
+
+**Usage:**
+
+```javascript
+// Any organization member
+router.get('/resource', auth, orgAuth.isMember, handler);
+
+// Admin only
+router.delete('/resource', auth, orgAuth.isAdmin, handler);
+
+// Role-based access
+router.get('/agents', auth, orgAuth.hasRole('viewer'), handler);
+router.post('/agents', auth, orgAuth.hasRole('member'), handler);
+router.delete('/org', auth, orgAuth.hasRole('admin'), handler);
 ```
 
 ## Environment Configuration
 
-### JWT Configuration
+### Required Environment Variables
 
 ```bash
-# .env
-JWT_SECRET=your-super-secret-jwt-key-here
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-here-min-32-chars
 JWT_EXPIRES_IN=24h
-JWT_REFRESH_EXPIRES_IN=7d
+
+# Session Secret (for OAuth)
+SESSION_SECRET=your-session-secret-here
+
+# Authentication Methods (comma-separated)
+AUTH_METHODS=emailpassword,oauth  # Default: both enabled
+
+# Domain Restrictions (optional)
+ALLOWED_EMAIL_DOMAINS=company.com,partner.org
+
+# Frontend URL (for OAuth redirects)
+FRONTEND_URL=http://localhost:3000
+
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/google/callback
+
+# GitHub OAuth (optional)
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+GITHUB_CALLBACK_URL=http://localhost:3000/api/v1/auth/github/callback
+
+# Encryption (for API key storage)
+ENCRYPTION_KEY=your-32-character-encryption-key
 ```
 
-### Security Headers
+### Authentication Method Configuration
+
+Control which authentication methods are enabled:
 
 ```bash
-# Additional security configuration
-CORS_ORIGIN=https://yourdomain.com
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
+# Both methods (default)
+AUTH_METHODS=emailpassword,oauth
+
+# Email/password only
+AUTH_METHODS=emailpassword
+
+# OAuth only
+AUTH_METHODS=oauth
 ```
+
+**Behavior:**
+
+- If `emailpassword` is disabled, registration and login endpoints return `AUTH_METHOD_DISABLED` error
+- If `oauth` is disabled, OAuth routes return `AUTH_METHOD_DISABLED` error
+- The `/api/v1/auth/oauth/providers` endpoint shows which methods are currently enabled
 
 ## Error Handling
 
-### Authentication Errors
+### Authentication Error Codes
 
-- **401 Unauthorized**: Missing or invalid token
-- **403 Forbidden**: Insufficient permissions
-- **404 Not Found**: User or resource not found
-- **429 Too Many Requests**: Rate limit exceeded
+| Status Code | Error                               | Description                              |
+| ----------- | ----------------------------------- | ---------------------------------------- |
+| `401`       | `Authentication required`           | No token provided                        |
+| `401`       | `Invalid token`                     | Token is malformed or expired            |
+| `401`       | `User not found`                    | Token valid but user doesn't exist       |
+| `403`       | `Access denied`                     | User lacks required permissions          |
+| `403`       | `Not a member of this organization` | User not in organization                 |
+| `403`       | `Admin rights required`             | User needs admin role                    |
+| `403`       | `{role} role required`              | User needs minimum role                  |
+| `400`       | `AUTH_METHOD_DISABLED`              | Authentication method is disabled        |
+| `400`       | `DOMAIN_NOT_ALLOWED`                | Email domain not in allowed list         |
+| `400`       | `OAUTH_ONLY_USER`                   | User must sign in via OAuth provider     |
+| `400`       | `LAST_AUTH_METHOD`                  | Cannot unlink only authentication method |
+| `429`       | `Too Many Requests`                 | Rate limit exceeded                      |
 
 ### Error Response Format
 
 ```json
 {
-  "error": "Authentication required",
-  "code": "AUTH_REQUIRED",
-  "details": {
-    "message": "No authentication token provided",
-    "expected_header": "Authorization: Bearer <token>"
-  }
+  "error": "Error message description",
+  "code": "ERROR_CODE",
+  "details": ["Additional", "context", "information"]
 }
 ```
 
-## Best Practices
+### OAuth Error Handling
 
-### For Developers
+OAuth errors redirect to frontend with error message:
 
-1. **Always Use HTTPS**: Encrypt all authentication traffic
-2. **Validate Tokens**: Check token validity on every request
-3. **Handle Expiration**: Implement automatic token refresh
-4. **Secure Storage**: Never store tokens in localStorage for sensitive apps
-
-### For Users
-
-1. **Strong Passwords**: Use unique, complex passwords
-2. **Regular Rotation**: Update API keys regularly
-3. **Principle of Least Privilege**: Grant minimal necessary permissions
-4. **Monitor Access**: Review access logs regularly
-
-### For Administrators
-
-1. **Regular Audits**: Review user access and permissions
-2. **Monitor Failed Attempts**: Track authentication failures
-3. **Update Dependencies**: Keep security libraries current
-4. **Backup Recovery**: Maintain secure account recovery processes
+```
+{FRONTEND_URL}/auth/error?message=authentication_failed
+{FRONTEND_URL}/auth/error?message=domain_not_allowed
+{FRONTEND_URL}/auth/error?message=token_generation_failed
+```
 
 ## Integration Examples
 
-### Client-Side JavaScript
+### Client-Side JavaScript (React Example)
 
 ```javascript
-// Store token securely
-const token = localStorage.getItem("auth_token");
+// Login with email/password
+const login = async (email, password) => {
+  const response = await fetch('/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
 
-// Make authenticated requests
-const response = await fetch("/api/agents", {
+  if (response.ok) {
+    const { token, user } = await response.json();
+    localStorage.setItem('authToken', token);
+    return { token, user };
+  }
+
+  throw new Error(await response.text());
+};
+
+// Make authenticated request
+const fetchAgents = async () => {
+  const token = localStorage.getItem('authToken');
+
+  const response = await fetch(
+    '/api/v1/organizations/org_123/projects/proj_456/agents',
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (response.status === 401) {
+    // Token expired, redirect to login
+    window.location.href = '/login';
+    return;
+  }
+
+  return response.json();
+};
+
+// OAuth login with popup
+const loginWithGoogle = () => {
+  const width = 600;
+  const height = 700;
+  const left = (window.innerWidth - width) / 2;
+  const top = (window.innerHeight - height) / 2;
+
+  const popup = window.open(
+    '/api/v1/auth/google',
+    'oauth-login',
+    `width=${width},height=${height},left=${left},top=${top}`
+  );
+
+  // Listen for OAuth callback
+  window.addEventListener('message', event => {
+    if (event.data.type === 'oauth-success') {
+      localStorage.setItem('authToken', event.data.token);
+      popup?.close();
+      window.location.href = '/dashboard';
+    }
+  });
+};
+```
+
+### Server-to-Server (Node.js Example)
+
+```javascript
+// Using JWT token
+const axios = require('axios');
+
+const client = axios.create({
+  baseURL: 'https://api.llmcrafter.com',
   headers: {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
+    Authorization: `Bearer ${process.env.LLM_CRAFTER_TOKEN}`,
+    'Content-Type': 'application/json',
   },
 });
 
-if (response.status === 401) {
-  // Handle token expiration
-  await refreshToken();
-}
+// Execute agent
+const response = await client.post(
+  '/api/v1/organizations/org_123/projects/proj_456/agents/agent_789/chat',
+  {
+    message: 'Hello, how can you help me?',
+    user_identifier: 'system_user',
+  }
+);
 ```
 
-### Server-to-Server
+### cURL Examples
 
-```javascript
-// Using API key for service integration
-const response = await fetch("/api/agents", {
-  headers: {
-    "X-API-Key": process.env.LLM_CRAFTER_API_KEY,
-    "Content-Type": "application/json",
-  },
-});
+```bash
+# Register new user
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "password": "MyS3cur3K3y!"
+  }'
+
+# Login
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "password": "MyS3cur3K3y!"
+  }'
+
+# Get profile
+curl -X GET http://localhost:3000/api/v1/auth/profile \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+# Get OAuth providers
+curl -X GET http://localhost:3000/api/v1/auth/oauth/providers
 ```
-
-The authentication system provides secure, scalable access control while maintaining ease of use for both developers and end users.

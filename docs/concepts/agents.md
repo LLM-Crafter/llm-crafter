@@ -4,9 +4,11 @@ Agents are the core AI entities in LLM Crafter. They encapsulate an LLM with spe
 
 ## Agent Types
 
-LLM Crafter supports two primary agent types, each optimized for different use cases:
+LLM Crafter supports multiple agent types, each optimized for different use cases:
 
 ### Chatbot Agents
+
+**Type:** `chatbot`
 
 Designed for interactive, multi-turn conversations with memory and context preservation.
 
@@ -16,6 +18,7 @@ Designed for interactive, multi-turn conversations with memory and context prese
 - **Interactive**: Designed for back-and-forth communication
 - **Memory**: Automatic conversation summarization for long chats
 - **Persistent**: Conversations are stored and can be resumed
+- **Context-Aware**: Can handle follow-up questions and references
 
 **Use Cases:**
 
@@ -23,8 +26,17 @@ Designed for interactive, multi-turn conversations with memory and context prese
 - Personal AI assistants
 - Interactive tutoring systems
 - Conversational interfaces
+- Q&A sessions
+
+**Optimizations:**
+
+- Longer conversation memory
+- Higher context retention
+- Personality-focused prompting
 
 ### Task Agents
+
+**Type:** `task`
 
 Optimized for single-purpose, stateless task execution.
 
@@ -34,13 +46,83 @@ Optimized for single-purpose, stateless task execution.
 - **Goal-oriented**: Designed to complete specific tasks
 - **Efficient**: No conversation overhead
 - **Scalable**: Can handle high volumes of parallel requests
+- **Structured Output**: Clear input/output patterns
 
 **Use Cases:**
 
 - Data processing and analysis
-- Content generation
+- Content generation (articles, summaries)
+- Code generation and review
+- Document classification
 - API orchestration
 - Automated workflows
+
+**Optimizations:**
+
+- Structured output formatting
+- Task completion validation
+- Performance-focused settings
+
+### Workflow Agents 🚧
+
+**Type:** `workflow` **(Coming Soon)**
+
+Workflow agents orchestrate complex multi-step processes by coordinating multiple tools and sub-tasks.
+
+**Planned Characteristics:**
+
+- Manages multi-step processes
+- Can invoke multiple tools in sequence
+- Handles conditional logic and branching
+- State management across workflow steps
+- Progress tracking and error recovery
+
+**Planned Use Cases:**
+
+- Multi-step business processes
+- Data pipelines with multiple stages
+- Complex decision trees
+- Integration between multiple systems
+
+### API Agents 🚧
+
+**Type:** `api` **(Coming Soon)**
+
+API agents will be specifically designed to interact with external APIs and services as a primary function.
+
+**Planned Characteristics:**
+
+- Optimized for API interactions
+- Built-in error handling for network operations
+- Support for various authentication methods
+- Request/response transformation capabilities
+- Rate limiting awareness
+
+**Planned Use Cases:**
+
+- Third-party service integration
+- Data fetching and synchronization
+- Webhook processing
+- External system automation
+
+## Choosing the Right Agent Type
+
+Consider these factors when selecting an agent type:
+
+| Factor                  | Chatbot                 | Task                    | Workflow 🚧           | API 🚧                 |
+| ----------------------- | ----------------------- | ----------------------- | --------------------- | ---------------------- |
+| **Interaction Pattern** | Multi-turn conversation | Single request/response | Multi-step process    | API-focused operations |
+| **State Management**    | Stateful                | Stateless               | Stateful across steps | Varies by use case     |
+| **Best For**            | Ongoing dialogue        | One-time tasks          | Complex workflows     | Service integration    |
+| **Complexity**          | Medium                  | Low                     | High                  | Medium                 |
+| **Memory**              | Conversation history    | None                    | Workflow state        | Optional               |
+
+**Quick Selection Guide:**
+
+- Choose **Chatbot** for: Customer support, personal assistants, interactive sessions
+- Choose **Task** for: Data processing, content generation, one-off operations
+- Choose **Workflow** 🚧 for: Multi-step processes, complex automation (when available)
+- Choose **API** 🚧 for: Primary focus on external service integration (when available)
 
 ## Agent Structure
 
@@ -303,68 +385,35 @@ POST /api/v1/organizations/{orgId}/projects/{projectId}/agents/{agentId}/convers
 
 ## Performance Optimization
 
-### Model Selection
-
-Choose models based on your use case:
-
-```json
-{
-  "use_cases": {
-    "customer_support": {
-      "model": "gpt-4o-mini",
-      "reasoning": "Cost-effective for simple queries"
-    },
-    "complex_analysis": {
-      "model": "gpt-4o",
-      "reasoning": "Better reasoning for complex tasks"
-    },
-    "coding_assistance": {
-      "model": "gpt-4o",
-      "reasoning": "Superior code understanding"
-    },
-    "creative_writing": {
-      "model": "gpt-4o",
-      "reasoning": "Better creative capabilities"
-    }
-  }
-}
-```
-
 ### Conversation Summarization
 
-LLM Crafter automatically summarizes long conversations to maintain performance:
+LLM Crafter automatically summarizes long conversations to maintain performance and context:
 
-- **Trigger**: Every 15 messages
-- **Benefits**: 60-70% token reduction
-- **Preservation**: Key topics, decisions, and user preferences
-- **Models**: Uses cost-effective models (e.g., gpt-4o-mini)
+**Trigger Conditions:**
 
-### Parameter Tuning
+- After 15 messages since the last summary
+- When conversation reaches 20+ messages with no summary
+- When `requires_summarization` flag is set
 
-Optimize LLM parameters for your use case:
+**How It Works:**
 
-```json
-{
-  "scenarios": {
-    "customer_support": {
-      "temperature": 0.3,
-      "reasoning": "Consistent, reliable responses"
-    },
-    "creative_content": {
-      "temperature": 0.9,
-      "reasoning": "More creative and varied output"
-    },
-    "code_generation": {
-      "temperature": 0.1,
-      "reasoning": "Precise, deterministic code"
-    },
-    "brainstorming": {
-      "temperature": 1.2,
-      "reasoning": "Highly creative and diverse ideas"
-    }
-  }
-}
-```
+- Analyzes conversation messages (user and assistant exchanges)
+- Extracts structured information: key topics, important decisions, unresolved issues, user preferences, and context data
+- Updates incrementally - new messages are added to existing summaries
+- Preserves recent messages (last 5) while summarizing older ones
+
+**Model Selection:**
+
+- Automatically selects efficient models for summarization (e.g., gpt-4o-mini, gpt-5-mini, o3-mini)
+- Uses lower temperature (0.3) for consistent summaries
+- Limits summary length to maintain efficiency
+
+**Benefits:**
+
+- Reduces token usage for long conversations
+- Maintains context without resending entire conversation history
+- Preserves important information for future interactions
+- Improves response times for conversations with many messages
 
 ## Monitoring and Analytics
 
