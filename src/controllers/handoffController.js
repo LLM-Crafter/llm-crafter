@@ -1,5 +1,6 @@
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
+const channelOrchestrator = require('../services/channelOrchestrator');
 
 /**
  * Get conversations awaiting handoff
@@ -82,6 +83,28 @@ const takeoverConversation = async (req, res) => {
         },
       });
       await conversation.save();
+
+      // Send message through the appropriate channel
+      if (conversation.channel && conversation.channel !== 'website') {
+        try {
+          await channelOrchestrator.sendChannelMessage(
+            conversation.agent,
+            conversation.channel,
+            conversation.user_identifier,
+            message,
+            conversation.channel_metadata
+          );
+          console.log(
+            `[Handoff] Takeover message sent via ${conversation.channel}`
+          );
+        } catch (error) {
+          console.error(
+            '[Handoff] Error sending message through channel:',
+            error
+          );
+          // Don't fail the handoff if channel send fails
+        }
+      }
     }
 
     res.json({
@@ -138,6 +161,31 @@ const sendHumanMessage = async (req, res) => {
     });
 
     await conversation.save();
+
+    // Send message through the appropriate channel
+    if (conversation.channel && conversation.channel !== 'website') {
+      try {
+        await channelOrchestrator.sendChannelMessage(
+          conversation.agent,
+          conversation.channel,
+          conversation.user_identifier,
+          message,
+          conversation.channel_metadata
+        );
+        console.log(
+          `[Handoff] Human message sent via ${conversation.channel} to ${conversation.user_identifier}`
+        );
+      } catch (error) {
+        console.error(
+          '[Handoff] Error sending message through channel:',
+          error
+        );
+        return res.status(500).json({
+          error: 'Message saved but failed to send through channel',
+          details: error.message,
+        });
+      }
+    }
 
     res.json({
       success: true,

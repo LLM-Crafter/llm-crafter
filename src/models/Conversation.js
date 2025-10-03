@@ -17,13 +17,14 @@ const messageSchema = new mongoose.Schema({
   },
   // Handler information for tracking who sent the message
   handler_info: {
-    agent_id: String,      // If message was from agent
-    human_operator: {      // If message was from human
+    agent_id: String, // If message was from agent
+    human_operator: {
+      // If message was from human
       user_id: String,
       name: String,
       email: String,
-      timestamp: Date
-    }
+      timestamp: Date,
+    },
   },
   // Agent thinking process (only for assistant messages)
   thinking_process: [
@@ -61,6 +62,21 @@ const messageSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  // Channel-specific information for each message
+  channel_info: {
+    channel: String, // 'whatsapp', 'telegram', 'email', 'website'
+    message_id: String, // Platform-specific message ID
+    reply_to: String, // For threading/replies
+    media: [
+      {
+        type: String, // 'image', 'video', 'document', 'audio'
+        url: String,
+        mime_type: String,
+        file_size: Number,
+        filename: String,
+      },
+    ],
+  },
 });
 
 const conversationSchema = new mongoose.Schema(
@@ -84,9 +100,65 @@ const conversationSchema = new mongoose.Schema(
       trim: true,
     },
     messages: [messageSchema],
+    // Channel where this conversation is taking place
+    channel: {
+      type: String,
+      enum: ['website', 'whatsapp', 'telegram', 'email'],
+      default: 'website',
+    },
+    // Channel-specific metadata
+    channel_metadata: {
+      // WhatsApp specific
+      whatsapp: {
+        phone_number: String,
+        profile_name: String,
+        wa_id: String, // WhatsApp user ID
+      },
+      // Telegram specific
+      telegram: {
+        chat_id: Number,
+        username: String,
+        first_name: String,
+        last_name: String,
+      },
+      // Email specific
+      email: {
+        from_email: String,
+        from_name: String,
+        subject: String,
+        thread_id: String, // For email threading
+        message_id: String,
+      },
+      // Website specific
+      website: {
+        session_id: String,
+        ip_address: String,
+        user_agent: String,
+      },
+    },
+    // Track if conversation spans multiple channels
+    channel_history: [
+      {
+        channel: String,
+        switched_at: {
+          type: Date,
+          default: Date.now,
+        },
+        reason: String,
+      },
+    ],
     status: {
       type: String,
-      enum: ['active', 'ended', 'timeout', 'error', 'agent_controlled', 'human_controlled', 'handoff_requested', 'archived'],
+      enum: [
+        'active',
+        'ended',
+        'timeout',
+        'error',
+        'agent_controlled',
+        'human_controlled',
+        'handoff_requested',
+        'archived',
+      ],
       default: 'agent_controlled',
     },
     current_handler: {
@@ -95,7 +167,7 @@ const conversationSchema = new mongoose.Schema(
       default: 'agent',
     },
     handoff_info: {
-      requested_by: String,  // 'agent' or human operator user ID
+      requested_by: String, // 'agent' or human operator user ID
       requested_at: Date,
       reason: String,
       assigned_human: String, // User ID of assigned human operator
@@ -104,8 +176,8 @@ const conversationSchema = new mongoose.Schema(
       urgency: {
         type: String,
         enum: ['low', 'medium', 'high'],
-        default: 'medium'
-      }
+        default: 'medium',
+      },
     },
     metadata: {
       total_tokens_used: {
@@ -170,6 +242,8 @@ const conversationSchema = new mongoose.Schema(
 conversationSchema.index({ agent: 1, user_identifier: 1 });
 conversationSchema.index({ agent: 1, status: 1 });
 conversationSchema.index({ 'metadata.last_activity': 1 });
+conversationSchema.index({ agent: 1, channel: 1, status: 1 }); // New index for channel queries
+conversationSchema.index({ channel: 1, 'metadata.last_activity': 1 }); // New index for channel analytics
 
 // Update last activity on message addition and check for summarization needs
 conversationSchema.pre('save', function (next) {
@@ -401,25 +475,34 @@ conversationSchema.methods.summarizeConversation = function () {
 };
 
 // Request handoff from agent to human
-conversationSchema.methods.requestHandoff = function(requestedBy, reason, urgency = 'medium', contextSummary = '') {
+conversationSchema.methods.requestHandoff = function (
+  requestedBy,
+  reason,
+  urgency = 'medium',
+  contextSummary = ''
+) {
   this.status = 'handoff_requested';
   this.handoff_info = {
     requested_by: requestedBy,
     requested_at: new Date(),
     reason: reason,
     urgency: urgency,
-    handoff_message: contextSummary
+    handoff_message: contextSummary,
   };
   return this.save();
 };
 
 // Assign human operator
-conversationSchema.methods.assignHuman = function(humanUserId, humanName, humanEmail) {
+conversationSchema.methods.assignHuman = function (
+  humanUserId,
+  humanName,
+  humanEmail
+) {
   this.status = 'human_controlled';
   this.current_handler = 'human';
   this.handoff_info.assigned_human = humanUserId;
   this.handoff_info.handed_off_at = new Date();
-  
+
   // Add system message about handoff
   this.messages.push({
     role: 'system',
@@ -430,26 +513,26 @@ conversationSchema.methods.assignHuman = function(humanUserId, humanName, humanE
         user_id: humanUserId,
         name: humanName,
         email: humanEmail,
-        timestamp: new Date()
-      }
-    }
+        timestamp: new Date(),
+      },
+    },
   });
-  
+
   return this.save();
 };
 
 // Hand back to agent
-conversationSchema.methods.handBackToAgent = function() {
+conversationSchema.methods.handBackToAgent = function () {
   this.status = 'agent_controlled';
   this.current_handler = 'agent';
-  
+
   // Add system message
   this.messages.push({
     role: 'system',
     content: 'You are now back with our AI assistant.',
-    timestamp: new Date()
+    timestamp: new Date(),
   });
-  
+
   return this.save();
 };
 

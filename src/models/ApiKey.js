@@ -118,4 +118,4 @@ apiKeySchema.statics.findByIdWithDecryptedKey = async function (id) {
   };
 };
 
-module.exports = mongoose.model('ApiKey', apiKeySchema);
+module.exports = mongoose.models.ApiKey || mongoose.model('ApiKey', apiKeySchema);
