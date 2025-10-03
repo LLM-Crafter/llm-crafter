@@ -5,6 +5,7 @@
 
 const BaseChannelService = require('./baseChannelService');
 const nodemailer = require('nodemailer');
+const encryption = require('../../utils/encryption');
 
 class EmailService extends BaseChannelService {
   constructor(channelConfig) {
@@ -18,11 +19,17 @@ class EmailService extends BaseChannelService {
   }
 
   /**
+   * Helper method to safely decrypt credentials
+   */
+  safeDecrypt(data) {
+    if (!data) return data;
+    return encryption.isEncrypted(data) ? encryption.decrypt(data) : data;
+  }
+
+  /**
    * Create email transporter based on provider
    */
   createTransporter() {
-    const encryption = require('../../utils/encryption');
-
     switch (this.emailConfig.provider) {
       case 'sendgrid':
         return nodemailer.createTransport({
@@ -31,7 +38,7 @@ class EmailService extends BaseChannelService {
           secure: false,
           auth: {
             user: 'apikey',
-            pass: encryption.decrypt(this.emailConfig.api_keys.sendgrid),
+            pass: this.safeDecrypt(this.emailConfig.api_keys.sendgrid),
           },
         });
 
@@ -41,20 +48,20 @@ class EmailService extends BaseChannelService {
           port: 587,
           secure: false,
           auth: {
-            user: encryption.decrypt(this.emailConfig.smtp_config.username),
-            pass: encryption.decrypt(this.emailConfig.api_keys.mailgun),
+            user: this.safeDecrypt(this.emailConfig.smtp_config.username),
+            pass: this.safeDecrypt(this.emailConfig.api_keys.mailgun),
           },
         });
 
       case 'ses':
         // AWS SES via SMTP
-        return nodemailer.createTransport({
+        return nodemailer.createTransporter({
           host: `email-smtp.${this.emailConfig.api_keys.ses_region}.amazonaws.com`,
           port: 587,
           secure: false,
           auth: {
-            user: encryption.decrypt(this.emailConfig.api_keys.ses_access_key),
-            pass: encryption.decrypt(this.emailConfig.api_keys.ses_secret_key),
+            user: this.safeDecrypt(this.emailConfig.api_keys.ses_access_key),
+            pass: this.safeDecrypt(this.emailConfig.api_keys.ses_secret_key),
           },
         });
 
@@ -67,7 +74,7 @@ class EmailService extends BaseChannelService {
           secure: this.emailConfig.smtp_config.secure || false,
           auth: {
             user: this.emailConfig.smtp_config.username,
-            pass: encryption.decrypt(this.emailConfig.smtp_config.password),
+            pass: this.safeDecrypt(this.emailConfig.smtp_config.password),
           },
         });
     }

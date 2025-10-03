@@ -195,33 +195,81 @@ const updateChannelConfig = async (req, res) => {
 
     // Update WhatsApp config
     if (updates.whatsapp) {
-      channelConfig.whatsapp = {
-        ...channelConfig.whatsapp,
-        ...updates.whatsapp,
-      };
+      // Initialize credentials object if it doesn't exist
+      if (!channelConfig.whatsapp) {
+        channelConfig.whatsapp = { credentials: {} };
+      }
+      if (!channelConfig.whatsapp.credentials) {
+        channelConfig.whatsapp.credentials = {};
+      }
 
-      // Encrypt sensitive credentials
-      if (updates.whatsapp.credentials) {
-        const creds = updates.whatsapp.credentials;
+      // Handle credentials that might be at top level or nested
+      const incomingCreds = updates.whatsapp.credentials || updates.whatsapp;
 
-        if (creds.auth_token && !creds.auth_token.startsWith('encrypted:')) {
+      // Encrypt and move credentials to the credentials object
+      if (incomingCreds.account_sid) {
+        channelConfig.whatsapp.credentials.account_sid =
+          incomingCreds.account_sid;
+      }
+
+      if (incomingCreds.auth_token) {
+        // Only encrypt if it's NOT already encrypted (check for U2FsdGVkX1 prefix from CryptoJS)
+        if (!incomingCreds.auth_token.startsWith('U2FsdGVkX1')) {
           channelConfig.whatsapp.credentials.auth_token = encryption.encrypt(
-            creds.auth_token
+            incomingCreds.auth_token
           );
+        } else {
+          channelConfig.whatsapp.credentials.auth_token =
+            incomingCreds.auth_token;
         }
-        if (
-          creds.access_token &&
-          !creds.access_token.startsWith('encrypted:')
-        ) {
+      }
+
+      if (incomingCreds.access_token) {
+        if (!incomingCreds.access_token.startsWith('U2FsdGVkX1')) {
           channelConfig.whatsapp.credentials.access_token = encryption.encrypt(
-            creds.access_token
+            incomingCreds.access_token
           );
+        } else {
+          channelConfig.whatsapp.credentials.access_token =
+            incomingCreds.access_token;
         }
-        if (creds.api_key && !creds.api_key.startsWith('encrypted:')) {
+      }
+
+      if (incomingCreds.api_key) {
+        if (!incomingCreds.api_key.startsWith('U2FsdGVkX1')) {
           channelConfig.whatsapp.credentials.api_key = encryption.encrypt(
-            creds.api_key
+            incomingCreds.api_key
           );
+        } else {
+          channelConfig.whatsapp.credentials.api_key = incomingCreds.api_key;
         }
+      }
+
+      if (incomingCreds.phone_number_id) {
+        channelConfig.whatsapp.credentials.phone_number_id =
+          incomingCreds.phone_number_id;
+      }
+
+      if (incomingCreds.business_account_id) {
+        channelConfig.whatsapp.credentials.business_account_id =
+          incomingCreds.business_account_id;
+      }
+
+      // Copy other non-credential fields
+      if (updates.whatsapp.enabled !== undefined) {
+        channelConfig.whatsapp.enabled = updates.whatsapp.enabled;
+      }
+      if (updates.whatsapp.provider) {
+        channelConfig.whatsapp.provider = updates.whatsapp.provider;
+      }
+      if (updates.whatsapp.phone_number) {
+        channelConfig.whatsapp.phone_number = updates.whatsapp.phone_number;
+      }
+      if (updates.whatsapp.verify_token) {
+        channelConfig.whatsapp.verify_token = updates.whatsapp.verify_token;
+      }
+      if (updates.whatsapp.webhook_url) {
+        channelConfig.whatsapp.webhook_url = updates.whatsapp.webhook_url;
       }
     }
 

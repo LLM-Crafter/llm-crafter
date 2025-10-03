@@ -81,19 +81,10 @@ class EncryptionUtil {
     }
 
     try {
-      // crypto-js encrypted strings are base64 and have a specific structure
-      // They start with "U2FsdGVkX1" when using the default format
-      if (data.startsWith('U2FsdGVkX1')) {
-        return true;
-      }
-
-      // Additional check: try to parse as base64 and see if it has reasonable length
-      if (data.length > 20 && data.match(/^[A-Za-z0-9+/]+=*$/)) {
-        // Looks like base64, could be encrypted
-        return true;
-      }
-
-      return false;
+      // crypto-js encrypted strings ALWAYS start with "U2FsdGVkX1" when using AES.encrypt
+      // This is the base64 encoding of "Salted__" prefix
+      // Only check for this specific prefix to avoid false positives
+      return data.startsWith('U2FsdGVkX1');
     } catch (error) {
       return false;
     }

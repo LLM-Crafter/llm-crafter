@@ -6,6 +6,7 @@
 const BaseChannelService = require('./baseChannelService');
 const axios = require('axios');
 const crypto = require('crypto');
+const encryption = require('../../utils/encryption');
 
 class TelegramService extends BaseChannelService {
   constructor(channelConfig) {
@@ -14,8 +15,9 @@ class TelegramService extends BaseChannelService {
 
     // Decrypt bot token if needed
     if (this.telegramConfig.bot_token) {
-      const encryption = require('../../utils/encryption');
-      this.botToken = encryption.decrypt(this.telegramConfig.bot_token);
+      this.botToken = encryption.isEncrypted(this.telegramConfig.bot_token)
+        ? encryption.decrypt(this.telegramConfig.bot_token)
+        : this.telegramConfig.bot_token;
       this.apiUrl = `https://api.telegram.org/bot${this.botToken}`;
     }
   }

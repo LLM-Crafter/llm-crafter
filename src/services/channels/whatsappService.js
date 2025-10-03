@@ -6,11 +6,21 @@
 const BaseChannelService = require('./baseChannelService');
 const axios = require('axios');
 const crypto = require('crypto');
+const encryption = require('../../utils/encryption');
 
 class WhatsAppService extends BaseChannelService {
   constructor(channelConfig) {
     super(channelConfig, 'whatsapp');
     this.whatsappConfig = this.config;
+  }
+
+  /**
+   * Helper method to safely decrypt credentials
+   * Only decrypts if the data is actually encrypted
+   */
+  safeDecrypt(data) {
+    if (!data) return data;
+    return encryption.isEncrypted(data) ? encryption.decrypt(data) : data;
   }
 
   /**
@@ -51,10 +61,13 @@ class WhatsAppService extends BaseChannelService {
     const url = `https://api.twilio.com/2010-04-01/Accounts/${this.whatsappConfig.credentials.account_sid}/Messages.json`;
 
     // Decrypt auth token if needed
-    const encryption = require('../../utils/encryption');
-    const authToken = encryption.decrypt(
-      this.whatsappConfig.credentials.auth_token
+    const authToken = this.safeDecrypt(
+      this.whatsappConfig.credentials?.auth_token
     );
+
+    if (!authToken) {
+      throw new Error('Twilio auth token is missing or could not be decrypted');
+    }
 
     const response = await axios.post(
       url,
@@ -90,8 +103,7 @@ class WhatsAppService extends BaseChannelService {
     const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
 
     // Decrypt access token if needed
-    const encryption = require('../../utils/encryption');
-    const accessToken = encryption.decrypt(
+    const accessToken = this.safeDecrypt(
       this.whatsappConfig.credentials.access_token
     );
 
@@ -133,8 +145,7 @@ class WhatsAppService extends BaseChannelService {
     const url = 'https://waba.360dialog.io/v1/messages';
 
     // Decrypt API key if needed
-    const encryption = require('../../utils/encryption');
-    const apiKey = encryption.decrypt(this.whatsappConfig.credentials.api_key);
+    const apiKey = this.safeDecrypt(this.whatsappConfig.credentials.api_key);
 
     const response = await axios.post(
       url,
@@ -188,8 +199,7 @@ class WhatsAppService extends BaseChannelService {
     const phoneNumberId = this.whatsappConfig.credentials.phone_number_id;
     const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
 
-    const encryption = require('../../utils/encryption');
-    const accessToken = encryption.decrypt(
+    const accessToken = this.safeDecrypt(
       this.whatsappConfig.credentials.access_token
     );
 
@@ -233,8 +243,7 @@ class WhatsAppService extends BaseChannelService {
   async sendMediaViaTwilio(to, media, options) {
     const url = `https://api.twilio.com/2010-04-01/Accounts/${this.whatsappConfig.credentials.account_sid}/Messages.json`;
 
-    const encryption = require('../../utils/encryption');
-    const authToken = encryption.decrypt(
+    const authToken = this.safeDecrypt(
       this.whatsappConfig.credentials.auth_token
     );
 
@@ -513,8 +522,7 @@ class WhatsAppService extends BaseChannelService {
     const signature = req.headers['x-twilio-signature'];
     if (!signature) return false;
 
-    const encryption = require('../../utils/encryption');
-    const authToken = encryption.decrypt(
+    const authToken = this.safeDecrypt(
       this.whatsappConfig.credentials.auth_token
     );
 
@@ -540,8 +548,7 @@ class WhatsAppService extends BaseChannelService {
     const signature = req.headers['x-hub-signature-256'];
     if (!signature) return false;
 
-    const encryption = require('../../utils/encryption');
-    const appSecret = encryption.decrypt(
+    const appSecret = this.safeDecrypt(
       this.whatsappConfig.credentials.access_token
     );
 

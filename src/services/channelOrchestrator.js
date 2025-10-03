@@ -31,7 +31,10 @@ class ChannelOrchestrator {
         return { enabled: this.getEnabledChannels(agentId) };
       }
 
-      const channelConfig = await ChannelConfig.findOne({ agent: agentId });
+      // Use lean() to get raw data without toJSON transformation that strips credentials
+      const channelConfig = await ChannelConfig.findOne({
+        agent: agentId,
+      }).lean();
 
       if (!channelConfig) {
         console.log(
