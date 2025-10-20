@@ -17,7 +17,7 @@
  * // Create agent session and chat
  * const session = await client.createAgentSession('agent_789');
  * const chatResult = await client.chatWithAgent(session.session_token, 'Hello!');
- * 
+ *
  * // chatResult contains:
  * // {
  * //   conversation_id: "uuid",
@@ -27,17 +27,17 @@
  * //   handoff_info: null, // handoff details if requested
  * //   session_info: { session_id: "id", remaining_interactions: 99 }
  * // }
- * 
+ *
  * console.log(chatResult.response); // Agent's text response
  * console.log(chatResult.suggestions); // Suggested follow-up questions
- * 
+ *
  * // Check for human handoff
  * if (chatResult.handoff_requested) {
  *   console.log('Human handoff requested:', chatResult.handoff_info.reason);
  *   // Start polling for human responses
  *   const pollForHuman = setInterval(async () => {
  *     const messages = await client.getLatestMessages(
- *       session.session_token, 
+ *       session.session_token,
  *       chatResult.conversation_id,
  *       new Date().toISOString()
  *     );
@@ -118,10 +118,10 @@ class LLMCrafterClient {
    */
   async _request(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     // Separate headers from other options to prevent overriding
     const { headers: optionHeaders = {}, ...otherOptions } = options;
-    
+
     const config = {
       method: 'GET',
       ...otherOptions, // Spread other options first
@@ -194,8 +194,11 @@ class LLMCrafterClient {
    */
   async _streamRequest(endpoint, options = {}, onChunk, onComplete, onError) {
     const url = `${this.baseUrl}${endpoint}`;
-    const { headers: optionHeaders = {}, body: optionBody, ...otherOptions } =
-      options;
+    const {
+      headers: optionHeaders = {},
+      body: optionBody,
+      ...otherOptions
+    } = options;
 
     const config = {
       method: 'GET',
@@ -243,7 +246,7 @@ class LLMCrafterClient {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                
+
                 if (data.type === 'response_chunk') {
                   onChunk(data.content);
                 } else if (data.type === 'complete') {
@@ -464,18 +467,24 @@ class LLMCrafterClient {
     onComplete = () => {},
     onError = () => {}
   ) {
-    return this._streamRequest('/external/agents/chat/stream', {
-      method: 'POST',
-      headers: {
-        'X-Session-Token': sessionToken,
+    return this._streamRequest(
+      '/external/agents/chat/stream',
+      {
+        method: 'POST',
+        headers: {
+          'X-Session-Token': sessionToken,
+        },
+        body: {
+          message,
+          conversationId,
+          userIdentifier,
+          dynamicContext,
+        },
       },
-      body: {
-        message,
-        conversationId,
-        userIdentifier,
-        dynamicContext,
-      },
-    }, onChunk, onComplete, onError);
+      onChunk,
+      onComplete,
+      onError
+    );
   }
 
   /**
@@ -496,16 +505,22 @@ class LLMCrafterClient {
     onComplete = () => {},
     onError = () => {}
   ) {
-    return this._streamRequest('/external/agents/execute/stream', {
-      method: 'POST',
-      headers: {
-        'X-Session-Token': sessionToken,
+    return this._streamRequest(
+      '/external/agents/execute/stream',
+      {
+        method: 'POST',
+        headers: {
+          'X-Session-Token': sessionToken,
+        },
+        body: {
+          input,
+          context,
+        },
       },
-      body: {
-        input,
-        context,
-      },
-    }, onChunk, onComplete, onError);
+      onChunk,
+      onComplete,
+      onError
+    );
   }
 
   /**
@@ -522,7 +537,7 @@ class LLMCrafterClient {
    * Response includes handoff detection:
    * ```javascript
    * {
-   *   conversation_id: "uuid", 
+   *   conversation_id: "uuid",
    *   response: "Agent's response text",
    *   handoff_requested: false, // true if agent requested human handoff
    *   handoff_info: { // Present if handoff_requested is true
@@ -563,7 +578,7 @@ class LLMCrafterClient {
   /**
    * Chat with an agent using streaming (API key-based)
    * @param {string} orgId - Organization ID
-   * @param {string} projectId - Project ID 
+   * @param {string} projectId - Project ID
    * @param {string} agentId - Agent ID
    * @param {string} message - Message to send to the agent
    * @param {string} conversationId - Optional conversation ID
@@ -711,7 +726,7 @@ class LLMCrafterClient {
    * // Poll for new messages every 2 seconds during handoff
    * const pollForMessages = async (sessionToken, conversationId, lastCheck) => {
    *   const result = await client.getLatestMessages(sessionToken, conversationId, lastCheck);
-   *   
+   *
    *   if (result.data.messages.length > 0) {
    *     result.data.messages.forEach(msg => {
    *       if (msg.role === 'human_operator') {
@@ -724,13 +739,19 @@ class LLMCrafterClient {
    * };
    * ```
    */
-  async getLatestMessages(sessionToken, conversationId, since = null, includeSystem = true) {
+  async getLatestMessages(
+    sessionToken,
+    conversationId,
+    since = null,
+    includeSystem = true
+  ) {
     const params = new URLSearchParams();
     if (since) params.append('since', since);
-    if (includeSystem !== undefined) params.append('include_system', includeSystem.toString());
-    
+    if (includeSystem !== undefined)
+      params.append('include_system', includeSystem.toString());
+
     const url = `/external/conversations/${conversationId}/messages/latest${params.toString() ? '?' + params.toString() : ''}`;
-    
+
     return this._request(url, {
       method: 'GET',
       headers: {
@@ -743,19 +764,26 @@ class LLMCrafterClient {
    * Get latest messages from a conversation (API key-based)
    * Alternative to session-based polling using direct API key authentication
    * @param {string} orgId - Organization ID
-   * @param {string} projectId - Project ID 
+   * @param {string} projectId - Project ID
    * @param {string} conversationId - Conversation ID to poll
    * @param {string} since - ISO timestamp to get messages since (optional)
    * @param {boolean} includeSystem - Whether to include system messages (default: true)
    * @returns {Promise<Object>} Latest messages and conversation info
    */
-  async getLatestMessagesDirect(orgId, projectId, conversationId, since = null, includeSystem = true) {
+  async getLatestMessagesDirect(
+    orgId,
+    projectId,
+    conversationId,
+    since = null,
+    includeSystem = true
+  ) {
     const params = new URLSearchParams();
     if (since) params.append('since', since);
-    if (includeSystem !== undefined) params.append('include_system', includeSystem.toString());
-    
+    if (includeSystem !== undefined)
+      params.append('include_system', includeSystem.toString());
+
     const url = `/external/organizations/${orgId}/projects/${projectId}/conversations/${conversationId}/messages/latest${params.toString() ? '?' + params.toString() : ''}`;
-    
+
     return this._request(url);
   }
 
@@ -805,12 +833,18 @@ class LLMCrafterClient {
    *   },
    *   { interval: 2000 }
    * );
-   * 
+   *
    * // Stop polling when needed
    * // stopPolling();
    * ```
    */
-  async pollForHumanMessages(sessionToken, conversationId, onHumanMessage, onHandback, options = {}) {
+  async pollForHumanMessages(
+    sessionToken,
+    conversationId,
+    onHumanMessage,
+    onHandback,
+    options = {}
+  ) {
     const { interval = 2000, maxRetries = 50 } = options;
     let retryCount = 0;
     let lastTimestamp = new Date().toISOString();
@@ -820,14 +854,22 @@ class LLMCrafterClient {
       if (!isActive || retryCount >= maxRetries) return;
 
       try {
-        const result = await this.getLatestMessages(sessionToken, conversationId, lastTimestamp);
-        
+        const result = await this.getLatestMessages(
+          sessionToken,
+          conversationId,
+          lastTimestamp
+        );
+
         if (result.data && result.data.messages) {
           result.data.messages.forEach(message => {
             if (message.role === 'human_operator' && onHumanMessage) {
               onHumanMessage(message);
             }
-            if (message.role === 'system' && message.content.includes('handed back to agent') && onHandback) {
+            if (
+              message.role === 'system' &&
+              message.content.includes('handed back to agent') &&
+              onHandback
+            ) {
               onHandback();
               isActive = false;
               return;
