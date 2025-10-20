@@ -170,6 +170,15 @@
         } catch (error) {
           lastError = error;
 
+          if (
+            typeof error.status === 'number' &&
+            error.status >= 400 &&
+            error.status < 500 &&
+            error.status !== 429
+          ) {
+            throw error;
+          }
+
           // Don't retry non-network errors on last attempt
           if (attempt === this.retryAttempts) {
             break;
@@ -191,18 +200,22 @@
      */
     async _streamRequest(endpoint, options = {}, onChunk, onComplete, onError) {
       const url = `${this.baseUrl}${endpoint}`;
+      const { headers: optionHeaders = {}, body: optionBody, ...otherOptions } =
+        options;
+
       const config = {
         method: 'GET',
+        ...otherOptions,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          ...options.headers,
+          'X-API-Key': this.apiKey,
+          Authorization: `Bearer ${this.apiKey}`,
+          ...optionHeaders,
         },
-        ...options,
       };
 
-      if (options.body) {
-        config.body = JSON.stringify(options.body);
+      if (typeof optionBody !== 'undefined') {
+        config.body = JSON.stringify(optionBody);
       }
 
       try {

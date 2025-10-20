@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { LLMCrafterClient } from '../src/index.js';
 
 describe('LLMCrafterClient', () => {
@@ -8,7 +9,7 @@ describe('LLMCrafterClient', () => {
       'test-api-key',
       'https://api.test.com/api/v1'
     );
-    fetch.mockClear();
+    fetch.mockReset();
   });
 
   describe('Constructor', () => {
@@ -110,11 +111,13 @@ describe('LLMCrafterClient', () => {
 
     test('should handle 4xx client errors without retry', async () => {
       const errorResponse = { error: 'Not found', code: 'NOT_FOUND' };
-      fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        json: jest.fn().mockResolvedValueOnce(errorResponse),
-      });
+      fetch.mockImplementation(() =>
+        Promise.resolve({
+          ok: false,
+          status: 404,
+          json: jest.fn().mockResolvedValueOnce(errorResponse),
+        })
+      );
 
       await expect(client._request('/test-endpoint')).rejects.toThrow(
         'Not found'
@@ -223,6 +226,48 @@ describe('LLMCrafterClient', () => {
     });
   });
 
+  describe('Streaming API Methods', () => {
+    test('chatWithAgentStream should send correct payload format', async () => {
+      const mockReader = {
+        read: () => Promise.resolve({ done: true, value: new Uint8Array() }),
+        releaseLock: () => {},
+      };
+
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => mockReader,
+        },
+      });
+
+      await client.chatWithAgentStream(
+        'session-token',
+        'Stream hello',
+        'conv-123',
+        'user-456',
+        { context: 'test' }
+      );
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.test.com/api/v1/external/agents/chat/stream',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'X-API-Key': 'test-api-key',
+            'X-Session-Token': 'session-token',
+          }),
+          body: JSON.stringify({
+            message: 'Stream hello',
+            conversationId: 'conv-123',
+            userIdentifier: 'user-456',
+            dynamicContext: { context: 'test' },
+          }),
+        })
+      );
+    });
+  });
+
   describe('testConnection method', () => {
     test('should return success when connection works', async () => {
       const usageData = { requests: 100, limit: 1000 };
@@ -239,11 +284,13 @@ describe('LLMCrafterClient', () => {
     });
 
     test('should return failure when connection fails', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: jest.fn().mockResolvedValueOnce({ error: 'Unauthorized' }),
-      });
+      fetch.mockImplementation(() =>
+        Promise.resolve({
+          ok: false,
+          status: 401,
+          json: jest.fn().mockResolvedValueOnce({ error: 'Unauthorized' }),
+        })
+      );
 
       const result = await client.testConnection();
 
