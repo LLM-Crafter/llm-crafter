@@ -1,0 +1,366 @@
+/* LLM Crafter Chat Widget Styles */
+
+.llm-crafter-widget-container * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.llm-crafter-widget-container {
+  --primary-color: #4a90e2;
+  --secondary-color: #357abd;
+  --background-color: #f5f7fa;
+  --text-color: #333333;
+  --border-color: #e1e8ed;
+  --white: #ffffff;
+  --error-color: #e74c3c;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999999;
+}
+
+/* Floating Button */
+.llm-crafter-widget-button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  color: var(--white);
+}
+
+.llm-crafter-widget-button:hover {
+  background: var(--secondary-color);
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.llm-crafter-widget-button svg {
+  width: 28px;
+  height: 28px;
+}
+
+.llm-crafter-widget-button.open svg.icon-chat {
+  display: block;
+}
+
+.llm-crafter-widget-button.open svg.icon-close {
+  display: none;
+}
+
+.llm-crafter-widget-button.close svg.icon-chat {
+  display: none;
+}
+
+.llm-crafter-widget-button.close svg.icon-close {
+  display: block;
+}
+
+/* Chat Container */
+.llm-crafter-chat-window {
+  display: none;
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  width: 400px;
+  height: 600px;
+  background: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+.llm-crafter-chat-window.open {
+  display: flex;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+  .llm-crafter-chat-window {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 140px);
+    right: 10px;
+    bottom: 90px;
+  }
+
+  .llm-crafter-widget-container {
+    right: 10px;
+    bottom: 10px;
+  }
+}
+
+/* Chat Header */
+.llm-crafter-chat-header {
+  background: var(--primary-color);
+  color: var(--white);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.llm-crafter-avatar {
+  width: 40px;
+  height: 40px;
+  background: var(--white);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: var(--primary-color);
+  font-size: 16px;
+}
+
+.llm-crafter-header-info {
+  flex: 1;
+}
+
+.llm-crafter-header-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.llm-crafter-header-info p {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.llm-crafter-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--white);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.llm-crafter-close-btn:hover {
+  opacity: 1;
+}
+
+/* Chat Messages */
+.llm-crafter-chat-messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background: var(--background-color);
+}
+
+.llm-crafter-message {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 8px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.llm-crafter-message.bot {
+  flex-direction: row;
+}
+
+.llm-crafter-message.user {
+  flex-direction: row-reverse;
+}
+
+.llm-crafter-message-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.llm-crafter-message.user .llm-crafter-message-avatar {
+  background: var(--secondary-color);
+}
+
+.llm-crafter-message-content {
+  max-width: 70%;
+}
+
+.llm-crafter-message-bubble {
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.llm-crafter-message.bot .llm-crafter-message-bubble {
+  background: var(--white);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-bottom-left-radius: 4px;
+}
+
+.llm-crafter-message.user .llm-crafter-message-bubble {
+  background: var(--primary-color);
+  color: var(--white);
+  border-bottom-right-radius: 4px;
+}
+
+.llm-crafter-error-message {
+  background: var(--error-color) !important;
+  color: var(--white) !important;
+  border: none !important;
+}
+
+/* Typing Indicator */
+.llm-crafter-typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--white);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  border-bottom-left-radius: 4px;
+  width: fit-content;
+}
+
+.llm-crafter-typing-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  animation: typing 1.4s infinite;
+}
+
+.llm-crafter-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.llm-crafter-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
+/* Chat Input */
+.llm-crafter-chat-input {
+  padding: 16px 20px;
+  background: var(--white);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 12px;
+}
+
+.llm-crafter-chat-input input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 24px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+  font-family: inherit;
+}
+
+.llm-crafter-chat-input input:focus {
+  border-color: var(--primary-color);
+}
+
+.llm-crafter-chat-input input:disabled {
+  background: var(--background-color);
+  cursor: not-allowed;
+}
+
+.llm-crafter-send-btn {
+  width: 44px;
+  height: 44px;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 50%;
+  color: var(--white);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.llm-crafter-send-btn:hover:not(:disabled) {
+  background: var(--secondary-color);
+  transform: scale(1.05);
+}
+
+.llm-crafter-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Powered by Badge */
+.llm-crafter-powered-by {
+  padding: 8px 20px;
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+  background: var(--white);
+  border-top: 1px solid var(--border-color);
+}
+
+.llm-crafter-powered-by a {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.llm-crafter-powered-by a:hover {
+  text-decoration: underline;
+}

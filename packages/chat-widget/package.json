@@ -1,0 +1,43 @@
+{
+  "name": "@llm-crafter/chat-widget",
+  "version": "0.1.0",
+  "description": "Embeddable chat widget for LLM Crafter AI agents - Add conversational AI to any website",
+  "type": "module",
+  "main": "dist/chat-widget.js",
+  "browser": "dist/chat-widget.umd.js",
+  "unpkg": "dist/chat-widget.umd.js",
+  "jsdelivr": "dist/chat-widget.umd.js",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "llm-crafter",
+    "chat-widget",
+    "ai",
+    "chatbot",
+    "widget",
+    "embed",
+    "customer-support",
+    "conversational-ai"
+  ],
+  "author": "LLM Crafter",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LLM-Crafter/llm-crafter.git",
+    "directory": "packages/chat-widget"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "rollup": "^4.9.0",
+    "rollup-plugin-postcss": "^4.0.2"
+  }
+}

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Widget Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 40px;
+        background: #f0f0f0;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 40px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 20px;
+      }
+      .btn {
+        background: #4a90e2;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+      }
+      .btn:hover {
+        background: #357abd;
+      }
+      .info {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 16px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 LLM Crafter Chat Widget Test</h1>
+
+      <div class="info">
+        <strong>Note:</strong> This is a test page for the chat widget. To use
+        with real API credentials, update the configuration in the script below.
+      </div>
+
+      <h2>Control the Widget</h2>
+      <button class="btn" onclick="chatWidget.open()">Open Chat</button>
+      <button class="btn" onclick="chatWidget.close()">Close Chat</button>
+      <button class="btn" onclick="chatWidget.toggle()">Toggle Chat</button>
+      <button class="btn" onclick="chatWidget.clearMessages()">
+        Clear Messages
+      </button>
+
+      <h2>Features</h2>
+      <ul>
+        <li>✅ Floating chat button</li>
+        <li>✅ Beautiful chat interface</li>
+        <li>✅ Message history</li>
+        <li>✅ Typing indicator</li>
+        <li>✅ Customizable colors and text</li>
+        <li>✅ Mobile responsive</li>
+        <li>✅ Session management</li>
+      </ul>
+
+      <h2>Configuration Options</h2>
+      <p>The widget supports extensive customization:</p>
+      <ul>
+        <li>
+          <strong>API Configuration:</strong> apiKey, agentId, organizationId,
+          projectId
+        </li>
+        <li>
+          <strong>Appearance:</strong> title, subtitle, colors, avatar text
+        </li>
+        <li><strong>Behavior:</strong> position, auto-open, welcome message</li>
+        <li>
+          <strong>Callbacks:</strong> onMessageSent, onMessageReceived, onError
+        </li>
+      </ul>
+
+      <h2>Documentation</h2>
+      <p>
+        See <strong>README.md</strong> for full documentation and
+        <strong>QUICKSTART.md</strong> for a quick start guide.
+      </p>
+    </div>
+
+    <!-- Load the chat widget -->
+    <script src="../dist/chat-widget.js"></script>
+
+    <script>
+      // Initialize the widget
+      // Replace with your actual credentials to enable functionality
+      const chatWidget = new LLMCrafterChatWidget({
+        // Required API credentials (replace with yours)
+        apiKey:
+          '3510765e4dc69a4547d5dbcc6f4695cebb00533ad80e625a410aaba092ac3e17',
+        agentId: '23fa7e06-2768-4a18-a246-9d090d011496',
+        organizationId: '238346a9-f3be-4302-b50a-d1dde3579a06',
+        projectId: 'ae31f14d-43df-4002-983e-d62cb760c3f3',
+        apiUrl: 'http://localhost:3000',
+
+        // Optional: Use local development server
+        // apiUrl: 'http://localhost:3000',
+
+        // Customization options
+        title: 'Test Assistant',
+        subtitle: 'Testing the chat widget',
+        welcomeMessage:
+          '👋 Welcome to the LLM Crafter chat widget test! Replace the demo credentials with your actual API key to enable chat functionality.',
+        placeholder: 'Type a message...',
+
+        // Custom colors
+        primaryColor: '#4a90e2',
+        secondaryColor: '#357abd',
+
+        // Position (bottom-right or bottom-left)
+        position: 'bottom-right',
+
+        // Auto-open on load
+        autoOpen: false,
+
+        // Show/hide powered by badge
+        showPoweredBy: true,
+
+        // Event callbacks
+        onMessageSent: message => {
+          console.log('✉️ Message sent:', message);
+        },
+
+        onMessageReceived: (response, data) => {
+          console.log('📨 Message received:', response);
+          console.log('Data:', data);
+        },
+
+        onError: error => {
+          console.error('❌ Error:', error);
+        },
+      });
+
+      // Make widget accessible globally for demo buttons
+      window.chatWidget = chatWidget;
+
+      console.log('Chat widget initialized! Use chatWidget.open() to open it.');
+    </script>
+  </body>
+</html>

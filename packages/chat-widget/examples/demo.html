@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Crafter Chat Widget - Demo</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        color: white;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 40px 20px;
+      }
+
+      h1 {
+        font-size: 48px;
+        margin-bottom: 16px;
+      }
+
+      p {
+        font-size: 20px;
+        opacity: 0.9;
+        line-height: 1.6;
+        margin-bottom: 32px;
+      }
+
+      .demo-controls {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        padding: 24px;
+        border-radius: 12px;
+        margin-bottom: 32px;
+      }
+
+      .demo-controls h2 {
+        margin-top: 0;
+        margin-bottom: 16px;
+      }
+
+      button {
+        background: white;
+        color: #667eea;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-right: 12px;
+        margin-bottom: 12px;
+        transition: all 0.2s ease;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .code-block {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 20px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin-bottom: 24px;
+      }
+
+      code {
+        color: #ffd700;
+        font-family: 'Monaco', 'Courier New', monospace;
+        font-size: 14px;
+      }
+
+      .note {
+        background: rgba(255, 215, 0, 0.2);
+        border-left: 4px solid #ffd700;
+        padding: 16px;
+        border-radius: 4px;
+        margin-bottom: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 LLM Crafter Chat Widget</h1>
+      <p>Add AI-powered chat to your website with just one line of code!</p>
+
+      <div class="note">
+        <strong>⚠️ Demo Mode:</strong> This example uses placeholder
+        credentials. Replace them with your actual API key and IDs to enable the
+        chat functionality.
+      </div>
+
+      <div class="demo-controls">
+        <h2>Try it out:</h2>
+        <button onclick="widget.open()">Open Chat</button>
+        <button onclick="widget.close()">Close Chat</button>
+        <button onclick="widget.toggle()">Toggle Chat</button>
+        <button onclick="widget.clearMessages()">Clear Messages</button>
+      </div>
+
+      <div class="code-block">
+        <code>
+          &lt;!-- Add this script tag to your website --&gt;<br />
+          &lt;script <br />
+          &nbsp;&nbsp;src="https://unpkg.com/@llm-crafter/chat-widget@latest/dist/chat-widget.min.js"<br />
+          &nbsp;&nbsp;data-api-key="<strong>your-api-key-here</strong>"<br />
+          &nbsp;&nbsp;data-agent-id="<strong>your-agent-id</strong>"<br />
+          &nbsp;&nbsp;data-organization-id="<strong>your-org-id</strong>"<br />
+          &nbsp;&nbsp;data-project-id="<strong>your-project-id</strong>"<br />
+          &nbsp;&nbsp;data-title="AI Assistant"<br />
+          &nbsp;&nbsp;data-primary-color="#4a90e2"<br />
+          &gt;&lt;/script&gt;
+        </code>
+      </div>
+
+      <h2>Features</h2>
+      <ul>
+        <li>🚀 Easy integration with script tag</li>
+        <li>🎨 Fully customizable colors and text</li>
+        <li>💬 Beautiful conversational UI</li>
+        <li>📱 Mobile responsive design</li>
+        <li>🔒 Secure API key authentication</li>
+        <li>⚡ Lightweight with no dependencies</li>
+      </ul>
+
+      <h2>Customization Options</h2>
+      <ul>
+        <li>
+          <strong>Colors:</strong> Primary, secondary, background, text colors
+        </li>
+        <li>
+          <strong>Text:</strong> Title, subtitle, placeholder, welcome message
+        </li>
+        <li><strong>Position:</strong> Bottom-right or bottom-left</li>
+        <li>
+          <strong>Behavior:</strong> Auto-open, powered-by badge, callbacks
+        </li>
+      </ul>
+
+      <p style="margin-top: 40px">
+        📚 Check out the
+        <a href="README.md" style="color: #ffd700; font-weight: bold">README</a>
+        for full documentation and examples.
+      </p>
+    </div>
+
+    <!-- Chat Widget -->
+    <script src="../dist/chat-widget.js"></script>
+    <script>
+      // Initialize the widget manually for demo purposes
+      // In production, use data attributes on the script tag
+      const widget = new LLMCrafterChatWidget({
+        apiKey: 'demo-api-key', // Replace with your actual API key
+        agentId: 'demo-agent-id', // Replace with your actual agent ID
+        organizationId: 'demo-org-id', // Replace with your actual org ID
+        projectId: 'demo-project-id', // Replace with your actual project ID
+
+        // Customization
+        title: 'Demo Assistant',
+        subtitle: 'Try me out!',
+        welcomeMessage:
+          '👋 Hello! This is a demo of the LLM Crafter chat widget. In production, replace the demo credentials with your actual API key and IDs.',
+        primaryColor: '#667eea',
+        secondaryColor: '#764ba2',
+
+        // Callbacks for demo
+        onMessageSent: message => {
+          console.log('Message sent:', message);
+        },
+        onMessageReceived: response => {
+          console.log('Response received:', response);
+        },
+        onError: error => {
+          console.error('Error:', error);
+        },
+      });
+
+      // Make widget accessible globally for demo buttons
+      window.widget = widget;
+    </script>
+  </body>
+</html>

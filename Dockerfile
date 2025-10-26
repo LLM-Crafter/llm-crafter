@@ -8,14 +8,27 @@ WORKDIR /app
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Copy package files
+# Copy package files for both root and widget
 COPY package*.json ./
+COPY packages/chat-widget/package*.json ./packages/chat-widget/
 
-# Install dependencies
+# Install dependencies for main app
 RUN npm ci --only=production && npm cache clean --force
+
+# Install dependencies and build widget
+WORKDIR /app/packages/chat-widget
+RUN npm ci && npm run build && npm cache clean --force
+
+# Go back to main app directory
+WORKDIR /app
 
 # Copy application source code
 COPY src/ ./src/
+
+# Copy widget source and built files
+COPY packages/chat-widget/src/ ./packages/chat-widget/src/
+COPY packages/chat-widget/dist/ ./packages/chat-widget/dist/
+COPY packages/chat-widget/rollup.config.js ./packages/chat-widget/
 
 # Create necessary directories and set permissions
 RUN mkdir -p /app/logs && \
