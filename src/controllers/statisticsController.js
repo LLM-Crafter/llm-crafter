@@ -6,7 +6,7 @@ const Project = require('../models/Project');
 
 /**
  * Get time range filter based on period
- * @param {string} period - '1d', '1w', '1m'
+ * @param {string} period - '1d', '1w', '1m', 'current-month', 'last-month'
  * @returns {Date} Start date for filtering
  */
 const getTimeFilter = period => {
@@ -22,6 +22,14 @@ const getTimeFilter = period => {
       break;
     case '1m':
       startDate = new Date(now - 30 * 24 * 60 * 60 * 1000); // 1 month ago
+      break;
+    case 'current-month':
+      // First day of current month at 00:00:00
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    case 'last-month':
+      // First day of last month at 00:00:00
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       break;
     default:
       startDate = new Date(now - 24 * 60 * 60 * 1000); // Default to 1 day
@@ -531,10 +539,13 @@ const getAgentStats = async (req, res) => {
     const { period = '1d' } = req.query;
 
     // Validate period
-    if (!['1d', '1w', '1m'].includes(period)) {
+    if (!['1d', '1w', '1m', 'current-month', 'last-month'].includes(period)) {
       return res
         .status(400)
-        .json({ error: "Invalid period. Use '1d', '1w', or '1m'" });
+        .json({
+          error:
+            "Invalid period. Use '1d', '1w', '1m', 'current-month', or 'last-month'",
+        });
     }
 
     const startDate = getTimeFilter(period);
