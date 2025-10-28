@@ -336,7 +336,9 @@ agentSchema.methods.getWebSearchConfig = function () {
 
 // Method to configure webpage scraper tool
 agentSchema.methods.configureWebpageScraper = function (config) {
-  const webpageScraperTool = this.tools.find(tool => tool.name === 'webpage_scraper');
+  const webpageScraperTool = this.tools.find(
+    tool => tool.name === 'webpage_scraper'
+  );
   if (!webpageScraperTool) {
     throw new Error('Webpage scraper tool not found in agent tools');
   }
@@ -352,7 +354,9 @@ agentSchema.methods.configureWebpageScraper = function (config) {
 
 // Method to get webpage scraper configuration
 agentSchema.methods.getWebpageScraperConfig = function () {
-  const webpageScraperTool = this.tools.find(tool => tool.name === 'webpage_scraper');
+  const webpageScraperTool = this.tools.find(
+    tool => tool.name === 'webpage_scraper'
+  );
   if (!webpageScraperTool) {
     return null;
   }
@@ -361,6 +365,44 @@ agentSchema.methods.getWebpageScraperConfig = function () {
     provider: webpageScraperTool.parameters?.provider || 'local',
     // Don't expose the actual API key, only whether it's configured
     has_api_key: !!webpageScraperTool.parameters?.encrypted_api_key,
+  };
+};
+
+// Method to configure Google Calendar tool
+agentSchema.methods.configureGoogleCalendar = function (config) {
+  const googleCalendarTool = this.tools.find(
+    tool => tool.name === 'google_calendar'
+  );
+  if (!googleCalendarTool) {
+    throw new Error('Google Calendar tool not found in agent tools');
+  }
+
+  // Merge new configuration with existing parameters
+  googleCalendarTool.parameters = {
+    ...googleCalendarTool.parameters,
+    ...config,
+  };
+
+  return this.save();
+};
+
+// Method to get Google Calendar configuration
+agentSchema.methods.getGoogleCalendarConfig = function () {
+  const googleCalendarTool = this.tools.find(
+    tool => tool.name === 'google_calendar'
+  );
+  if (!googleCalendarTool) {
+    return null;
+  }
+
+  return {
+    calendar_id: googleCalendarTool.parameters?.calendar_id || 'primary',
+    timezone: googleCalendarTool.parameters?.timezone || 'UTC',
+    // Don't expose the actual tokens, only whether they're configured
+    has_access_token: !!googleCalendarTool.parameters?.encrypted_access_token,
+    has_refresh_token: !!googleCalendarTool.parameters?.encrypted_refresh_token,
+    user_email: googleCalendarTool.parameters?.user_email || null,
+    configured_at: googleCalendarTool.parameters?.configured_at || null,
   };
 };
 

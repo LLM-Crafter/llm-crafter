@@ -248,6 +248,12 @@ class ToolService {
       'request_human_handoff',
       this.humanHandoffHandler.bind(this)
     );
+
+    // Google Calendar tool
+    this.registerToolHandler(
+      'google_calendar',
+      this.googleCalendarHandler.bind(this)
+    );
   }
 
   /**
@@ -771,13 +777,29 @@ class ToolService {
       formattedTime = now.toString();
     }
 
-    return {
+    // Extract useful date components for easy reference
+    const date = new Date(now);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
+    const result = {
+      success: true,
+      current_date: dateString, // Easy to parse: "2025-10-28"
+      current_time: formattedTime,
       timestamp: formattedTime,
       timezone,
       format,
       unix_timestamp: Math.floor(now.getTime() / 1000),
       iso_string: now.toISOString(),
+      year,
+      month: parseInt(month),
+      day: parseInt(day),
+      message: `Current time retrieved successfully: ${dateString}`,
     };
+
+    return result;
   }
 
   /**
@@ -2126,6 +2148,542 @@ class ToolService {
       console.error('Human handoff request failed:', error.message);
       throw new Error(`Failed to request human handoff: ${error.message}`);
     }
+  }
+
+  /**
+   * Google Calendar tool handler
+   */
+  async googleCalendarHandler(parameters, config) {
+    const startTime = Date.now();
+    const {
+      action,
+      calendar_id = config.calendar_id || 'primary',
+      access_token: paramAccessToken,
+      refresh_token: paramRefreshToken,
+      // Event parameters
+      summary,
+      description,
+      location,
+      start_time,
+      end_time,
+      timezone = config.timezone || 'UTC',
+      attendees,
+      // Query parameters
+      time_min,
+      time_max,
+      max_results = 10,
+      // Event ID
+      event_id,
+      // Free slots parameters
+      duration_minutes,
+    } = parameters;
+
+    if (!action) {
+      throw new Error('Action parameter is required for Google Calendar tool');
+    }
+
+    // Get access token from parameters or agent config
+    let access_token = paramAccessToken;
+    let refresh_token = paramRefreshToken;
+
+    // If tokens not in parameters, try to get from agent config (encrypted)
+    if (!access_token && config.encrypted_access_token) {
+      const encryptionUtil = require('../utils/encryption');
+      access_token = encryptionUtil.decrypt(config.encrypted_access_token);
+    }
+
+    if (!refresh_token && config.encrypted_refresh_token) {
+      const encryptionUtil = require('../utils/encryption');
+      refresh_token = encryptionUtil.decrypt(config.encrypted_refresh_token);
+    }
+
+    if (!access_token) {
+      throw new Error(
+        'Access token is required for Google Calendar authentication. ' +
+          'Please configure the Google Calendar tool with OAuth tokens or provide access_token in parameters.'
+      );
+    }
+
+    try {
+      const { google } = require('googleapis');
+
+      // Set up OAuth2 client with proper credentials for token refresh
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.CALENDAR_GOOGLE_CLIENT_ID,
+        process.env.CALENDAR_GOOGLE_CLIENT_SECRET,
+        process.env.CALENDAR_GOOGLE_REDIRECT_URI ||
+          'http://localhost:3000/auth/google/callback'
+      );
+
+      oauth2Client.setCredentials({
+        access_token,
+        refresh_token,
+      });
+
+      // Set up token refresh handler
+      oauth2Client.on('tokens', tokens => {
+        console.log('Google Calendar: OAuth tokens refreshed');
+        if (tokens.access_token) {
+          access_token = tokens.access_token;
+          // Note: If refresh_token is provided in the response, we should update it
+          // However, this requires updating the agent configuration which we'll skip for now
+          // to avoid permission issues during tool execution
+        }
+      });
+
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+      let result;
+
+      switch (action) {
+        case 'create_event':
+          result = await this.createCalendarEvent(calendar, calendar_id, {
+            summary,
+            description,
+            location,
+            start_time,
+            end_time,
+            timezone,
+            attendees,
+          });
+          break;
+
+        case 'list_events':
+          result = await this.listCalendarEvents(calendar, calendar_id, {
+            time_min,
+            time_max,
+            max_results,
+          });
+          break;
+
+        case 'get_event':
+          if (!event_id) {
+            throw new Error('Event ID is required for get_event action');
+          }
+          result = await this.getCalendarEvent(calendar, calendar_id, event_id);
+          break;
+
+        case 'update_event':
+          if (!event_id) {
+            throw new Error('Event ID is required for update_event action');
+          }
+          result = await this.updateCalendarEvent(
+            calendar,
+            calendar_id,
+            event_id,
+            {
+              summary,
+              description,
+              location,
+              start_time,
+              end_time,
+              timezone,
+              attendees,
+            }
+          );
+          break;
+
+        case 'delete_event':
+          if (!event_id) {
+            throw new Error('Event ID is required for delete_event action');
+          }
+          result = await this.deleteCalendarEvent(
+            calendar,
+            calendar_id,
+            event_id
+          );
+          break;
+
+        case 'find_free_slots':
+          if (!duration_minutes) {
+            throw new Error(
+              'Duration in minutes is required for find_free_slots action'
+            );
+          }
+          result = await this.findFreeSlots(calendar, calendar_id, {
+            time_min,
+            time_max,
+            duration_minutes,
+            timezone,
+          });
+          break;
+
+        default:
+          throw new Error(`Unsupported action: ${action}`);
+      }
+
+      const executionTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        action,
+        ...result,
+        calendar_id,
+        user_email: config.user_email || null,
+        execution_time_ms: executionTime,
+      };
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+
+      // Handle specific Google API errors
+      let errorMessage = error.message;
+      let errorCode = null;
+
+      if (error.response && error.response.data && error.response.data.error) {
+        errorCode = error.response.data.error.code;
+        errorMessage = error.response.data.error.message || errorMessage;
+
+        // Provide helpful context for common errors
+        if (
+          errorCode === 401 ||
+          errorMessage.includes('invalid_grant') ||
+          errorMessage.includes('invalid_request')
+        ) {
+          errorMessage = `Authentication failed: ${errorMessage}. The access token may have expired. Please re-authorize the Google Calendar connection by visiting your account settings and reconnecting your Google account.`;
+        } else if (errorCode === 403) {
+          errorMessage = `Permission denied: ${errorMessage}. Make sure the Google account has granted calendar access permissions.`;
+        } else if (errorCode === 404) {
+          errorMessage = `Not found: ${errorMessage}. The event or calendar may not exist.`;
+        }
+      }
+
+      console.error(
+        'Google Calendar error:',
+        errorMessage,
+        error.response?.data || ''
+      );
+
+      return {
+        success: false,
+        action,
+        error: errorMessage,
+        error_code: errorCode,
+        calendar_id,
+        execution_time_ms: executionTime,
+      };
+    }
+  }
+
+  /**
+   * Create a calendar event
+   */
+  async createCalendarEvent(calendar, calendarId, eventData) {
+    const {
+      summary,
+      description,
+      location,
+      start_time,
+      end_time,
+      timezone,
+      attendees,
+    } = eventData;
+
+    if (!summary) {
+      throw new Error('Event summary (title) is required');
+    }
+
+    if (!start_time || !end_time) {
+      throw new Error('Start time and end time are required');
+    }
+
+    const event = {
+      summary,
+      description,
+      location,
+      start: {
+        dateTime: start_time,
+        timeZone: timezone,
+      },
+      end: {
+        dateTime: end_time,
+        timeZone: timezone,
+      },
+    };
+
+    // Add attendees if provided
+    if (attendees && attendees.length > 0) {
+      event.attendees = attendees.map(email => ({ email }));
+      event.sendUpdates = 'all'; // Send email invitations
+    }
+
+    const response = await calendar.events.insert({
+      calendarId,
+      resource: event,
+      sendUpdates: attendees && attendees.length > 0 ? 'all' : 'none',
+    });
+
+    return {
+      event: this.formatCalendarEvent(response.data),
+      message: 'Event created successfully',
+    };
+  }
+
+  /**
+   * List calendar events
+   */
+  async listCalendarEvents(calendar, calendarId, queryParams) {
+    const { time_min, time_max, max_results } = queryParams;
+
+    const params = {
+      calendarId,
+      maxResults: max_results,
+      singleEvents: true,
+      orderBy: 'startTime',
+    };
+
+    if (time_min) {
+      params.timeMin = time_min;
+    } else {
+      // Default to current time
+      params.timeMin = new Date().toISOString();
+    }
+
+    if (time_max) {
+      params.timeMax = time_max;
+    }
+
+    const response = await calendar.events.list(params);
+    const events = response.data.items || [];
+
+    return {
+      events: events.map(event => this.formatCalendarEvent(event)),
+      total_events: events.length,
+      message: `Found ${events.length} event(s)`,
+    };
+  }
+
+  /**
+   * Get a specific calendar event
+   */
+  async getCalendarEvent(calendar, calendarId, eventId) {
+    // Validate event ID format
+    if (!eventId || eventId.includes(' ') || eventId.length < 10) {
+      throw new Error(
+        `Invalid event_id format: "${eventId}". ` +
+          'Event IDs should be long strings without spaces. ' +
+          'Please use list_events to get the correct event_id.'
+      );
+    }
+
+    const response = await calendar.events.get({
+      calendarId,
+      eventId,
+    });
+
+    return {
+      event: this.formatCalendarEvent(response.data),
+      message: 'Event retrieved successfully',
+    };
+  }
+
+  /**
+   * Update a calendar event
+   */
+  async updateCalendarEvent(calendar, calendarId, eventId, eventData) {
+    const {
+      summary,
+      description,
+      location,
+      start_time,
+      end_time,
+      timezone,
+      attendees,
+    } = eventData;
+
+    // Validate event ID format
+    if (!eventId || eventId.includes(' ') || eventId.length < 10) {
+      throw new Error(
+        `Invalid event_id format: "${eventId}". ` +
+          'Event IDs should be long strings without spaces. ' +
+          'Please use list_events to get the correct event_id.'
+      );
+    }
+
+    // First, get the existing event
+    const existingEvent = await calendar.events.get({
+      calendarId,
+      eventId,
+    });
+
+    // Prepare update with existing data as defaults
+    const event = { ...existingEvent.data };
+
+    if (summary !== undefined) event.summary = summary;
+    if (description !== undefined) event.description = description;
+    if (location !== undefined) event.location = location;
+
+    if (start_time !== undefined) {
+      event.start = {
+        dateTime: start_time,
+        timeZone: timezone,
+      };
+    }
+
+    if (end_time !== undefined) {
+      event.end = {
+        dateTime: end_time,
+        timeZone: timezone,
+      };
+    }
+
+    if (attendees !== undefined) {
+      event.attendees = attendees.map(email => ({ email }));
+    }
+
+    const response = await calendar.events.update({
+      calendarId,
+      eventId,
+      resource: event,
+      sendUpdates:
+        event.attendees && event.attendees.length > 0 ? 'all' : 'none',
+    });
+
+    return {
+      event: this.formatCalendarEvent(response.data),
+      message: 'Event updated successfully',
+    };
+  }
+
+  /**
+   * Delete a calendar event
+   */
+  async deleteCalendarEvent(calendar, calendarId, eventId) {
+    // Validate event ID format
+    if (!eventId || eventId.includes(' ') || eventId.length < 10) {
+      throw new Error(
+        `Invalid event_id format: "${eventId}". ` +
+          'Event IDs should be long strings without spaces. ' +
+          'Please use list_events to get the correct event_id.'
+      );
+    }
+
+    await calendar.events.delete({
+      calendarId,
+      eventId,
+      sendUpdates: 'all', // Notify attendees
+    });
+
+    return {
+      event_id: eventId,
+      message: 'Event deleted successfully',
+    };
+  }
+
+  /**
+   * Find free time slots in the calendar
+   */
+  async findFreeSlots(calendar, calendarId, slotParams) {
+    const { time_min, time_max, duration_minutes, timezone } = slotParams;
+
+    // Set default time range if not provided
+    const startTime = time_min ? new Date(time_min) : new Date();
+    const endTime = time_max
+      ? new Date(time_max)
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
+    // Get all events in the time range
+    const response = await calendar.events.list({
+      calendarId,
+      timeMin: startTime.toISOString(),
+      timeMax: endTime.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const events = response.data.items || [];
+    const freeSlots = [];
+
+    // Working hours: 9 AM to 5 PM (can be made configurable)
+    const workingHoursStart = 9; // 9 AM
+    const workingHoursEnd = 17; // 5 PM
+
+    // Iterate through each day in the range
+    let currentDay = new Date(startTime);
+    currentDay.setHours(workingHoursStart, 0, 0, 0);
+
+    while (currentDay < endTime) {
+      const dayEnd = new Date(currentDay);
+      dayEnd.setHours(workingHoursEnd, 0, 0, 0);
+
+      // Skip weekends (optional - can be configured)
+      if (currentDay.getDay() !== 0 && currentDay.getDay() !== 6) {
+        let slotStart = new Date(currentDay);
+
+        // Find free slots within this day
+        const dayEvents = events.filter(event => {
+          const eventStart = new Date(event.start.dateTime || event.start.date);
+          return eventStart.toDateString() === currentDay.toDateString();
+        });
+
+        for (const event of dayEvents) {
+          const eventStart = new Date(event.start.dateTime || event.start.date);
+          const eventEnd = new Date(event.end.dateTime || event.end.date);
+
+          // Check if there's a gap before this event
+          const gapMinutes = (eventStart - slotStart) / (1000 * 60);
+          if (gapMinutes >= duration_minutes) {
+            freeSlots.push({
+              start: slotStart.toISOString(),
+              end: new Date(
+                slotStart.getTime() + duration_minutes * 60 * 1000
+              ).toISOString(),
+              duration_minutes,
+            });
+          }
+
+          // Move slot start to after this event
+          slotStart = new Date(Math.max(slotStart, eventEnd));
+        }
+
+        // Check for free slot at the end of the day
+        const remainingMinutes = (dayEnd - slotStart) / (1000 * 60);
+        if (remainingMinutes >= duration_minutes && slotStart < dayEnd) {
+          freeSlots.push({
+            start: slotStart.toISOString(),
+            end: new Date(
+              slotStart.getTime() + duration_minutes * 60 * 1000
+            ).toISOString(),
+            duration_minutes,
+          });
+        }
+      }
+
+      // Move to next day
+      currentDay.setDate(currentDay.getDate() + 1);
+      currentDay.setHours(workingHoursStart, 0, 0, 0);
+    }
+
+    return {
+      free_slots: freeSlots.slice(0, 20), // Return max 20 slots
+      total_slots_found: freeSlots.length,
+      duration_minutes,
+      timezone,
+      message: `Found ${freeSlots.length} available time slot(s)`,
+    };
+  }
+
+  /**
+   * Format calendar event for consistent output
+   */
+  formatCalendarEvent(event) {
+    return {
+      id: event.id,
+      summary: event.summary,
+      description: event.description || '',
+      location: event.location || '',
+      start: event.start?.dateTime || event.start?.date,
+      end: event.end?.dateTime || event.end?.date,
+      timezone: event.start?.timeZone || '',
+      attendees:
+        event.attendees?.map(a => ({
+          email: a.email,
+          responseStatus: a.responseStatus,
+        })) || [],
+      htmlLink: event.htmlLink,
+      status: event.status,
+      created: event.created,
+      updated: event.updated,
+    };
   }
 
   // ===== HELPER METHODS =====

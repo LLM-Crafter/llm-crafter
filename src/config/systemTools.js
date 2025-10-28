@@ -4,7 +4,8 @@ const systemTools = [
   {
     name: 'web_search',
     display_name: 'Web Search',
-    description: 'Search the web for information using a search engine (Brave Search or Tavily)',
+    description:
+      'Search the web for information using a search engine (Brave Search or Tavily)',
     category: 'web',
     parameters_schema: {
       type: 'object',
@@ -63,7 +64,8 @@ const systemTools = [
   {
     name: 'webpage_scraper',
     display_name: 'Webpage Scraper',
-    description: 'Scrape content from web pages using local scraper or Tavily extract API',
+    description:
+      'Scrape content from web pages using local scraper or Tavily extract API',
     category: 'web',
     parameters_schema: {
       type: 'object',
@@ -206,7 +208,8 @@ const systemTools = [
   {
     name: 'current_time',
     display_name: 'Current Time',
-    description: 'Get the current date and time in various formats',
+    description:
+      'Get the current date and time. Returns current_date field in YYYY-MM-DD format for easy use in other tools. Call this ONCE at the start of calendar operations, then use the returned date for calculations.',
     category: 'utility',
     parameters_schema: {
       type: 'object',
@@ -227,12 +230,31 @@ const systemTools = [
     },
     return_schema: {
       type: 'object',
+      description:
+        'Current date and time information. Use current_date field (YYYY-MM-DD format) for date calculations.',
       properties: {
+        success: {
+          type: 'boolean',
+          description: 'Always true - operation completed successfully',
+        },
+        current_date: {
+          type: 'string',
+          description:
+            'Current date in YYYY-MM-DD format (e.g., "2025-10-28"). Use this for date calculations.',
+        },
+        current_time: {
+          type: 'string',
+          description: 'Formatted current time based on format parameter',
+        },
         timestamp: { type: 'string' },
         timezone: { type: 'string' },
         format: { type: 'string' },
         unix_timestamp: { type: 'number' },
         iso_string: { type: 'string' },
+        year: { type: 'number' },
+        month: { type: 'number' },
+        day: { type: 'number' },
+        message: { type: 'string' },
       },
     },
     implementation: {
@@ -438,7 +460,8 @@ const systemTools = [
   {
     name: 'rag_search',
     display_name: 'RAG Search',
-    description: 'Search through indexed knowledge base using semantic similarity and keyword matching',
+    description:
+      'Search through indexed knowledge base using semantic similarity and keyword matching',
     category: 'knowledge',
     parameters_schema: {
       type: 'object',
@@ -522,15 +545,15 @@ const systemTools = [
                   author: { type: 'string' },
                   themes: {
                     type: 'array',
-                    items: { type: 'string' }
+                    items: { type: 'string' },
                   },
                   pros: {
                     type: 'array',
-                    items: { type: 'string' }
+                    items: { type: 'string' },
                   },
                   cons: {
                     type: 'array',
-                    items: { type: 'string' }
+                    items: { type: 'string' },
                   },
                 },
               },
@@ -557,25 +580,28 @@ const systemTools = [
   {
     name: 'request_human_handoff',
     display_name: 'Request Human Handoff',
-    description: 'Request human operator to take over the conversation when the agent cannot adequately help the user. Use this when encountering complex issues, frustrated users, or requests requiring human judgment.',
+    description:
+      'Request human operator to take over the conversation when the agent cannot adequately help the user. Use this when encountering complex issues, frustrated users, or requests requiring human judgment.',
     category: 'communication',
     parameters_schema: {
       type: 'object',
       properties: {
         reason: {
           type: 'string',
-          description: 'Detailed explanation of why human intervention is needed'
+          description:
+            'Detailed explanation of why human intervention is needed',
         },
         urgency: {
           type: 'string',
           enum: ['low', 'medium', 'high'],
           description: 'Priority level for the handoff request',
-          default: 'medium'
+          default: 'medium',
         },
         context_summary: {
           type: 'string',
-          description: 'Brief summary of the conversation and current situation for the human operator'
-        }
+          description:
+            'Brief summary of the conversation and current situation for the human operator',
+        },
       },
       required: ['reason'],
       additionalProperties: false,
@@ -593,6 +619,213 @@ const systemTools = [
       type: 'internal',
       handler: 'humanHandoffHandler',
       config: {},
+    },
+    is_system_tool: true,
+  },
+  {
+    name: 'google_calendar',
+    display_name: 'Google Calendar',
+    description:
+      "Manage Google Calendar events. IMPORTANT: Use current_time tool first to get today's date before any calendar operations. All parameters must be at ROOT level (flat structure), NOT nested in objects. For updates/deletes, get event_id from list_events first - event IDs are long strings without spaces.",
+    category: 'communication',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          description:
+            'The calendar action to perform. For updates/deletes, you must first use list_events to get the event_id.',
+          enum: [
+            'create_event',
+            'list_events',
+            'get_event',
+            'update_event',
+            'delete_event',
+            'find_free_slots',
+          ],
+        },
+        calendar_id: {
+          type: 'string',
+          description:
+            'Calendar ID to use. Use "primary" for the user\'s main calendar.',
+          default: 'primary',
+        },
+        // Event creation/update parameters
+        summary: {
+          type: 'string',
+          description:
+            'Event title/summary (NOT "title"). Required for create_event. Example: "Team Meeting" or "Doctor Appointment"',
+        },
+        description: {
+          type: 'string',
+          description:
+            'Event description with additional details. Example: "Discuss Q4 planning and budget"',
+        },
+        location: {
+          type: 'string',
+          description:
+            'Event location. Can be physical address or virtual meeting link. Example: "Conference Room A" or "https://zoom.us/j/123"',
+        },
+        start_time: {
+          type: 'string',
+          description:
+            'Event start time in ISO 8601 format with timezone: "YYYY-MM-DDTHH:mm:ss±HH:mm". Required for create_event. Examples: "2025-10-28T14:00:00+01:00" (Lisbon), "2025-10-28T09:00:00-07:00" (Pacific). ALWAYS include the current year (2025).',
+        },
+        end_time: {
+          type: 'string',
+          description:
+            'Event end time in ISO 8601 format with timezone: "YYYY-MM-DDTHH:mm:ss±HH:mm". Required for create_event. Must be after start_time. Examples: "2025-10-28T15:00:00+01:00". Typical meetings are 30min-2hrs.',
+        },
+        timezone: {
+          type: 'string',
+          description:
+            'IANA timezone for the event. Examples: "Europe/Lisbon", "America/New_York", "America/Los_Angeles", "UTC". Default is UTC.',
+          default: 'UTC',
+        },
+        attendees: {
+          type: 'array',
+          description:
+            'Array of attendee email addresses as strings. Example: ["john@example.com", "jane@example.com"]. Attendees will receive email invitations.',
+          items: { type: 'string' },
+        },
+        // List/query parameters
+        time_min: {
+          type: 'string',
+          description:
+            'Start of time range for listing events (ISO 8601). Example: "2025-10-28T00:00:00Z" for start of day. If omitted, defaults to current time.',
+        },
+        time_max: {
+          type: 'string',
+          description:
+            'End of time range for listing events (ISO 8601). Example: "2025-10-28T23:59:59Z" for end of day. Use with time_min to query specific date ranges.',
+        },
+        max_results: {
+          type: 'number',
+          description:
+            'Maximum number of events to return from list_events. Default is 10. Range: 1-250.',
+          default: 10,
+          minimum: 1,
+          maximum: 250,
+        },
+        // Event ID for get/update/delete
+        event_id: {
+          type: 'string',
+          description:
+            'Event ID from Google Calendar. CRITICAL: Must be the complete ID from list_events response, typically long strings like "abc123def456ghi789@google.com". NO SPACES allowed. If update/delete fails, re-query with list_events to get correct ID. Do NOT manually type or truncate event IDs.',
+        },
+        // Find free slots parameters
+        duration_minutes: {
+          type: 'number',
+          description:
+            'Duration in minutes for finding available time slots. Minimum 15 minutes. Example: 30 for 30-minute slots, 60 for 1-hour slots.',
+          minimum: 15,
+        },
+        // Authentication
+        access_token: {
+          type: 'string',
+          description:
+            'Google OAuth2 access token. Usually provided automatically from agent configuration. Only include if explicitly required.',
+        },
+        refresh_token: {
+          type: 'string',
+          description:
+            'Google OAuth2 refresh token for renewing access. Usually provided automatically from agent configuration.',
+        },
+      },
+      required: ['action'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      description:
+        'Response from calendar operations. Check "success" field first. If false, check "error" field for details.',
+      properties: {
+        success: {
+          type: 'boolean',
+          description:
+            'Whether the operation succeeded. Always check this first.',
+        },
+        action: {
+          type: 'string',
+          description: 'The action that was performed',
+        },
+        event: {
+          type: 'object',
+          description:
+            'Single event details (for create_event, get_event, update_event). The "id" field is the event_id needed for updates/deletes.',
+          properties: {
+            id: {
+              type: 'string',
+              description:
+                'Event ID - use this exact value for update_event or delete_event operations. Never modify or truncate this ID.',
+            },
+            summary: {
+              type: 'string',
+              description: 'Event title',
+            },
+            description: {
+              type: 'string',
+              description: 'Event description',
+            },
+            location: {
+              type: 'string',
+              description: 'Event location',
+            },
+            start: {
+              type: 'string',
+              description: 'Event start time in ISO 8601 format',
+            },
+            end: {
+              type: 'string',
+              description: 'Event end time in ISO 8601 format',
+            },
+            attendees: {
+              type: 'array',
+              description:
+                'List of attendees with their email and response status',
+            },
+            htmlLink: {
+              type: 'string',
+              description: 'Link to view/edit the event in Google Calendar',
+            },
+          },
+        },
+        events: {
+          type: 'array',
+          description:
+            'Array of events (for list_events). Each event has an "id" field that must be used for updates/deletes. If empty array, no events found in the specified time range.',
+        },
+        free_slots: {
+          type: 'array',
+          description:
+            'Available time slots (for find_free_slots). Each slot has start, end, and duration_minutes.',
+        },
+        calendar_id: {
+          type: 'string',
+          description: 'Calendar ID that was used',
+        },
+        execution_time_ms: {
+          type: 'number',
+          description: 'How long the operation took in milliseconds',
+        },
+        error: {
+          type: 'string',
+          description:
+            'Error message if success is false. Common errors: "Not Found" (invalid event_id), "Event summary (title) is required", "Invalid event_id format" (has spaces or truncated).',
+        },
+        message: {
+          type: 'string',
+          description: 'Human-readable message about the operation result',
+        },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'googleCalendarHandler',
+      config: {
+        calendar_id: 'primary',
+        timezone: 'UTC',
+      },
     },
     is_system_tool: true,
   },

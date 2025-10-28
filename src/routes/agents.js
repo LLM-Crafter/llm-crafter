@@ -423,4 +423,52 @@ router.get(
   agentController.getWebpageScraperConfig
 );
 
+// ===== GOOGLE CALENDAR CONFIGURATION ROUTES =====
+
+const googleCalendarConfigValidation = [
+  body('access_token')
+    .notEmpty()
+    .isString()
+    .withMessage('Access token is required and must be a string'),
+  body('refresh_token')
+    .optional()
+    .isString()
+    .withMessage('Refresh token must be a string'),
+  body('calendar_id')
+    .optional()
+    .isString()
+    .withMessage('Calendar ID must be a string'),
+  body('timezone')
+    .optional()
+    .isString()
+    .withMessage('Timezone must be a string'),
+  body('user_email')
+    .optional()
+    .isEmail()
+    .withMessage('User email must be a valid email address'),
+];
+
+router.post(
+  '/:agentId/google-calendar-config',
+  auth,
+  orgAuth.hasRole('member'),
+  googleCalendarConfigValidation,
+  validate,
+  agentController.configureGoogleCalendar
+);
+
+router.get(
+  '/:agentId/google-calendar-config',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getGoogleCalendarConfig
+);
+
+router.delete(
+  '/:agentId/google-calendar-config',
+  auth,
+  orgAuth.hasRole('member'),
+  agentController.deleteGoogleCalendarConfig
+);
+
 module.exports = router;

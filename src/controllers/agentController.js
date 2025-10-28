@@ -264,9 +264,7 @@ const updateAgent = async (req, res) => {
           name: tool.name,
           description: tool.description,
           // Preserve existing parameters if tool was already configured, otherwise use empty object
-          parameters: existingTool
-            ? existingTool.parameters
-            : {},
+          parameters: existingTool ? existingTool.parameters : {},
           enabled: existingTool ? existingTool.enabled : true,
         };
       });
@@ -1760,7 +1758,138 @@ const getWebpageScraperConfig = async (req, res) => {
     });
   } catch (error) {
     console.error('Get webpage scraper config error:', error);
-    res.status(500).json({ error: 'Failed to get webpage scraper configuration' });
+    res
+      .status(500)
+      .json({ error: 'Failed to get webpage scraper configuration' });
+  }
+};
+
+// ===== GOOGLE CALENDAR CONFIGURATION =====
+
+const configureGoogleCalendar = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if agent has google_calendar tool
+    const hasGoogleCalendarTool = agent.tools.some(
+      tool => tool.name === 'google_calendar'
+    );
+    if (!hasGoogleCalendarTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have google_calendar tool configured' });
+    }
+
+    const { access_token, refresh_token, calendar_id, timezone, user_email } =
+      req.body;
+
+    // Validate required fields
+    if (!access_token) {
+      return res.status(400).json({
+        error: 'Access token is required for Google Calendar configuration',
+      });
+    }
+
+    // Prepare config object
+    const config = {};
+    if (calendar_id) config.calendar_id = calendar_id;
+    if (timezone) config.timezone = timezone;
+    if (user_email) config.user_email = user_email;
+    config.configured_at = new Date().toISOString();
+
+    // Encrypt and store tokens
+    const encryptionUtil = require('../utils/encryption');
+    config.encrypted_access_token = encryptionUtil.encrypt(access_token);
+
+    if (refresh_token) {
+      config.encrypted_refresh_token = encryptionUtil.encrypt(refresh_token);
+    }
+
+    await agent.configureGoogleCalendar(config);
+
+    res.json({
+      message: 'Google Calendar configuration updated successfully',
+      calendar_id: calendar_id || 'primary',
+      timezone: timezone || 'UTC',
+      has_access_token: true,
+      has_refresh_token: !!refresh_token,
+      user_email: user_email || null,
+      configured_at: config.configured_at,
+    });
+  } catch (error) {
+    console.error('Configure Google Calendar error:', error);
+    res.status(500).json({ error: 'Failed to configure Google Calendar' });
+  }
+};
+
+const getGoogleCalendarConfig = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const googleCalendarConfig = agent.getGoogleCalendarConfig();
+    if (!googleCalendarConfig) {
+      return res
+        .status(404)
+        .json({ error: 'Agent does not have google_calendar tool configured' });
+    }
+
+    res.json({
+      success: true,
+      data: googleCalendarConfig,
+    });
+  } catch (error) {
+    console.error('Get Google Calendar config error:', error);
+    res
+      .status(500)
+      .json({ error: 'Failed to get Google Calendar configuration' });
+  }
+};
+
+const deleteGoogleCalendarConfig = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Remove Google Calendar configuration
+    const googleCalendarTool = agent.tools.find(
+      tool => tool.name === 'google_calendar'
+    );
+    if (googleCalendarTool) {
+      googleCalendarTool.parameters = {};
+      await agent.save();
+    }
+
+    res.json({
+      message: 'Google Calendar configuration removed successfully',
+    });
+  } catch (error) {
+    console.error('Delete Google Calendar config error:', error);
+    res
+      .status(500)
+      .json({ error: 'Failed to delete Google Calendar configuration' });
   }
 };
 
@@ -1798,4 +1927,7 @@ module.exports = {
   getWebSearchConfig,
   configureWebpageScraper,
   getWebpageScraperConfig,
+  configureGoogleCalendar,
+  getGoogleCalendarConfig,
+  deleteGoogleCalendarConfig,
 };
