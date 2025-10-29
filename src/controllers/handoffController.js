@@ -3,14 +3,35 @@ const User = require('../models/User');
 const channelOrchestrator = require('../services/channelOrchestrator');
 
 /**
- * Get conversations awaiting handoff
+ * Get conversations awaiting handoff (filtered by user's organizations)
  */
 const getPendingHandoffs = async (req, res) => {
   try {
     const { page = 1, limit = 20, urgency } = req.query;
     const skip = (page - 1) * limit;
 
-    const filter = { status: 'handoff_requested' };
+    // Get user's organizations
+    const Organization = require('../models/Organization');
+    const Agent = require('../models/Agent');
+
+    const userOrganizations = await Organization.find({
+      'members.user': req.user._id,
+    }).select('_id');
+
+    const orgIds = userOrganizations.map(org => org._id);
+
+    // Find all agents belonging to user's organizations
+    const agents = await Agent.find({ organization: { $in: orgIds } }).select(
+      '_id'
+    );
+    const agentIds = agents.map(agent => agent._id);
+
+    // Build filter for conversations
+    const filter = {
+      status: 'handoff_requested',
+      agent: { $in: agentIds },
+    };
+
     if (urgency) {
       filter['handoff_info.urgency'] = urgency;
     }
@@ -35,6 +56,57 @@ const getPendingHandoffs = async (req, res) => {
   } catch (error) {
     console.error('Error fetching pending handoffs:', error);
     res.status(500).json({ error: 'Failed to fetch pending handoffs' });
+  }
+};
+
+/**
+ * Get pending handoffs for a specific organization
+ */
+const getOrganizationPendingHandoffs = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    const { page = 1, limit = 20, urgency } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Get Agent model to query agents by organization
+    const Agent = require('../models/Agent');
+
+    // Find all agents belonging to this organization
+    const agents = await Agent.find({ organization: orgId }).select('_id');
+    const agentIds = agents.map(agent => agent._id);
+
+    // Build filter for conversations
+    const filter = {
+      status: 'handoff_requested',
+      agent: { $in: agentIds },
+    };
+
+    if (urgency) {
+      filter['handoff_info.urgency'] = urgency;
+    }
+
+    const conversations = await Conversation.find(filter)
+      .populate('agent', 'name type')
+      .sort({ 'handoff_info.requested_at': -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Conversation.countDocuments(filter);
+
+    res.json({
+      conversations,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching organization pending handoffs:', error);
+    res
+      .status(500)
+      .json({ error: 'Failed to fetch organization pending handoffs' });
   }
 };
 
@@ -270,6 +342,58 @@ const getMyConversations = async (req, res) => {
 };
 
 /**
+ * Get all conversations for an organization
+ */
+const getOrganizationConversations = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    const { page = 1, limit = 20, status, channel } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Get Agent model to query agents by organization
+    const Agent = require('../models/Agent');
+
+    // Find all agents belonging to this organization
+    const agents = await Agent.find({ organization: orgId }).select('_id');
+    const agentIds = agents.map(agent => agent._id);
+
+    // Build filter for conversations
+    const filter = { agent: { $in: agentIds } };
+
+    // Add optional filters
+    if (status) {
+      filter.status = status;
+    }
+    if (channel) {
+      filter.channel = channel;
+    }
+
+    const conversations = await Conversation.find(filter)
+      .populate('agent', 'name type')
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Conversation.countDocuments(filter);
+
+    res.json({
+      conversations,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching organization conversations:', error);
+    res
+      .status(500)
+      .json({ error: 'Failed to fetch organization conversations' });
+  }
+};
+
+/**
  * Stream conversation updates for human operators
  */
 const streamConversation = async (req, res) => {
@@ -445,10 +569,12 @@ const getLatestMessages = async (req, res) => {
 
 module.exports = {
   getPendingHandoffs,
+  getOrganizationPendingHandoffs,
   takeoverConversation,
   sendHumanMessage,
   handBackToAgent,
   getMyConversations,
+  getOrganizationConversations,
   streamConversation,
   getConversationDetails,
   getLatestMessages,
