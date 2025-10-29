@@ -4,131 +4,147 @@ const crypto = require('crypto');
 /**
  * Middleware to authenticate requests using session tokens
  * This is used for agent execution after a session token has been generated
+ * @param {Object} options - Configuration options
+ * @param {boolean} options.skipInteractionCount - If true, don't count this request against interaction limits
  */
-const sessionAuth = async (req, res, next) => {
-  try {
-    // Extract session token from headers
-    const sessionToken =
-      req.header('X-Session-Token') ||
-      (req.header('Authorization')?.startsWith('Session ')
-        ? req.header('Authorization').replace('Session ', '')
-        : null);
+const sessionAuth = (options = {}) => {
+  const { skipInteractionCount = false } = options;
 
-    if (!sessionToken) {
-      return res.status(401).json({
-        error: 'Session token required',
-        code: 'SESSION_TOKEN_REQUIRED',
-      });
-    }
+  return async (req, res, next) => {
+    try {
+      // Extract session token from headers
+      const sessionToken =
+        req.header('X-Session-Token') ||
+        (req.header('Authorization')?.startsWith('Session ')
+          ? req.header('Authorization').replace('Session ', '')
+          : null);
 
-    // Hash the provided token to compare with stored hash
-    const tokenHash = SessionToken.hashSessionToken(sessionToken);
-
-    // Find and validate the session
-    const session = await SessionToken.findOne({
-      token_hash: tokenHash,
-      is_revoked: false,
-      expires_at: { $gt: new Date() },
-    }).populate([
-      {
-        path: 'user_api_key',
-        populate: {
-          path: 'user organization',
-        },
-      },
-      'agent',
-    ]);
-
-    if (!session) {
-      return res.status(401).json({
-        error: 'Invalid or expired session token',
-        code: 'INVALID_SESSION_TOKEN',
-      });
-    }
-
-    // Additional validation
-    if (!session.isValid()) {
-      return res.status(401).json({
-        error: 'Session token is no longer valid',
-        code: 'SESSION_INVALID',
-      });
-    }
-
-    // Check interaction limits
-    if (!session.canInteract()) {
-      return res.status(429).json({
-        error: 'Session interaction limit exceeded',
-        code: 'INTERACTION_LIMIT_EXCEEDED',
-        max_interactions: session.max_interactions,
-        interactions_used: session.interactions_used,
-      });
-    }
-
-    // Validate that the session's API key is still active
-    if (!session.user_api_key.is_active) {
-      return res.status(401).json({
-        error: 'Associated API key is no longer active',
-        code: 'API_KEY_INACTIVE',
-      });
-    }
-
-    // Check if API key is expired
-    if (session.user_api_key.isExpired()) {
-      return res.status(401).json({
-        error: 'Associated API key has expired',
-        code: 'API_KEY_EXPIRED',
-      });
-    }
-
-    // Optional: Validate IP consistency (if enabled)
-    if (process.env.ENFORCE_SESSION_IP_CONSISTENCY === 'true') {
-      const currentIP = req.ip || req.connection.remoteAddress;
-      if (session.client_ip && session.client_ip !== currentIP) {
-        return res.status(403).json({
-          error: 'IP address mismatch',
-          code: 'IP_MISMATCH',
+      if (!sessionToken) {
+        return res.status(401).json({
+          error: 'Session token required',
+          code: 'SESSION_TOKEN_REQUIRED',
         });
       }
-    }
 
-    // Use an interaction (this will save the session)
-    const remainingInteractions = await session.useInteraction();
+      // Hash the provided token to compare with stored hash
+      const tokenHash = SessionToken.hashSessionToken(sessionToken);
 
-    // Attach session data to request
-    req.sessionToken = session;
-    req.user = session.user_api_key.user;
-    req.organization = session.user_api_key.organization;
-    req.apiKey = session.user_api_key;
-    req.agent = session.agent;
-    req.remainingInteractions = remainingInteractions;
+      // Find and validate the session
+      const session = await SessionToken.findOne({
+        token_hash: tokenHash,
+        is_revoked: false,
+        expires_at: { $gt: new Date() },
+      }).populate([
+        {
+          path: 'user_api_key',
+          populate: {
+            path: 'user organization',
+          },
+        },
+        'agent',
+      ]);
 
-    next();
-  } catch (error) {
-    console.error('Session authentication error:', error);
+      if (!session) {
+        return res.status(401).json({
+          error: 'Invalid or expired session token',
+          code: 'INVALID_SESSION_TOKEN',
+        });
+      }
 
-    if (error.message === 'Session interaction limit exceeded') {
-      return res.status(429).json({
-        error: error.message,
-        code: 'INTERACTION_LIMIT_EXCEEDED',
+      // Additional validation
+      if (!session.isValid()) {
+        return res.status(401).json({
+          error: 'Session token is no longer valid',
+          code: 'SESSION_INVALID',
+        });
+      }
+
+      // Check interaction limits (unless skipped)
+      if (!skipInteractionCount && !session.canInteract()) {
+        return res.status(429).json({
+          error: 'Session interaction limit exceeded',
+          code: 'INTERACTION_LIMIT_EXCEEDED',
+          max_interactions: session.max_interactions,
+          interactions_used: session.interactions_used,
+        });
+      }
+
+      // Validate that the session's API key is still active
+      if (!session.user_api_key.is_active) {
+        return res.status(401).json({
+          error: 'Associated API key is no longer active',
+          code: 'API_KEY_INACTIVE',
+        });
+      }
+
+      // Check if API key is expired
+      if (session.user_api_key.isExpired()) {
+        return res.status(401).json({
+          error: 'Associated API key has expired',
+          code: 'API_KEY_EXPIRED',
+        });
+      }
+
+      // Optional: Validate IP consistency (if enabled)
+      if (process.env.ENFORCE_SESSION_IP_CONSISTENCY === 'true') {
+        const currentIP = req.ip || req.connection.remoteAddress;
+        if (session.client_ip && session.client_ip !== currentIP) {
+          return res.status(403).json({
+            error: 'IP address mismatch',
+            code: 'IP_MISMATCH',
+          });
+        }
+      }
+
+      // Use an interaction (this will save the session) - only if not skipped
+      let remainingInteractions =
+        session.max_interactions - session.interactions_used;
+      if (!skipInteractionCount) {
+        remainingInteractions = await session.useInteraction();
+      }
+
+      // Attach session data to request
+      req.sessionToken = session;
+      req.user = session.user_api_key.user;
+      req.organization = session.user_api_key.organization;
+      req.apiKey = session.user_api_key;
+      req.agent = session.agent;
+      req.remainingInteractions = remainingInteractions;
+
+      next();
+    } catch (error) {
+      console.error('Session authentication error:', error);
+
+      if (error.message === 'Session interaction limit exceeded') {
+        return res.status(429).json({
+          error: error.message,
+          code: 'INTERACTION_LIMIT_EXCEEDED',
+        });
+      }
+
+      res.status(401).json({
+        error: 'Session authentication failed',
+        code: 'SESSION_AUTH_FAILED',
       });
     }
-
-    res.status(401).json({
-      error: 'Session authentication failed',
-      code: 'SESSION_AUTH_FAILED',
-    });
-  }
+  };
 };
 
 /**
  * Middleware to authenticate requests using either session tokens or API keys
  * Useful for endpoints that can work with both authentication methods
+ * @param {Object} options - Configuration options
+ * @param {boolean} options.allowSessionToken - Allow session token authentication
+ * @param {boolean} options.allowApiKey - Allow API key authentication
+ * @param {Array} options.requiredScopes - Required scopes for API key authentication
+ * @param {boolean} options.skipInteractionCount - If true, don't count this request against interaction limits
  */
 const flexibleSessionAuth = (options = {}) => {
   const {
     allowSessionToken = true,
     allowApiKey = true,
     requiredScopes = [],
+    skipInteractionCount = false,
   } = options;
 
   return async (req, res, next) => {
@@ -138,12 +154,12 @@ const flexibleSessionAuth = (options = {}) => {
 
     // Try session token first if provided
     if (allowSessionToken && sessionTokenHeader) {
-      return sessionAuth(req, res, next);
+      return sessionAuth({ skipInteractionCount })(req, res, next);
     }
 
     // Try session token in Authorization header
     if (allowSessionToken && authHeader?.startsWith('Session ')) {
-      return sessionAuth(req, res, next);
+      return sessionAuth({ skipInteractionCount })(req, res, next);
     }
 
     // Try API key if provided and no session token

@@ -36,6 +36,7 @@ class LLMCrafterChatWidget {
       autoOpen: config.autoOpen || false,
       showPoweredBy: config.showPoweredBy !== false,
       poweredByUrl: config.poweredByUrl || '#',
+      poweredByText: config.poweredByText || 'LLM Crafter',
       userIdentifier: config.userIdentifier || null,
       enableStreaming: config.enableStreaming !== false,
       pollingInterval: config.pollingInterval || 3000, // Poll for new messages every 3 seconds
@@ -45,6 +46,7 @@ class LLMCrafterChatWidget {
       onMessageReceived: config.onMessageReceived || null,
       onError: config.onError || null,
       onHumanTakeover: config.onHumanTakeover || null,
+      messageTransformer: config.messageTransformer || null, // Function to transform messages before display
     };
 
     this.conversationId = null;
@@ -55,6 +57,7 @@ class LLMCrafterChatWidget {
     this.pollingIntervalId = null;
     this.lastPollTimestamp = null;
     this.isHumanControlled = false;
+    this.displayedMessageIds = new Set(); // Track message IDs to prevent duplicates
 
     this.init();
   }
@@ -121,7 +124,7 @@ class LLMCrafterChatWidget {
           </svg>
         </button>
       </div>
-      ${this.config.showPoweredBy ? `<div class="llm-crafter-powered-by">Powered by <a href="${this.config.poweredByUrl}" target="_blank">LLM Crafter</a></div>` : ''}
+      ${this.config.showPoweredBy ? `<div class="llm-crafter-powered-by">Powered by <a href="${this.config.poweredByUrl}" target="_blank">${this.config.poweredByText}</a></div>` : ''}
     `;
 
     container.appendChild(button);
@@ -300,6 +303,14 @@ class LLMCrafterChatWidget {
     if (botMessage && !this.isHumanControlled) {
       this.addMessage(botMessage, false, this.config.botName);
 
+      // Track the message to prevent duplicate from polling
+      // Use message_id if available, otherwise create a tracking key from content
+      if (data.message_id) {
+        this.displayedMessageIds.add(data.message_id);
+      }
+      // Also track by content hash as fallback
+      this.displayedMessageIds.add(this.createMessageKey(botMessage));
+
       // Call onMessageReceived callback
       if (this.config.onMessageReceived) {
         this.config.onMessageReceived(botMessage, data);
@@ -411,6 +422,7 @@ class LLMCrafterChatWidget {
 
     let fullResponse = '';
     let conversationId = null;
+    let messageId = null;
 
     // Process streaming response
     const reader = response.body.getReader();
@@ -434,10 +446,13 @@ class LLMCrafterChatWidget {
 
                 if (parsed.type === 'response_chunk') {
                   fullResponse += parsed.content;
-                  bubbleElement.textContent = fullResponse;
+                  // Apply transformation to the accumulated response
+                  const transformedText = this.transformMessage(fullResponse);
+                  bubbleElement.innerHTML = transformedText;
                   this.scrollToBottom();
                 } else if (parsed.type === 'complete') {
                   conversationId = parsed.conversation_id;
+                  messageId = parsed.message_id;
                 }
               } catch (e) {
                 // Skip invalid JSON
@@ -459,6 +474,13 @@ class LLMCrafterChatWidget {
       timestamp: new Date(),
     });
 
+    // Track the message to prevent duplicate from polling
+    if (messageId) {
+      this.displayedMessageIds.add(messageId);
+    }
+    // Also track by content hash as fallback (for streaming responses without message_id)
+    this.displayedMessageIds.add(this.createMessageKey(fullResponse));
+
     // Update conversation ID
     if (conversationId) {
       this.conversationId = conversationId;
@@ -475,6 +497,39 @@ class LLMCrafterChatWidget {
         conversation_id: conversationId,
       });
     }
+  }
+
+  createMessageKey(content) {
+    // Create a simple hash of the message content for tracking
+    // Normalize the content by trimming and removing extra whitespace
+    const normalized = content.trim().replace(/\s+/g, ' ');
+    // Use a simple string hash
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i++) {
+      const char = normalized.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return `content_${hash}`;
+  }
+
+  transformMessage(text) {
+    // Apply custom transformer if provided
+    if (
+      this.config.messageTransformer &&
+      typeof this.config.messageTransformer === 'function'
+    ) {
+      try {
+        return this.config.messageTransformer(text);
+      } catch (error) {
+        console.warn('Message transformer error:', error);
+        // Fallback to escaped HTML if transformer fails
+        return this.escapeHtml(text);
+      }
+    }
+
+    // Default: escape HTML
+    return this.escapeHtml(text);
   }
 
   addMessage(text, isUser = false, senderName = null, isHumanOperator = false) {
@@ -494,11 +549,14 @@ class LLMCrafterChatWidget {
     // Determine the sender name to display
     const displayName = senderName || (isUser ? null : this.config.botName);
 
+    // Transform the message if a transformer function is provided
+    const transformedText = this.transformMessage(text);
+
     messageDiv.innerHTML = `
       <div class="llm-crafter-message-avatar">${this.escapeHtml(avatarText)}</div>
       <div class="llm-crafter-message-content">
         ${displayName ? `<div class="llm-crafter-message-sender">${this.escapeHtml(displayName)}</div>` : ''}
-        <div class="llm-crafter-message-bubble">${this.escapeHtml(text)}</div>
+        <div class="llm-crafter-message-bubble">${transformedText}</div>
       </div>
     `;
 
@@ -678,6 +736,16 @@ class LLMCrafterChatWidget {
       // Add any new messages from human operators
       if (data.new_messages && data.new_messages.length > 0) {
         for (const msg of data.new_messages) {
+          // Skip if we've already displayed this message (prevent duplicates)
+          // Check both by _id and by content hash
+          const contentKey = this.createMessageKey(msg.content);
+          if (
+            (msg._id && this.displayedMessageIds.has(msg._id)) ||
+            this.displayedMessageIds.has(contentKey)
+          ) {
+            continue;
+          }
+
           // Only show messages from assistant (bot) or human operators
           // Skip user messages as they're already displayed when sent
           if (
@@ -693,6 +761,12 @@ class LLMCrafterChatWidget {
               : this.config.botName;
 
             this.addMessage(msg.content, false, senderName, isHumanOperator);
+
+            // Track this message ID and content to prevent duplicates
+            if (msg._id) {
+              this.displayedMessageIds.add(msg._id);
+            }
+            this.displayedMessageIds.add(contentKey);
 
             // Call onMessageReceived callback for human messages
             if (this.config.onMessageReceived) {
@@ -724,6 +798,7 @@ class LLMCrafterChatWidget {
     this.conversationId = null;
     this.lastPollTimestamp = null;
     this.isHumanControlled = false;
+    this.displayedMessageIds.clear(); // Clear tracked message IDs
     this.stopPolling();
     this.elements.messagesContainer.innerHTML = '';
 
@@ -773,6 +848,7 @@ class LLMCrafterChatWidget {
       autoOpen: script.getAttribute('data-auto-open') === 'true',
       showPoweredBy: script.getAttribute('data-show-powered-by') !== 'false',
       poweredByUrl: script.getAttribute('data-powered-by-url'),
+      poweredByText: script.getAttribute('data-powered-by-text'),
       enableStreaming: script.getAttribute('data-enable-streaming') !== 'false',
       pollingInterval:
         parseInt(script.getAttribute('data-polling-interval')) || 3000,

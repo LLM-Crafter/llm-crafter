@@ -79,7 +79,7 @@ router.post(
 router.post(
   '/agents/chat',
   proxyLimiter, // Rate limit: 60 requests per minute
-  sessionAuth,
+  sessionAuth(),
   agentChatValidation,
   validate,
   agentController.executeChatbotAgentWithSession
@@ -89,7 +89,7 @@ router.post(
 router.post(
   '/agents/execute',
   proxyLimiter, // Rate limit: 60 requests per minute
-  sessionAuth,
+  sessionAuth(),
   agentTaskValidation,
   validate,
   agentController.executeTaskAgentWithSession
@@ -99,7 +99,7 @@ router.post(
 router.post(
   '/agents/chat/stream',
   proxyLimiter, // Rate limit: 60 requests per minute
-  sessionAuth,
+  sessionAuth(),
   agentChatValidation,
   validate,
   agentController.executeChatbotAgentWithSessionStream
@@ -109,7 +109,7 @@ router.post(
 router.post(
   '/agents/execute/stream',
   proxyLimiter, // Rate limit: 60 requests per minute
-  sessionAuth,
+  sessionAuth(),
   agentTaskValidation,
   validate,
   agentController.executeTaskAgentWithSessionStream
@@ -197,9 +197,11 @@ router.get(
 // ===== CONVERSATION POLLING ROUTES =====
 
 // Get latest messages for conversation polling (session-based)
+// Note: This endpoint does NOT count towards session interaction limits
 router.get(
   '/conversations/:conversationId/messages/latest',
-  flexibleSessionAuth(),
+  generalLimiter, // Rate limit: 100 requests per 15 minutes
+  flexibleSessionAuth({ skipInteractionCount: true }),
   handoffController.getLatestMessages
 );
 

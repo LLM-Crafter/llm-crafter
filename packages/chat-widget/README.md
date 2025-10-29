@@ -106,20 +106,71 @@ const widget = new LLMCrafterChatWidget({
 | ----------------- | ------- | ---------------- | ----------------------------------------------------- |
 | `position`        | string  | `'bottom-right'` | Widget position (`'bottom-right'` or `'bottom-left'`) |
 | `autoOpen`        | boolean | `false`          | Automatically open chat on page load                  |
-| `showPoweredBy`   | boolean | `true`           | Show "Powered by LLM Crafter" badge                   |
+| `showPoweredBy`   | boolean | `true`           | Show "Powered by" badge                               |
 | `poweredByUrl`    | string  | `'#'`            | URL for the "Powered by" link                         |
+| `poweredByText`   | string  | `'LLM Crafter'`  | Text shown in the "Powered by" link                   |
 | `userIdentifier`  | string  | `null`           | Optional identifier for the user                      |
 | `enableStreaming` | boolean | `true`           | Enable streaming responses (real-time text)           |
 | `pollingInterval` | number  | `3000`           | Interval in ms to poll for human operator messages    |
 
 ### Callback Options
 
-| Option              | Type     | Description                                 |
-| ------------------- | -------- | ------------------------------------------- |
-| `onMessageSent`     | function | Called when user sends a message            |
-| `onMessageReceived` | function | Called when bot responds                    |
-| `onError`           | function | Called when an error occurs                 |
-| `onHumanTakeover`   | function | Called when a human operator joins the chat |
+| Option               | Type     | Description                                                               |
+| -------------------- | -------- | ------------------------------------------------------------------------- |
+| `onMessageSent`      | function | Called when user sends a message                                          |
+| `onMessageReceived`  | function | Called when bot responds                                                  |
+| `onError`            | function | Called when an error occurs                                               |
+| `onHumanTakeover`    | function | Called when a human operator joins the chat                               |
+| `messageTransformer` | function | Custom function to transform message text (e.g., for custom link formats) |
+
+### Advanced Message Transformation
+
+The `messageTransformer` option allows you to customize how messages are displayed. This is useful for:
+
+- Converting custom markup patterns into HTML elements
+- Creating custom link formats
+- Adding emoji reactions or other interactive elements
+- Applying custom styling or formatting
+
+**Example: Custom Link Format**
+
+If your agent outputs custom links like `[CUSTOMLINK:https://example.com|Click Here]`, you can transform them:
+
+```javascript
+const widget = new LLMCrafterChatWidget({
+  apiKey: 'your-api-key',
+  agentId: 'your-agent-id',
+  organizationId: 'your-org-id',
+  projectId: 'your-project-id',
+
+  messageTransformer: text => {
+    // First, escape HTML to prevent XSS
+    const escapeHtml = str => {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    };
+
+    // Escape the text
+    let escaped = escapeHtml(text);
+
+    // Transform [CUSTOMLINK:url|label] into clickable links
+    escaped = escaped.replace(
+      /\[CUSTOMLINK:([^\|]+)\|([^\]]+)\]/g,
+      (match, url, label) => {
+        // Validate URL to prevent javascript: protocol
+        const safeUrl =
+          url.startsWith('http://') || url.startsWith('https://') ? url : '#';
+        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color: #4a90e2; text-decoration: underline;">${label}</a>`;
+      }
+    );
+
+    return escaped;
+  },
+});
+```
+
+**Note:** The transformer is called for both streaming and non-streaming responses. For streaming, it's applied incrementally as chunks arrive, so make sure your transformation handles partial text gracefully.
 
 ## Usage Examples
 

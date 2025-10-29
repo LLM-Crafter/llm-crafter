@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Crafter Chat Widget - Message Transformer Example</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        background: white;
+        border-radius: 12px;
+        padding: 40px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      h1 {
+        color: #333;
+        margin-top: 0;
+      }
+
+      .info {
+        background: #f0f7ff;
+        border-left: 4px solid #4a90e2;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+
+      .info h3 {
+        margin-top: 0;
+        color: #2c5aa0;
+      }
+
+      .code {
+        background: #f5f7fa;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        padding: 16px;
+        margin: 10px 0;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 13px;
+        overflow-x: auto;
+      }
+
+      .example-output {
+        background: #fff;
+        border: 2px solid #4a90e2;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+
+      .example-output h4 {
+        margin-top: 0;
+        color: #4a90e2;
+      }
+
+      .test-button {
+        background: #4a90e2;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .test-button:hover {
+        background: #357abd;
+      }
+
+      code {
+        background: #f0f0f0;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 13px;
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin: 30px 0;
+      }
+
+      .feature {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid #4a90e2;
+      }
+
+      .feature h4 {
+        margin-top: 0;
+        color: #333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔗 Message Transformer Example</h1>
+
+      <p>
+        This example demonstrates the <code>messageTransformer</code> option,
+        which allows you to transform agent messages before they're displayed.
+      </p>
+
+      <div class="info">
+        <h3>📝 What is Message Transformer?</h3>
+        <p>
+          The <code>messageTransformer</code> is a function that receives the
+          raw message text from your agent and returns transformed HTML. This
+          allows you to:
+        </p>
+        <ul>
+          <li>
+            Convert custom markup patterns (like
+            <code>[CUSTOMLINK:url|label]</code>) into HTML elements
+          </li>
+          <li>Add interactive elements like buttons or cards</li>
+          <li>Apply custom styling or formatting</li>
+          <li>Sanitize and secure user-generated content</li>
+        </ul>
+      </div>
+
+      <div class="features">
+        <div class="feature">
+          <h4>🔗 Custom Links</h4>
+          <p>
+            Transform patterns like
+            <code>[CUSTOMLINK:https://example.com|Click Here]</code> into
+            clickable links
+          </p>
+        </div>
+
+        <div class="feature">
+          <h4>🌊 Streaming Support</h4>
+          <p>
+            Works with both streaming and non-streaming responses, applied
+            incrementally as text arrives
+          </p>
+        </div>
+
+        <div class="feature">
+          <h4>🔒 Security First</h4>
+          <p>
+            Always escape HTML to prevent XSS attacks, then apply your custom
+            transformations
+          </p>
+        </div>
+      </div>
+
+      <div class="example-output">
+        <h4>Example Transformation Function</h4>
+        <div class="code">
+          messageTransformer: (text) => { // 1. Escape HTML to prevent XSS const
+          escapeHtml = (str) => { const div = document.createElement('div');
+          div.textContent = str; return div.innerHTML; }; let escaped =
+          escapeHtml(text); // 2. Transform [CUSTOMLINK:url|label] into links
+          escaped = escaped.replace( /\[CUSTOMLINK:([^\|]+)\|([^\]]+)\]/g,
+          (match, url, label) => { // Validate URL to prevent javascript:
+          protocol const safeUrl = url.startsWith('http://') ||
+          url.startsWith('https://') ? url : '#'; return `&lt;a
+          href="${safeUrl}" target="_blank" rel="noopener noreferrer"
+          style="color: #4a90e2; text-decoration: underline;"&gt; ${label}
+          &lt;/a&gt;`; } ); return escaped; }
+        </div>
+      </div>
+
+      <div class="info">
+        <h3>🎯 Try It Out</h3>
+        <p>
+          Ask the agent to include custom links in its response. For example:
+        </p>
+        <ul>
+          <li>
+            "Show me a link to Google" →
+            <code>[CUSTOMLINK:https://google.com|Google]</code>
+          </li>
+          <li>
+            "Give me documentation links" →
+            <code
+              >[CUSTOMLINK:https://docs.example.com|View Documentation]</code
+            >
+          </li>
+        </ul>
+        <p>
+          The widget will automatically transform these patterns into clickable
+          links!
+        </p>
+      </div>
+
+      <div class="info" style="background: #fff3cd; border-color: #ffc107">
+        <h3>⚠️ Configuration Required</h3>
+        <p>
+          To run this example, you need to configure your API credentials. Open
+          the HTML file and update the widget configuration with your:
+        </p>
+        <ul>
+          <li><code>apiKey</code></li>
+          <li><code>agentId</code></li>
+          <li><code>organizationId</code></li>
+          <li><code>projectId</code></li>
+          <li><code>apiUrl</code> (your API server URL)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Load the widget -->
+    <script src="../dist/chat-widget.min.js"></script>
+
+    <script>
+      // Initialize the widget with message transformer
+      const widget = new LLMCrafterChatWidget({
+        // ⚠️ REPLACE THESE WITH YOUR ACTUAL CREDENTIALS
+        apiKey: 'your-api-key-here',
+        agentId: 'your-agent-id',
+        organizationId: 'your-org-id',
+        projectId: 'your-project-id',
+        apiUrl: 'http://localhost:3000', // Your API URL
+
+        // Customization
+        title: 'Custom Links Demo',
+        subtitle: 'Try asking for links!',
+        welcomeMessage:
+          'Hello! I can create custom formatted links. Try asking me for a link! 🔗',
+        primaryColor: '#4a90e2',
+        autoOpen: true,
+
+        // Message transformer function
+        messageTransformer: text => {
+          // Helper function to escape HTML and prevent XSS
+          const escapeHtml = str => {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+          };
+
+          // First, escape all HTML
+          let escaped = escapeHtml(text);
+
+          // Transform [CUSTOMLINK:url|label] into clickable links
+          escaped = escaped.replace(
+            /\[CUSTOMLINK:([^\|]+)\|([^\]]+)\]/g,
+            (match, url, label) => {
+              // Validate URL to prevent javascript: protocol and other attacks
+              const safeUrl =
+                url.startsWith('http://') || url.startsWith('https://')
+                  ? url
+                  : '#';
+
+              return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color: #4a90e2; text-decoration: underline; font-weight: 500;">${label}</a>`;
+            }
+          );
+
+          // You can add more transformations here
+          // For example, transform [BUTTON:text] into buttons:
+          // escaped = escaped.replace(
+          //   /\[BUTTON:([^\]]+)\]/g,
+          //   (match, text) => `<button style="...">${text}</button>`
+          // );
+
+          return escaped;
+        },
+
+        // Callbacks for debugging
+        onMessageSent: message => {
+          console.log('📤 User sent:', message);
+        },
+
+        onMessageReceived: response => {
+          console.log('📥 Bot replied:', response);
+        },
+
+        onError: error => {
+          console.error('❌ Error:', error);
+        },
+      });
+
+      console.log('✅ Widget initialized with message transformer');
+      console.log(
+        '💡 Tip: Ask the agent to output [CUSTOMLINK:https://google.com|Google] in its response'
+      );
+    </script>
+  </body>
+</html>

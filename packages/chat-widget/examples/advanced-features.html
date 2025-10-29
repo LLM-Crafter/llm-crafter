@@ -284,6 +284,31 @@
           }
         },
 
+        messageTransformer: text => {
+          // 1. Escape HTML to prevent XSS
+          const escapeHtml = str => {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+          };
+
+          let escaped = escapeHtml(text);
+
+          // 2. Transform custom patterns
+          escaped = escaped.replace(
+            /\[CUSTOMLINK:([^\|]+)\|([^\]]+)\]/g,
+            (match, url, label) => {
+              const safeUrl =
+                url.startsWith('http://') || url.startsWith('https://')
+                  ? url
+                  : '#';
+              return `<a href="${safeUrl}" style="color: #4a90e2; text-decoration: underline;" target="_blank" rel="noopener noreferrer">${label}</a>`;
+            }
+          );
+
+          return escaped;
+        },
+
         onError: error => {
           logEvent('ERROR', error);
         },
