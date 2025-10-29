@@ -1893,6 +1893,126 @@ const deleteGoogleCalendarConfig = async (req, res) => {
   }
 };
 
+// ===== TOOL MANAGEMENT =====
+
+const addToolToAgent = async (req, res) => {
+  try {
+    const { tool_name, parameters, enabled } = req.body;
+
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if tool exists in available tools
+    const availableTools = await toolService.getAvailableTools();
+    const toolExists = availableTools.find(tool => tool.name === tool_name);
+
+    if (!toolExists) {
+      return res.status(404).json({
+        error: 'Tool not found',
+        message: `Tool '${tool_name}' is not available. Check available tools list.`,
+      });
+    }
+
+    // Check if tool is already added to agent
+    const existingTool = agent.tools.find(tool => tool.name === tool_name);
+    if (existingTool) {
+      return res.status(400).json({
+        error: 'Tool already exists',
+        message: `Tool '${tool_name}' is already added to this agent. Use PUT /:agentId to update tool configuration.`,
+      });
+    }
+
+    // Add tool to agent
+    agent.tools.push({
+      name: tool_name,
+      description: toolExists.description,
+      parameters: parameters || {},
+      enabled: enabled !== undefined ? enabled : true,
+    });
+
+    await agent.save();
+
+    res.status(201).json({
+      message: 'Tool added successfully',
+      tool: {
+        name: tool_name,
+        description: toolExists.description,
+        parameters: parameters || {},
+        enabled: enabled !== undefined ? enabled : true,
+      },
+    });
+  } catch (error) {
+    console.error('Add tool to agent error:', error);
+    res.status(500).json({ error: 'Failed to add tool to agent' });
+  }
+};
+
+const removeToolFromAgent = async (req, res) => {
+  try {
+    const { toolName } = req.params;
+
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if tool exists on agent
+    const toolIndex = agent.tools.findIndex(tool => tool.name === toolName);
+    if (toolIndex === -1) {
+      return res.status(404).json({
+        error: 'Tool not found',
+        message: `Tool '${toolName}' is not configured for this agent.`,
+      });
+    }
+
+    // Remove tool from agent
+    agent.tools.splice(toolIndex, 1);
+    await agent.save();
+
+    res.json({
+      message: 'Tool removed successfully',
+      tool_name: toolName,
+    });
+  } catch (error) {
+    console.error('Remove tool from agent error:', error);
+    res.status(500).json({ error: 'Failed to remove tool from agent' });
+  }
+};
+
+const getAgentTools = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    res.json({
+      tools: agent.tools,
+      count: agent.tools.length,
+    });
+  } catch (error) {
+    console.error('Get agent tools error:', error);
+    res.status(500).json({ error: 'Failed to get agent tools' });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -1930,4 +2050,7 @@ module.exports = {
   configureGoogleCalendar,
   getGoogleCalendarConfig,
   deleteGoogleCalendarConfig,
+  addToolToAgent,
+  removeToolFromAgent,
+  getAgentTools,
 };

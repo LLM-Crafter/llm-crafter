@@ -471,4 +471,44 @@ router.delete(
   agentController.deleteGoogleCalendarConfig
 );
 
+// ===== TOOL MANAGEMENT ROUTES =====
+
+const addToolValidation = [
+  body('tool_name')
+    .notEmpty()
+    .isString()
+    .withMessage('Tool name is required and must be a string'),
+  body('parameters')
+    .optional()
+    .isObject()
+    .withMessage('Parameters must be an object'),
+  body('enabled')
+    .optional()
+    .isBoolean()
+    .withMessage('Enabled must be a boolean'),
+];
+
+router.post(
+  '/:agentId/tools',
+  auth,
+  orgAuth.hasRole('member'),
+  addToolValidation,
+  validate,
+  agentController.addToolToAgent
+);
+
+router.delete(
+  '/:agentId/tools/:toolName',
+  auth,
+  orgAuth.hasRole('member'),
+  agentController.removeToolFromAgent
+);
+
+router.get(
+  '/:agentId/tools',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getAgentTools
+);
+
 module.exports = router;
