@@ -10,6 +10,10 @@ Embeddable AI chat widget for any website. Add conversational AI powered by LLM 
 - 📱 **Mobile Responsive** - Works perfectly on all screen sizes
 - 🔒 **Secure** - API key authentication with session management
 - ⚡ **Lightweight** - Minimal bundle size with no dependencies
+- 🌊 **Streaming Responses** - Real-time AI responses with Server-Sent Events
+- 🔄 **Conversation Continuity** - Maintains context across messages
+- 👤 **Human Handoff Detection** - Automatic detection and display of human operator takeover
+- 📡 **Message Polling** - Real-time updates from human operators
 
 ## Quick Start
 
@@ -75,14 +79,17 @@ const widget = new LLMCrafterChatWidget({
 
 ### Customization Options
 
-| Option           | Type   | Default                                  | Description               |
-| ---------------- | ------ | ---------------------------------------- | ------------------------- |
-| `title`          | string | `'AI Assistant'`                         | Chat header title         |
-| `subtitle`       | string | `'Online • Typically replies instantly'` | Chat header subtitle      |
-| `placeholder`    | string | `'Type your message...'`                 | Input placeholder text    |
-| `avatarText`     | string | `'AI'`                                   | Text shown in bot avatar  |
-| `userAvatarText` | string | `'U'`                                    | Text shown in user avatar |
-| `welcomeMessage` | string | `'Hello! 👋 How can I help you today?'`  | Initial greeting message  |
+| Option              | Type   | Default                                  | Description                                |
+| ------------------- | ------ | ---------------------------------------- | ------------------------------------------ |
+| `title`             | string | `'AI Assistant'`                         | Chat header title                          |
+| `subtitle`          | string | `'Online • Typically replies instantly'` | Chat header subtitle                       |
+| `placeholder`       | string | `'Type your message...'`                 | Input placeholder text                     |
+| `avatarText`        | string | `'AI'`                                   | Text shown in bot avatar                   |
+| `userAvatarText`    | string | `'U'`                                    | Text shown in user avatar                  |
+| `humanAvatarText`   | string | `'👤'`                                   | Text shown in human operator avatar        |
+| `botName`           | string | `'AI'`                                   | Name displayed for bot messages            |
+| `humanOperatorName` | string | `'Human'`                                | Name displayed for human operator messages |
+| `welcomeMessage`    | string | `'Hello! 👋 How can I help you today?'`  | Initial greeting message                   |
 
 ### Styling Options
 
@@ -95,20 +102,24 @@ const widget = new LLMCrafterChatWidget({
 
 ### Behavior Options
 
-| Option           | Type    | Default          | Description                                           |
-| ---------------- | ------- | ---------------- | ----------------------------------------------------- |
-| `position`       | string  | `'bottom-right'` | Widget position (`'bottom-right'` or `'bottom-left'`) |
-| `autoOpen`       | boolean | `false`          | Automatically open chat on page load                  |
-| `showPoweredBy`  | boolean | `true`           | Show "Powered by LLM Crafter" badge                   |
-| `userIdentifier` | string  | `null`           | Optional identifier for the user                      |
+| Option            | Type    | Default          | Description                                           |
+| ----------------- | ------- | ---------------- | ----------------------------------------------------- |
+| `position`        | string  | `'bottom-right'` | Widget position (`'bottom-right'` or `'bottom-left'`) |
+| `autoOpen`        | boolean | `false`          | Automatically open chat on page load                  |
+| `showPoweredBy`   | boolean | `true`           | Show "Powered by LLM Crafter" badge                   |
+| `poweredByUrl`    | string  | `'#'`            | URL for the "Powered by" link                         |
+| `userIdentifier`  | string  | `null`           | Optional identifier for the user                      |
+| `enableStreaming` | boolean | `true`           | Enable streaming responses (real-time text)           |
+| `pollingInterval` | number  | `3000`           | Interval in ms to poll for human operator messages    |
 
 ### Callback Options
 
-| Option              | Type     | Description                      |
-| ------------------- | -------- | -------------------------------- |
-| `onMessageSent`     | function | Called when user sends a message |
-| `onMessageReceived` | function | Called when bot responds         |
-| `onError`           | function | Called when an error occurs      |
+| Option              | Type     | Description                                 |
+| ------------------- | -------- | ------------------------------------------- |
+| `onMessageSent`     | function | Called when user sends a message            |
+| `onMessageReceived` | function | Called when bot responds                    |
+| `onError`           | function | Called when an error occurs                 |
+| `onHumanTakeover`   | function | Called when a human operator joins the chat |
 
 ## Usage Examples
 
@@ -307,6 +318,183 @@ widget.setUserIdentifier('user_12345');
 
 // Destroy the widget and remove from DOM
 widget.destroy();
+```
+
+## Advanced Features
+
+### Streaming Responses
+
+The widget supports real-time streaming of AI responses using Server-Sent Events (SSE). This provides a more engaging user experience as text appears progressively instead of all at once.
+
+```javascript
+const widget = new LLMCrafterChatWidget({
+  apiKey: 'your-api-key',
+  agentId: 'your-agent-id',
+  organizationId: 'org_123',
+  projectId: 'proj_456',
+
+  // Enable streaming (default: true)
+  enableStreaming: true,
+});
+
+// You can toggle streaming dynamically
+widget.config.enableStreaming = false; // Switch to non-streaming mode
+```
+
+#### How it works:
+
+- Uses `/api/v1/external/agents/chat/stream` endpoint
+- Text appears word-by-word as the AI generates it
+- Falls back to non-streaming if disabled
+- No additional configuration required
+
+### Conversation Continuity
+
+The widget automatically maintains conversation context across multiple messages. The `conversationId` is tracked internally and sent with each request.
+
+```javascript
+// After the first message, conversationId is automatically set
+widget.conversationId; // Returns the current conversation ID
+
+// Manually clear conversation and start fresh
+widget.clearMessages(); // Resets conversationId and removes all messages
+```
+
+#### Benefits:
+
+- AI remembers previous messages in the conversation
+- Provides contextual and coherent responses
+- No manual tracking required
+
+### Human Handoff Detection
+
+The widget automatically polls for messages from human operators and updates the UI when a human takes over the conversation.
+
+```javascript
+const widget = new LLMCrafterChatWidget({
+  apiKey: 'your-api-key',
+  agentId: 'your-agent-id',
+  organizationId: 'org_123',
+  projectId: 'proj_456',
+
+  // Configure polling interval (default: 3000ms)
+  pollingInterval: 3000,
+
+  // Callback when human operator joins
+  onHumanTakeover: data => {
+    console.log('Human operator joined!');
+    console.log('Handoff status:', data.handoff_active);
+
+    // Show a custom notification
+    showNotification('A human operator has joined the conversation');
+  },
+
+  // Callback for all messages (including from humans)
+  onMessageReceived: (message, data) => {
+    if (data.from_human) {
+      console.log('Message from human operator:', message);
+    }
+  },
+});
+```
+
+#### Features:
+
+- Polls `/api/v1/external/conversations/:conversationId/messages/latest` every 3 seconds (configurable)
+- Automatically displays messages from human operators
+- Updates UI subtitle to show "👤 Human operator" when handoff occurs
+- Returns to AI mode when human hands control back
+
+### Custom Branding
+
+Customize the "Powered by" link to match your branding:
+
+```javascript
+const widget = new LLMCrafterChatWidget({
+  apiKey: 'your-api-key',
+  agentId: 'your-agent-id',
+  organizationId: 'org_123',
+  projectId: 'proj_456',
+
+  // Show/hide the badge
+  showPoweredBy: true,
+
+  // Customize the URL (default: '#')
+  poweredByUrl: 'https://yourcompany.com',
+});
+```
+
+Or via script tag:
+
+```html
+<script
+  src="chat-widget.js"
+  data-api-key="your-api-key"
+  data-agent-id="agent-id"
+  data-organization-id="org-id"
+  data-project-id="proj-id"
+  data-show-powered-by="true"
+  data-powered-by-url="https://yourcompany.com"
+></script>
+```
+
+### Complete Advanced Example
+
+```javascript
+const widget = new LLMCrafterChatWidget({
+  // Required
+  apiKey: 'your-api-key',
+  agentId: 'your-agent-id',
+  organizationId: 'org_123',
+  projectId: 'proj_456',
+
+  // Customization
+  title: 'Customer Support',
+  subtitle: 'Online • We respond instantly',
+  primaryColor: '#667eea',
+
+  // Advanced features
+  enableStreaming: true,
+  pollingInterval: 2000, // Poll every 2 seconds
+  poweredByUrl: 'https://yourcompany.com',
+
+  // Callbacks
+  onMessageSent: message => {
+    console.log('User:', message);
+    analytics.track('chat_message_sent');
+  },
+
+  onMessageReceived: (message, data) => {
+    if (data.from_human) {
+      console.log('Human operator:', message);
+      analytics.track('human_message_received');
+    } else {
+      console.log('AI:', message);
+      analytics.track('ai_message_received');
+    }
+  },
+
+  onHumanTakeover: data => {
+    console.log('Human operator joined the conversation');
+    analytics.track('human_takeover', {
+      conversation_id: data.conversation_id,
+    });
+
+    // Optional: Play a notification sound
+    playNotificationSound();
+  },
+
+  onError: error => {
+    console.error('Chat error:', error);
+    Sentry.captureException(new Error(error));
+  },
+});
+
+// Access conversation state
+console.log('Conversation ID:', widget.conversationId);
+console.log('Is human controlling?', widget.isHumanControlled);
+console.log('Is polling active?', !!widget.pollingIntervalId);
+console.log('Message count:', widget.messages.length);
 ```
 
 ## Getting Your API Credentials

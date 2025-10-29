@@ -199,12 +199,11 @@ router.get(
 // Get latest messages for conversation polling (session-based)
 router.get(
   '/conversations/:conversationId/messages/latest',
-  generalLimiter, // Rate limit: 100 requests per 15 minutes
-  flexibleSessionAuth,
+  flexibleSessionAuth(),
   handoffController.getLatestMessages
 );
 
-// Get latest messages for conversation polling (API key-based) 
+// Get latest messages for conversation polling (API key-based)
 router.get(
   '/organizations/:orgId/projects/:projectId/conversations/:conversationId/messages/latest',
   generalLimiter, // Rate limit: 100 requests per 15 minutes

@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Crafter Chat Widget - Advanced Features Demo</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+      }
+
+      .subtitle {
+        color: #666;
+        margin-bottom: 30px;
+        font-size: 18px;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+      }
+
+      .feature-card {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        border-left: 4px solid #4a90e2;
+      }
+
+      .feature-card h3 {
+        margin-top: 0;
+        color: #4a90e2;
+      }
+
+      .feature-card p {
+        color: #666;
+        line-height: 1.6;
+      }
+
+      .badge {
+        display: inline-block;
+        background: #4a90e2;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+
+      .badge.new {
+        background: #10b981;
+      }
+
+      .controls {
+        background: #f0f4f8;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 30px;
+      }
+
+      .controls h3 {
+        margin-top: 0;
+        color: #333;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        background: #4a90e2;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #357abd;
+      }
+
+      button.secondary {
+        background: #6c757d;
+      }
+
+      button.secondary:hover {
+        background: #5a6268;
+      }
+
+      .log {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 15px;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 15px;
+      }
+
+      .log-entry {
+        margin-bottom: 8px;
+        padding: 4px 0;
+        border-bottom: 1px solid #333;
+      }
+
+      .log-entry:last-child {
+        border-bottom: none;
+      }
+
+      .timestamp {
+        color: #858585;
+        margin-right: 8px;
+      }
+
+      .log-type {
+        color: #4a90e2;
+        font-weight: bold;
+        margin-right: 8px;
+      }
+
+      .log-type.human {
+        color: #10b981;
+      }
+
+      .log-type.error {
+        color: #ef4444;
+      }
+
+      code {
+        background: #f0f4f8;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🚀 LLM Crafter Chat Widget - Advanced Features</h1>
+      <p class="subtitle">
+        Demonstrating streaming, conversation continuity, and human handoff
+        detection
+      </p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <span class="badge new">NEW</span>
+          <h3>🎯 Conversation Continuity</h3>
+          <p>
+            Messages now maintain context across the entire conversation. The
+            <code>conversationId</code> is automatically tracked and sent with
+            each message.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <span class="badge new">NEW</span>
+          <h3>⚡ Streaming Responses</h3>
+          <p>
+            Watch AI responses appear in real-time with Server-Sent Events
+            (SSE). Toggle streaming on/off to see the difference.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <span class="badge new">NEW</span>
+          <h3>👤 Human Handoff Detection</h3>
+          <p>
+            Automatically polls for messages from human operators. When a human
+            takes over, the UI updates to show "Human operator".
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <span class="badge">ENHANCED</span>
+          <h3>🔗 Configurable Branding</h3>
+          <p>
+            The "Powered by" link is now fully configurable. Set a custom URL or
+            hide it completely.
+          </p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <h3>🎮 Control Panel</h3>
+        <div class="button-group">
+          <button onclick="toggleChat()">Toggle Chat</button>
+          <button onclick="clearMessages()">Clear Messages</button>
+          <button onclick="toggleStreaming()" id="streamingBtn">
+            Disable Streaming
+          </button>
+          <button class="secondary" onclick="showConversationId()">
+            Show Conversation ID
+          </button>
+          <button class="secondary" onclick="getWidgetState()">
+            Get Widget State
+          </button>
+        </div>
+
+        <div class="log" id="eventLog">
+          <div class="log-entry">
+            <span class="timestamp">--:--:--</span>
+            <span class="log-type">INFO</span>
+            Event log initialized. Interact with the chat to see events.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Include the chat widget -->
+    <script src="http://localhost:3000/widget/chat-widget.min.js"></script>
+
+    <script>
+      // Configuration
+      const config = {
+        apiKey:
+          '23724aff927a3d16e25702026e6c81cb62bbef57fcab94932867e1943ddac6a5',
+        agentId: 'a699ee98-bab1-4e2c-be1c-3e9cd2017e56',
+        organizationId: 'b94c96a8-e435-437f-adb8-c33151cdf825',
+        projectId: '9049f5c3-c55a-477c-a902-8c7f04b6da7f',
+        apiUrl: 'http://localhost:3000',
+
+        // Customization
+        title: 'Advanced AI Assistant',
+        subtitle: 'Online • Featuring streaming & handoff',
+        placeholder: 'Ask me anything...',
+        welcomeMessage:
+          '👋 Hello! Try asking me something to see streaming in action!',
+
+        // Styling
+        primaryColor: '#667eea',
+        secondaryColor: '#764ba2',
+        position: 'bottom-right',
+
+        // New features
+        poweredByUrl: 'https://github.com/LLM-Crafter/llm-crafter',
+        enableStreaming: true,
+        pollingInterval: 3000, // Poll every 3 seconds
+
+        humanAvatarText: '👤',
+        botName: 'AI',
+        humanOperatorName: 'Suporte',
+
+        // Callbacks
+        onMessageSent: message => {
+          logEvent('SENT', `User: ${message}`);
+        },
+
+        onMessageReceived: (message, data) => {
+          if (data.from_human) {
+            logEvent('HUMAN', `Human operator: ${message}`);
+          } else {
+            logEvent('RECEIVED', `Bot: ${message.substring(0, 50)}...`);
+          }
+        },
+
+        onError: error => {
+          logEvent('ERROR', error);
+        },
+
+        onHumanTakeover: data => {
+          logEvent('HUMAN', '👤 Human operator has joined the conversation!');
+          alert('A human operator has joined the conversation!');
+        },
+      };
+
+      // Initialize widget
+      let widget;
+      try {
+        widget = new LLMCrafterChatWidget(config);
+        logEvent('INFO', 'Widget initialized successfully');
+      } catch (error) {
+        logEvent('ERROR', 'Failed to initialize widget: ' + error.message);
+      }
+
+      // Control functions
+      function toggleChat() {
+        if (widget) {
+          widget.toggle();
+          logEvent('INFO', 'Chat toggled');
+        }
+      }
+
+      function clearMessages() {
+        if (widget) {
+          widget.clearMessages();
+          logEvent('INFO', 'Messages cleared');
+        }
+      }
+
+      function toggleStreaming() {
+        if (widget) {
+          widget.config.enableStreaming = !widget.config.enableStreaming;
+          const btn = document.getElementById('streamingBtn');
+          btn.textContent = widget.config.enableStreaming
+            ? 'Disable Streaming'
+            : 'Enable Streaming';
+          logEvent(
+            'INFO',
+            `Streaming ${widget.config.enableStreaming ? 'enabled' : 'disabled'}`
+          );
+        }
+      }
+
+      function showConversationId() {
+        if (widget && widget.conversationId) {
+          alert(`Conversation ID: ${widget.conversationId}`);
+          logEvent('INFO', `Conversation ID: ${widget.conversationId}`);
+        } else {
+          alert('No active conversation. Send a message first.');
+          logEvent('INFO', 'No active conversation');
+        }
+      }
+
+      function getWidgetState() {
+        if (widget) {
+          const state = {
+            conversationId: widget.conversationId,
+            isOpen: widget.isOpen,
+            messageCount: widget.messages.length,
+            isHumanControlled: widget.isHumanControlled,
+            isPolling: !!widget.pollingIntervalId,
+            streamingEnabled: widget.config.enableStreaming,
+          };
+
+          console.log('Widget State:', state);
+          logEvent('INFO', `State: ${JSON.stringify(state)}`);
+          alert('Widget state logged to console');
+        }
+      }
+
+      // Event logging
+      function logEvent(type, message) {
+        const log = document.getElementById('eventLog');
+        const time = new Date().toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+
+        const typeClass =
+          type === 'HUMAN' ? 'human' : type === 'ERROR' ? 'error' : '';
+
+        entry.innerHTML = `
+          <span class="timestamp">${time}</span>
+          <span class="log-type ${typeClass}">${type}</span>
+          ${escapeHtml(message)}
+        `;
+
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Log initial state
+      setTimeout(() => {
+        if (widget) {
+          logEvent(
+            'INFO',
+            `Streaming: ${config.enableStreaming ? 'enabled' : 'disabled'}`
+          );
+          logEvent('INFO', `Polling interval: ${config.pollingInterval}ms`);
+          logEvent('INFO', `Powered by URL: ${config.poweredByUrl}`);
+        }
+      }, 100);
+    </script>
+  </body>
+</html>
