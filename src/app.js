@@ -38,6 +38,7 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+app.set('trust proxy', true);
 app.use(cors());
 app.use(morgan('dev'));
 
