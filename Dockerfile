@@ -25,9 +25,7 @@ WORKDIR /app
 # Copy application source code
 COPY src/ ./src/
 
-# Copy widget source and built files
-COPY packages/chat-widget/src/ ./packages/chat-widget/src/
-COPY packages/chat-widget/dist/ ./packages/chat-widget/dist/
+# Copy widget source files (dist is already built in previous step)
 COPY packages/chat-widget/rollup.config.js ./packages/chat-widget/
 
 # Create necessary directories and set permissions
