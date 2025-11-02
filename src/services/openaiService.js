@@ -5,15 +5,19 @@ const PRICING = {
   openai: {
     'gpt-5': {
       input: 0.00125, // $1.25 per million tokens input
-      output: 0.01, // $10 per million tokens output
+      output: 0.01, // $10.00 per million tokens output
     },
     'gpt-5-mini': {
       input: 0.00025, // $0.25 per million tokens input
-      output: 0.002, // $2 per million tokens output
+      output: 0.002, // $2.00 per million tokens output
     },
     'gpt-5-nano': {
       input: 0.00005, // $0.05 per million tokens input
       output: 0.0004, // $0.40 per million tokens output
+    },
+    'gpt-5-pro': {
+      input: 0.015, // $15.00 per million tokens input
+      output: 0.12, // $120.00 per million tokens output
     },
     'gpt-5-chat-latest': {
       input: 0.00125,
@@ -21,55 +25,55 @@ const PRICING = {
     },
     'gpt-4o': {
       input: 0.0025, // $2.50 per million tokens input
-      output: 0.01, // $10 per million tokens output
+      output: 0.01, // $10.00 per million tokens output
     },
     'gpt-4o-mini': {
       input: 0.00015, // $0.15 per million tokens input
       output: 0.0006, // $0.60 per million tokens output
     },
     'gpt-4-turbo': {
-      input: 0.01, // $10 per million tokens input
-      output: 0.03, // $30 per million tokens output
+      input: 0.01, // $10.00 per million tokens input
+      output: 0.03, // $30.00 per million tokens output
     },
     'gpt-4.1': {
-      input: 0.002, // $2.00 per million tokens input
-      output: 0.008, // $8 per million tokens output
+      input: 0.003, // $3.00 per million tokens input
+      output: 0.012, // $12.00 per million tokens output
     },
     'gpt-4.1-mini': {
-      input: 0.0004, // $0.40 per million tokens input
-      output: 0.0016, // $1.60 per million tokens output
+      input: 0.0008, // $0.80 per million tokens input
+      output: 0.0032, // $3.20 per million tokens output
     },
     'gpt-4.1-nano': {
-      input: 0.0001, // $0.10 per million tokens input
-      output: 0.0004, // $0.40 per million tokens output
+      input: 0.0002, // $0.20 per million tokens input
+      output: 0.0008, // $0.80 per million tokens output
+    },
+    'o4-mini': {
+      input: 0.004, // $4.00 per million tokens input
+      output: 0.016, // $16.00 per million tokens output
     },
     o3: {
-      input: 0.002, // $2 per million tokens input
-      output: 0.008, // $8 per million tokens output
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.008, // $8.00 per million tokens output
     },
     'o3-pro': {
-      input: 0.02, // $20 per million tokens input
-      output: 0.08, // $80 per million tokens output
+      input: 0.02, // $20.00 per million tokens input
+      output: 0.08, // $80.00 per million tokens output
     },
     'o3-deep-research': {
-      input: 0.01, // $10 per million tokens input
-      output: 0.04, // $40 per million tokens output
+      input: 0.01, // $10.00 per million tokens input
+      output: 0.04, // $40.00 per million tokens output
     },
     'o3-mini': {
       input: 0.0011, // $1.10 per million tokens input
       output: 0.0044, // $4.40 per million tokens output
     },
-    'o4-mini': {
-      input: 0.0011, // $1.10 per million tokens input
-      output: 0.0044, // $4.40 per million tokens output
-    },
     'o4-mini-deep-research': {
-      input: 0.002, // $2 per million tokens input
-      output: 0.008, // $8 per million tokens output
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.008, // $8.00 per million tokens output
     },
     o1: {
-      input: 0.015, // $15 per million tokens input
-      output: 0.06, // $60 per million tokens output
+      input: 0.015, // $15.00 per million tokens input
+      output: 0.06, // $60.00 per million tokens output
     },
     'o1-mini': {
       input: 0.0011, // $1.10 per million tokens input
@@ -77,7 +81,7 @@ const PRICING = {
     },
     'codex-mini-latest': {
       input: 0.0015, // $1.50 per million tokens input
-      output: 0.006, // $6 per million tokens output
+      output: 0.006, // $6.00 per million tokens output
     },
     'gpt-oss-120b': {
       input: 0, // Free/open-weight models with no pricing info available
@@ -89,37 +93,54 @@ const PRICING = {
     },
   },
   anthropic: {
+    // Claude Opus 4.1
     'claude-opus-4-1': {
-      input: 15.0, // $15 per million input tokens
-      output: 75.0, // $75 per million output tokens
+      input: 0.015, // $15 per million input tokens
+      output: 0.075, // $75 per million output tokens
     },
+    // Claude Sonnet 4.5 (≤ 200K context)
+    'claude-sonnet-4-5': {
+      input: 0.003, // $3 per million input tokens
+      output: 0.015, // $15 per million output tokens
+    },
+    // Claude Sonnet 4.5 (> 200K context)
+    'claude-sonnet-4-5-long': {
+      input: 0.006, // $6 per million input tokens
+      output: 0.0225, // $22.50 per million output tokens
+    },
+    // Claude Haiku 4.5
+    'claude-haiku-4-5': {
+      input: 0.001, // $1 per million input tokens
+      output: 0.005, // $5 per million output tokens
+    },
+    // Legacy/compatibility (fallback to Haiku/Sonnet pricing)
     'claude-opus-4': {
-      input: 15.0,
-      output: 75.0,
+      input: 0.015,
+      output: 0.075,
     },
     'claude-sonnet-4': {
-      input: 3.0, // $3 per million input tokens
-      output: 15.0, // $15 per million output tokens
+      input: 0.003,
+      output: 0.015,
     },
     'claude-3-5-sonnet': {
-      input: 3.0, // $3 per million input tokens
-      output: 15.0, // $15 per million output tokens
+      input: 0.003,
+      output: 0.015,
     },
     'claude-3-5-haiku': {
-      input: 0.8, // $0.80 per million input tokens
-      output: 4.0, // $4 per million output tokens
+      input: 0.001,
+      output: 0.005,
     },
     'claude-3-opus': {
-      input: 15.0,
-      output: 75.0,
+      input: 0.015,
+      output: 0.075,
     },
     'claude-3-sonnet': {
-      input: 3.0,
-      output: 15.0,
+      input: 0.003,
+      output: 0.015,
     },
     'claude-3-haiku': {
-      input: 0.8,
-      output: 4.0,
+      input: 0.001,
+      output: 0.005,
     },
   },
   deepseek: {
@@ -140,6 +161,76 @@ const PRICING = {
     'deepseek/deepseek-chat': {
       input: 0.00014,
       output: 0.00028,
+    },
+  },
+  xai: {
+    // Grok 4 series (prices per 1M tokens divided by 1000 for per 1K tokens)
+    'grok-4': {
+      input: 0.003, // $3.00 per million tokens input
+      output: 0.015, // $15.00 per million tokens output
+    },
+    'grok-4-fast-reasoning': {
+      input: 0.0002, // $0.20 per million tokens input
+      output: 0.0005, // $0.50 per million tokens output
+    },
+    'grok-4-fast-non-reasoning': {
+      input: 0.0002, // $0.20 per million tokens input
+      output: 0.0005, // $0.50 per million tokens output
+    },
+    // Specialized coding model
+    'grok-code-fast-1': {
+      input: 0.0002, // $0.20 per million tokens input
+      output: 0.0015, // $1.50 per million tokens output
+    },
+    // Grok 3 series
+    'grok-3': {
+      input: 0.003, // $3.00 per million tokens input
+      output: 0.015, // $15.00 per million tokens output
+    },
+    'grok-3-mini': {
+      input: 0.0003, // $0.30 per million tokens input
+      output: 0.0005, // $0.50 per million tokens output
+    },
+    // Image generation (per image, not per token)
+    'grok-2-image-1212': {
+      input: 0, // Text input has no cost
+      output: 0.07, // $0.07 per image
+    },
+    // Grok 2 series (using Grok 3 pricing as fallback)
+    'grok-2': {
+      input: 0.003,
+      output: 0.015,
+    },
+    'grok-2-1212': {
+      input: 0.003,
+      output: 0.015,
+    },
+    'grok-2-mini': {
+      input: 0.0003,
+      output: 0.0005,
+    },
+    // Grok 1.5 series (using Grok 3 pricing as fallback)
+    'grok-1.5': {
+      input: 0.003,
+      output: 0.015,
+    },
+    'grok-1.5-vision': {
+      input: 0.003,
+      output: 0.015,
+    },
+    // Grok 1 series (legacy, using Grok 3 pricing as fallback)
+    'grok-1': {
+      input: 0.003,
+      output: 0.015,
+    },
+    // Beta models (using Grok 3 pricing as fallback)
+    'grok-beta': {
+      input: 0.003,
+      output: 0.015,
+    },
+    'grok-vision-beta': {
+      input: 0.003,
+      output: 0.015,
     },
   },
 };
@@ -165,6 +256,8 @@ class OpenAIService {
         return 'https://generativelanguage.googleapis.com/v1beta/openai';
       case 'openrouter':
         return 'https://openrouter.ai/api/v1';
+      case 'xai':
+        return 'https://api.x.ai/v1';
       case 'openai':
       default:
         return 'https://api.openai.com/v1';
@@ -248,7 +341,13 @@ class OpenAIService {
     }
   }
 
-  async generateStreamingCompletion(model, prompt, parameters, systemPrompt = null, onChunk = null) {
+  async generateStreamingCompletion(
+    model,
+    prompt,
+    parameters,
+    systemPrompt = null,
+    onChunk = null
+  ) {
     const mappedParams = this.mapParameters(parameters);
 
     // Build messages array

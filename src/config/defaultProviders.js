@@ -4,19 +4,12 @@ const defaultProviders = [
   {
     name: 'openai',
     models: [
-      // GPT-5 series
+      // GPT-5 series (latest)
       'gpt-5',
       'gpt-5-mini',
       'gpt-5-nano',
+      'gpt-5-pro',
       'gpt-5-chat',
-
-      // Reasoning & research (O-series)
-      'o3-deep-research',
-      'o3-pro',
-      'o3',
-      'o3-mini',
-      'o4-mini-deep-research',
-      'o4-mini',
 
       // GPT-4.1 series
       'gpt-4.1',
@@ -27,6 +20,14 @@ const defaultProviders = [
       'gpt-4o',
       'gpt-4o-mini',
       'gpt-4-turbo',
+      'o4-mini',
+      'o4-mini-deep-research',
+
+      // Reasoning & research (O-series)
+      'o3-deep-research',
+      'o3-pro',
+      'o3',
+      'o3-mini',
 
       // GPT-4 and 3.5 legacy
       'gpt-4',
@@ -48,10 +49,15 @@ const defaultProviders = [
   {
     name: 'anthropic',
     models: [
-      // Claude 4.x mainline
+      // Claude 4.x mainline (latest)
       'claude-opus-4-1-20250805', // Claude Opus 4.1 (current top-tier model)
+      'claude-sonnet-4-5-20250929', // Claude Sonnet 4.5 (mainstream, best balance)
+      'claude-sonnet-4-5-long', // Claude Sonnet 4.5 (long context, >200K tokens)
+      'claude-haiku-4-5-20251001', // Claude Haiku 4.5 (fastest, most affordable)
+
+      // Claude 4.x legacy
       'claude-opus-4-20250514', // Claude Opus 4 (original Claude 4 release)
-      'claude-sonnet-4-20250514', // Claude Sonnet 4 (mainstream general-use model)
+      'claude-sonnet-4-20250514', // Claude Sonnet 4 (legacy)
 
       // Claude 3.7 and 3.5 (legacy/active for select uses)
       'claude-3-7-sonnet-20250219', // Claude 3.7 Sonnet (hybrid model; still deployed)
@@ -111,6 +117,41 @@ const defaultProviders = [
       'DeepSeek-R1-Distill-Qwen-32B', // Distilled version of R1 model with competitive reasoning and code performance
       'JanusFlow', // Multimodal model with decoupled visual encoding for understanding and generation
       'Janus-Pro', // Advanced multimodal generation model in the Janus series
+    ],
+  },
+  {
+    name: 'xai',
+    models: [
+      // Grok 4 series (latest - July 2025)
+      'grok-4', // Flagship model with 256k context, advanced reasoning, coding, and vision
+      'grok-4-fast-reasoning', // Cost-efficient with 2M context, released September 2025
+      'grok-4-fast-non-reasoning', // Fast variant with 2M context
+
+      // Specialized coding model
+      'grok-code-fast-1', // Lightning-fast reasoning model for agentic coding, 256k context, released August 2025
+
+      // Grok 3 series (February 2025)
+      'grok-3', // Flagship model with superior reasoning, 132k context
+      'grok-3-mini', // Lightweight model excelling at math and reasoning, 132k context
+
+      // Image generation
+      'grok-2-image-1212', // Latest image generation model (Aurora), December 2024
+
+      // Grok 2 series (August 2024)
+      'grok-2',
+      'grok-2-1212', // December 2024 release with improved multilingual support
+      'grok-2-mini',
+
+      // Grok 1.5 series (March-April 2024)
+      'grok-1.5', // 128k context
+      'grok-1.5-vision', // First multimodal model
+
+      // Grok 1 series (legacy)
+      'grok-1', // 314B parameter MoE model (open-sourced March 2024)
+
+      // Beta/experimental models
+      'grok-beta',
+      'grok-vision-beta',
     ],
   },
 ];
