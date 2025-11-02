@@ -12,12 +12,12 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY package*.json ./
 COPY packages/chat-widget/package*.json ./packages/chat-widget/
 
-# Copy widget build configuration before building
-COPY packages/chat-widget/rollup.config.js ./packages/chat-widget/
-COPY packages/chat-widget/src/ ./packages/chat-widget/src/
+# Install dependencies for main app (production only)
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Install dependencies for main app
-RUN npm ci --only=production && npm cache clean --force
+# Copy widget build configuration and source before building
+COPY packages/chat-widget/rollup.config.js ./packages/chat-widget/rollup.config.js
+COPY packages/chat-widget/src/ ./packages/chat-widget/src/
 
 # Install dependencies and build widget
 WORKDIR /app/packages/chat-widget
@@ -28,6 +28,9 @@ WORKDIR /app
 
 # Copy application source code
 COPY src/ ./src/
+
+# Verify the dist folder exists and list contents
+RUN echo "Checking widget dist folder:" && ls -la /app/packages/chat-widget/dist/ || echo "Warning: dist folder not found"
 
 # Create necessary directories and set permissions
 RUN mkdir -p /app/logs && \
