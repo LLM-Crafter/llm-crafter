@@ -12,6 +12,10 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY package*.json ./
 COPY packages/chat-widget/package*.json ./packages/chat-widget/
 
+# Copy widget build configuration before building
+COPY packages/chat-widget/rollup.config.js ./packages/chat-widget/
+COPY packages/chat-widget/src/ ./packages/chat-widget/src/
+
 # Install dependencies for main app
 RUN npm ci --only=production && npm cache clean --force
 
@@ -24,9 +28,6 @@ WORKDIR /app
 
 # Copy application source code
 COPY src/ ./src/
-
-# Copy widget source files (dist is already built in previous step)
-COPY packages/chat-widget/rollup.config.js ./packages/chat-widget/
 
 # Create necessary directories and set permissions
 RUN mkdir -p /app/logs && \
