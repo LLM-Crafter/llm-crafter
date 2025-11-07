@@ -883,7 +883,27 @@ const getApiEndpoints = async (req, res) => {
         .json({ error: 'Agent does not have api_caller tool configured' });
     }
 
-    // Don't expose sensitive authentication details
+    // Sanitize authentication details at endpoint level (don't expose tokens/keys)
+    const sanitizedEndpoints = {};
+    if (apiConfig.endpoints) {
+      for (const [name, endpoint] of Object.entries(apiConfig.endpoints)) {
+        sanitizedEndpoints[name] = {
+          ...endpoint,
+          authentication: endpoint.authentication
+            ? {
+                type: endpoint.authentication.type,
+                ...(endpoint.authentication.type === 'api_key' && {
+                  key_name: endpoint.authentication.key_name,
+                  location: endpoint.authentication.location,
+                }),
+                configured: true,
+              }
+            : null,
+        };
+      }
+    }
+
+    // Keep global authentication for backward compatibility (deprecated)
     const sanitizedAuth = apiConfig.authentication
       ? {
           type: apiConfig.authentication.type,
@@ -892,17 +912,347 @@ const getApiEndpoints = async (req, res) => {
             apiConfig.authentication.api_key ||
             apiConfig.authentication.cookie
           ),
+          deprecated: true, // Mark as deprecated
         }
       : {};
 
     res.json({
-      endpoints: apiConfig.endpoints,
+      endpoints: sanitizedEndpoints,
       authentication: sanitizedAuth,
       summarization: apiConfig.summarization || {},
     });
   } catch (error) {
     console.error('Get API endpoints error:', error);
     res.status(500).json({ error: 'Failed to get API endpoints' });
+  }
+};
+
+// ===== INDIVIDUAL API ENDPOINT MANAGEMENT =====
+
+const addApiEndpoint = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if agent has api_caller tool
+    const apiCallerTool = agent.tools.find(tool => tool.name === 'api_caller');
+    if (!apiCallerTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have api_caller tool configured' });
+    }
+
+    const { endpoint_name } = req.params;
+    const { base_url, path, methods, description, authentication } = req.body;
+
+    // Validate required fields
+    if (!base_url || !path) {
+      return res.status(400).json({
+        error: 'base_url and path are required',
+      });
+    }
+
+    // Validate methods array
+    if (methods && !Array.isArray(methods)) {
+      return res.status(400).json({
+        error: 'methods must be an array',
+      });
+    }
+
+    // Validate authentication if provided
+    if (authentication) {
+      const validAuthTypes = ['bearer_token', 'api_key', 'cookie'];
+      if (
+        !authentication.type ||
+        !validAuthTypes.includes(authentication.type)
+      ) {
+        return res.status(400).json({
+          error: `Invalid authentication type. Must be one of: ${validAuthTypes.join(', ')}`,
+        });
+      }
+
+      // Validate required auth fields based on type
+      if (authentication.type === 'bearer_token' && !authentication.token) {
+        return res.status(400).json({
+          error: 'Bearer token is required for bearer_token authentication',
+        });
+      }
+      if (authentication.type === 'api_key') {
+        if (!authentication.key_name || !authentication.key_value) {
+          return res.status(400).json({
+            error:
+              'key_name and key_value are required for api_key authentication',
+          });
+        }
+        if (
+          !authentication.location ||
+          !['header', 'query'].includes(authentication.location)
+        ) {
+          return res.status(400).json({
+            error:
+              'location must be either "header" or "query" for api_key authentication',
+          });
+        }
+      }
+      if (authentication.type === 'cookie' && !authentication.cookie) {
+        return res.status(400).json({
+          error: 'Cookie value is required for cookie authentication',
+        });
+      }
+    }
+
+    // Initialize endpoints object if it doesn't exist
+    if (!apiCallerTool.parameters) {
+      apiCallerTool.parameters = {};
+    }
+    if (!apiCallerTool.parameters.endpoints) {
+      apiCallerTool.parameters.endpoints = {};
+    }
+
+    // Check if endpoint already exists
+    if (apiCallerTool.parameters.endpoints[endpoint_name]) {
+      return res.status(400).json({
+        error: `Endpoint '${endpoint_name}' already exists. Use PUT to update it.`,
+      });
+    }
+
+    // Add new endpoint
+    apiCallerTool.parameters.endpoints[endpoint_name] = {
+      base_url,
+      path,
+      methods: methods || ['GET'],
+      description: description || '',
+      authentication: authentication || null,
+    };
+
+    // Mark the nested object as modified for Mongoose
+    agent.markModified('tools');
+    await agent.save();
+
+    res.status(201).json({
+      message: 'API endpoint added successfully',
+      endpoint_name,
+      endpoint: apiCallerTool.parameters.endpoints[endpoint_name],
+    });
+  } catch (error) {
+    console.error('Add API endpoint error:', error);
+    res.status(500).json({ error: 'Failed to add API endpoint' });
+  }
+};
+
+const updateApiEndpoint = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if agent has api_caller tool
+    const apiCallerTool = agent.tools.find(tool => tool.name === 'api_caller');
+    if (!apiCallerTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have api_caller tool configured' });
+    }
+
+    const { endpoint_name } = req.params;
+    const { base_url, path, methods, description, authentication } = req.body;
+
+    // Check if endpoint exists
+    if (!apiCallerTool.parameters?.endpoints?.[endpoint_name]) {
+      return res.status(404).json({
+        error: `Endpoint '${endpoint_name}' not found`,
+      });
+    }
+
+    // Validate methods array if provided
+    if (methods && !Array.isArray(methods)) {
+      return res.status(400).json({
+        error: 'methods must be an array',
+      });
+    }
+
+    // Validate authentication if provided
+    if (authentication) {
+      const validAuthTypes = ['bearer_token', 'api_key', 'cookie'];
+      if (
+        !authentication.type ||
+        !validAuthTypes.includes(authentication.type)
+      ) {
+        return res.status(400).json({
+          error: `Invalid authentication type. Must be one of: ${validAuthTypes.join(', ')}`,
+        });
+      }
+
+      // Validate required auth fields based on type
+      if (authentication.type === 'bearer_token' && !authentication.token) {
+        return res.status(400).json({
+          error: 'Bearer token is required for bearer_token authentication',
+        });
+      }
+      if (authentication.type === 'api_key') {
+        if (!authentication.key_name || !authentication.key_value) {
+          return res.status(400).json({
+            error:
+              'key_name and key_value are required for api_key authentication',
+          });
+        }
+        if (
+          !authentication.location ||
+          !['header', 'query'].includes(authentication.location)
+        ) {
+          return res.status(400).json({
+            error:
+              'location must be either "header" or "query" for api_key authentication',
+          });
+        }
+      }
+      if (authentication.type === 'cookie' && !authentication.cookie) {
+        return res.status(400).json({
+          error: 'Cookie value is required for cookie authentication',
+        });
+      }
+    }
+
+    // Update endpoint with provided fields
+    const currentEndpoint = apiCallerTool.parameters.endpoints[endpoint_name];
+    apiCallerTool.parameters.endpoints[endpoint_name] = {
+      base_url: base_url !== undefined ? base_url : currentEndpoint.base_url,
+      path: path !== undefined ? path : currentEndpoint.path,
+      methods: methods !== undefined ? methods : currentEndpoint.methods,
+      description:
+        description !== undefined ? description : currentEndpoint.description,
+      authentication:
+        authentication !== undefined
+          ? authentication
+          : currentEndpoint.authentication,
+    };
+
+    // Mark the nested object as modified for Mongoose
+    agent.markModified('tools');
+    await agent.save();
+
+    res.json({
+      message: 'API endpoint updated successfully',
+      endpoint_name,
+      endpoint: apiCallerTool.parameters.endpoints[endpoint_name],
+    });
+  } catch (error) {
+    console.error('Update API endpoint error:', error);
+    res.status(500).json({ error: 'Failed to update API endpoint' });
+  }
+};
+
+const deleteApiEndpoint = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if agent has api_caller tool
+    const apiCallerTool = agent.tools.find(tool => tool.name === 'api_caller');
+    if (!apiCallerTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have api_caller tool configured' });
+    }
+
+    const { endpoint_name } = req.params;
+
+    // Check if endpoint exists
+    if (!apiCallerTool.parameters?.endpoints?.[endpoint_name]) {
+      return res.status(404).json({
+        error: `Endpoint '${endpoint_name}' not found`,
+      });
+    }
+
+    // Delete endpoint
+    delete apiCallerTool.parameters.endpoints[endpoint_name];
+
+    // Mark the nested object as modified for Mongoose
+    agent.markModified('tools');
+    await agent.save();
+
+    res.json({
+      message: 'API endpoint deleted successfully',
+      endpoint_name,
+    });
+  } catch (error) {
+    console.error('Delete API endpoint error:', error);
+    res.status(500).json({ error: 'Failed to delete API endpoint' });
+  }
+};
+
+const getApiEndpoint = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Check if agent has api_caller tool
+    const apiCallerTool = agent.tools.find(tool => tool.name === 'api_caller');
+    if (!apiCallerTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have api_caller tool configured' });
+    }
+
+    const { endpoint_name } = req.params;
+
+    // Check if endpoint exists
+    const endpoint = apiCallerTool.parameters?.endpoints?.[endpoint_name];
+    if (!endpoint) {
+      return res.status(404).json({
+        error: `Endpoint '${endpoint_name}' not found`,
+      });
+    }
+
+    // Sanitize authentication details (don't expose tokens/keys)
+    const sanitizedEndpoint = {
+      ...endpoint,
+      authentication: endpoint.authentication
+        ? {
+            type: endpoint.authentication.type,
+            ...(endpoint.authentication.type === 'api_key' && {
+              key_name: endpoint.authentication.key_name,
+              location: endpoint.authentication.location,
+            }),
+            configured: true,
+          }
+        : null,
+    };
+
+    res.json({
+      endpoint_name,
+      endpoint: sanitizedEndpoint,
+    });
+  } catch (error) {
+    console.error('Get API endpoint error:', error);
+    res.status(500).json({ error: 'Failed to get API endpoint' });
   }
 };
 
@@ -2029,6 +2379,10 @@ module.exports = {
   getAgentExecution,
   configureApiEndpoints,
   getApiEndpoints,
+  addApiEndpoint,
+  updateApiEndpoint,
+  deleteApiEndpoint,
+  getApiEndpoint,
   configureFAQs,
   getFAQs,
   summarizeConversation,

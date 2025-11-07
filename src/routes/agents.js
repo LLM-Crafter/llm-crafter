@@ -274,6 +274,91 @@ router.get(
   agentController.getApiEndpoints
 );
 
+// ===== INDIVIDUAL API ENDPOINT MANAGEMENT ROUTES =====
+
+const individualEndpointValidation = [
+  body('base_url').optional(),
+  body('path').optional().isString().withMessage('path must be a string'),
+  body('methods').optional().isArray().withMessage('methods must be an array'),
+  body('methods.*')
+    .optional()
+    .isIn(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+    .withMessage('Invalid HTTP method'),
+  body('description')
+    .optional()
+    .isString()
+    .withMessage('description must be a string'),
+  body('authentication')
+    .optional()
+    .isObject()
+    .withMessage('authentication must be an object'),
+  body('authentication.type')
+    .optional()
+    .isIn(['bearer_token', 'api_key', 'cookie'])
+    .withMessage('Invalid authentication type'),
+  body('authentication.token')
+    .optional()
+    .isString()
+    .withMessage('authentication token must be a string'),
+  body('authentication.key_name')
+    .optional()
+    .isString()
+    .withMessage('authentication key_name must be a string'),
+  body('authentication.key_value')
+    .optional()
+    .isString()
+    .withMessage('authentication key_value must be a string'),
+  body('authentication.location')
+    .optional()
+    .isIn(['header', 'query'])
+    .withMessage('authentication location must be header or query'),
+  body('authentication.cookie')
+    .optional()
+    .isString()
+    .withMessage('authentication cookie must be a string'),
+];
+
+const createEndpointValidation = [
+  body('base_url')
+    .optional()
+    .isString()
+    .withMessage('base_url is required and must be a valid URL with protocol'),
+  body('path').notEmpty().isString().withMessage('path is required'),
+  ...individualEndpointValidation.slice(2), // Include the rest of the validation
+];
+
+router.post(
+  '/:agentId/api-endpoints/:endpoint_name',
+  auth,
+  orgAuth.hasRole('member'),
+  createEndpointValidation,
+  validate,
+  agentController.addApiEndpoint
+);
+
+router.put(
+  '/:agentId/api-endpoints/:endpoint_name',
+  auth,
+  orgAuth.hasRole('member'),
+  individualEndpointValidation,
+  validate,
+  agentController.updateApiEndpoint
+);
+
+router.delete(
+  '/:agentId/api-endpoints/:endpoint_name',
+  auth,
+  orgAuth.hasRole('member'),
+  agentController.deleteApiEndpoint
+);
+
+router.get(
+  '/:agentId/api-endpoints/:endpoint_name',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getApiEndpoint
+);
+
 // ===== FAQ CONFIGURATION ROUTES =====
 
 const faqValidation = [

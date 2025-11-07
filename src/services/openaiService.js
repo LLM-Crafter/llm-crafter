@@ -291,6 +291,11 @@ class OpenAIService {
       delete mappedParams.presence_penalty;
     }
 
+    if (this.provider === 'xai') {
+      delete mappedParams.frequency_penalty;
+      delete mappedParams.presence_penalty;
+    }
+
     return mappedParams;
   }
 

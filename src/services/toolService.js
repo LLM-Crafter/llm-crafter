@@ -905,29 +905,40 @@ class ToolService {
         finalUrl.searchParams.append(key, value);
       }
 
-      // Handle authentication if configured
-      if (config.authentication) {
-        const auth = config.authentication;
+      // Handle authentication - prioritize endpoint-level auth over global auth
+      const authConfig = endpointConfig.authentication || config.authentication;
 
-        switch (auth.type) {
+      if (authConfig) {
+        switch (authConfig.type) {
           case 'bearer_token':
-            if (auth.token) {
-              authHeaders['Authorization'] = `Bearer ${auth.token}`;
+            if (authConfig.token) {
+              authHeaders['Authorization'] = `Bearer ${authConfig.token}`;
             }
             break;
           case 'api_key':
-            if (auth.api_key) {
-              if (auth.header) {
-                authHeaders[auth.header] = auth.api_key;
+            if (authConfig.key_value) {
+              // New endpoint-level format
+              if (authConfig.location === 'header') {
+                authHeaders[authConfig.key_name] = authConfig.key_value;
+              } else if (authConfig.location === 'query') {
+                finalUrl.searchParams.append(
+                  authConfig.key_name,
+                  authConfig.key_value
+                );
+              }
+            } else if (authConfig.api_key) {
+              // Legacy global format
+              if (authConfig.header) {
+                authHeaders[authConfig.header] = authConfig.api_key;
               } else {
                 // Default to X-API-Key if no header specified
-                authHeaders['X-API-Key'] = auth.api_key;
+                authHeaders['X-API-Key'] = authConfig.api_key;
               }
             }
             break;
           case 'cookie':
-            if (auth.cookie) {
-              authHeaders['Cookie'] = auth.cookie;
+            if (authConfig.cookie) {
+              authHeaders['Cookie'] = authConfig.cookie;
             }
             break;
         }
@@ -956,6 +967,8 @@ class ToolService {
         method: method.toUpperCase(),
         headers: finalHeaders,
         timeout,
+        // Trust self-signed certificates (useful for localhost/development)
+        rejectUnauthorized: false,
       };
 
       // Add body if present
