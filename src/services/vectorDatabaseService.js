@@ -1,18 +1,22 @@
 // Optional imports - gracefully handle missing dependencies
 let weaviate;
-let PineconeStore;
+let Pinecone;
 
 try {
   weaviate = require('weaviate-ts-client').default;
 } catch (error) {
-  console.warn('weaviate-ts-client not installed. Weaviate functionality will be disabled.');
+  console.warn(
+    'weaviate-ts-client not installed. Weaviate functionality will be disabled.'
+  );
 }
 
 try {
-  const pinecone = require('@pinecone-database/pinecone');
-  PineconeStore = pinecone.PineconeStore;
+  const pineconeModule = require('@pinecone-database/pinecone');
+  Pinecone = pineconeModule.Pinecone;
 } catch (error) {
-  console.warn('@pinecone-database/pinecone not installed. Pinecone functionality will be disabled.');
+  console.warn(
+    '@pinecone-database/pinecone not installed. Pinecone functionality will be disabled.'
+  );
 }
 
 /**
@@ -42,7 +46,9 @@ class VectorDatabaseInterface {
         await this.connectMemory();
         break;
       default:
-        throw new Error(`Unsupported vector database provider: ${this.provider}`);
+        throw new Error(
+          `Unsupported vector database provider: ${this.provider}`
+        );
     }
     this.isConnected = true;
   }
@@ -56,13 +62,15 @@ class VectorDatabaseInterface {
 
   async connectWeaviate() {
     const { endpoint, apiKey, scheme = 'https', headers } = this.config;
-    
+
     if (!endpoint) {
       throw new Error('Weaviate endpoint is required');
     }
 
     if (!weaviate) {
-      throw new Error('weaviate-ts-client is not installed. Run: npm install weaviate-ts-client');
+      throw new Error(
+        'weaviate-ts-client is not installed. Run: npm install weaviate-ts-client'
+      );
     }
 
     // Ensure headers is a plain object, not a Map or complex object
@@ -89,7 +97,7 @@ class VectorDatabaseInterface {
       scheme: scheme,
       host: endpoint.replace(/^https?:\/\//, ''),
       apiKey: apiKey ? weaviate.ApiKey(apiKey) : undefined,
-      headers: cleanHeaders
+      headers: cleanHeaders,
     });
 
     // Test connection
@@ -102,21 +110,26 @@ class VectorDatabaseInterface {
   }
 
   async connectPinecone() {
-    const { apiKey, environment, indexName } = this.config;
-    
-    if (!apiKey || !environment || !indexName) {
-      throw new Error('Pinecone apiKey, environment, and indexName are required');
+    const { apiKey, indexName } = this.config;
+
+    if (!apiKey || !indexName) {
+      throw new Error('Pinecone apiKey and indexName are required');
     }
 
-    this.client = new PineconeClient();
-    await this.client.init({
+    if (!Pinecone) {
+      throw new Error(
+        '@pinecone-database/pinecone is not installed. Run: npm install @pinecone-database/pinecone'
+      );
+    }
+
+    // Initialize Pinecone client (v3+ API)
+    this.client = new Pinecone({
       apiKey,
-      environment
     });
 
-    // Test connection
+    // Test connection by getting index description
     try {
-      const indexStats = await this.client.describe_index({ indexName });
+      const indexDescription = await this.client.describeIndex(indexName);
       console.log('✅ Connected to Pinecone successfully');
     } catch (error) {
       throw new Error(`Failed to connect to Pinecone: ${error.message}`);
@@ -168,11 +181,13 @@ class VectorDatabaseInterface {
 class WeaviateVectorDB extends VectorDatabaseInterface {
   constructor(config) {
     super({ provider: 'weaviate', ...config });
-    
+
     if (!weaviate) {
-      throw new Error('weaviate-ts-client is not installed. Run: npm install weaviate-ts-client');
+      throw new Error(
+        'weaviate-ts-client is not installed. Run: npm install weaviate-ts-client'
+      );
     }
-    
+
     // Ensure headers is a plain object, not a Map or complex object
     const cleanHeaders = {};
     if (config.headers && typeof config.headers === 'object') {
@@ -192,14 +207,14 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
         });
       }
     }
-    
+
     this.client = weaviate.client({
       scheme: config.scheme || 'http',
       host: config.endpoint?.replace(/^https?:\/\//, '') || 'localhost:8080',
       apiKey: config.apiKey ? weaviate.ApiKey(config.apiKey) : undefined,
-      headers: cleanHeaders
+      headers: cleanHeaders,
     });
-    
+
     this.className = config.className || 'Documents';
   }
 
@@ -259,7 +274,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
           name: 'project_id',
           dataType: ['string'],
           description: 'Project ID',
-        }
+        },
       ],
       vectorizer: 'none', // We'll provide our own vectors
     };
@@ -270,7 +285,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
 
   async addDocuments(documents) {
     const results = [];
-    
+
     for (const doc of documents) {
       try {
         const result = await this.client.data
@@ -283,18 +298,18 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
             document_id: doc.document_id,
             chunk_index: doc.chunk_index || 0,
             organization_id: doc.organization_id,
-            project_id: doc.project_id
+            project_id: doc.project_id,
           })
           .withVector(doc.embedding)
           .do();
-        
+
         results.push(result.id);
       } catch (error) {
         console.error('Error adding document to Weaviate:', error);
         throw error;
       }
     }
-    
+
     return results;
   }
 
@@ -303,30 +318,32 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
       let searchQuery = this.client.graphql
         .get()
         .withClassName(this.className)
-        .withFields('content title source document_id chunk_index organization_id project_id')
+        .withFields(
+          'content title source document_id chunk_index organization_id project_id'
+        )
         .withNearVector({
           vector: embedding,
-          certainty: 0.7
+          certainty: 0.7,
         })
         .withLimit(limit);
 
       // Add organization/project filters if provided
       if (filters.organization_id || filters.project_id) {
         const whereConditions = [];
-        
+
         if (filters.organization_id) {
           whereConditions.push({
             path: ['organization_id'],
             operator: 'Equal',
-            valueString: filters.organization_id
+            valueString: filters.organization_id,
           });
         }
-        
+
         if (filters.project_id) {
           whereConditions.push({
-            path: ['project_id'], 
+            path: ['project_id'],
             operator: 'Equal',
-            valueString: filters.project_id
+            valueString: filters.project_id,
           });
         }
 
@@ -336,7 +353,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
         } else if (whereConditions.length === 2) {
           searchQuery = searchQuery.withWhere({
             operator: 'And',
-            operands: whereConditions
+            operands: whereConditions,
           });
         }
       }
@@ -357,10 +374,10 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
         .withWhere({
           path: ['document_id'],
           operator: 'Equal',
-          valueText: documentId
+          valueText: documentId,
         })
         .do();
-      
+
       return true;
     } catch (error) {
       console.error('Error deleting document from Weaviate:', error);
@@ -380,19 +397,21 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
             {
               path: ['organization_id'],
               operator: 'Equal',
-              valueText: organizationId
+              valueText: organizationId,
             },
             {
               path: ['project_id'],
               operator: 'Equal',
-              valueText: projectId
-            }
-          ]
+              valueText: projectId,
+            },
+          ],
         })
         .withFields('meta { count }')
         .do();
 
-      const totalCount = aggregateResult?.data?.Aggregate?.[this.className]?.[0]?.meta?.count || 0;
+      const totalCount =
+        aggregateResult?.data?.Aggregate?.[this.className]?.[0]?.meta?.count ||
+        0;
 
       // Get sample of document IDs to calculate date range from Weaviate's internal timestamps
       let indexedRange = null;
@@ -407,14 +426,14 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
                 {
                   path: ['organization_id'],
                   operator: 'Equal',
-                  valueText: organizationId
+                  valueText: organizationId,
                 },
                 {
                   path: ['project_id'],
                   operator: 'Equal',
-                  valueText: projectId
-                }
-              ]
+                  valueText: projectId,
+                },
+              ],
             })
             .withFields('_additional { id creationTimeUnix }')
             .withLimit(100)
@@ -426,23 +445,26 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
               .map(d => d._additional?.creationTimeUnix)
               .filter(t => t)
               .map(t => parseInt(t));
-            
+
             if (timestamps.length > 0) {
               indexedRange = {
                 oldest: Math.min(...timestamps),
-                newest: Math.max(...timestamps)
+                newest: Math.max(...timestamps),
               };
             }
           }
         } catch (timestampError) {
           // If we can't get timestamps, that's okay, just skip the range
-          console.log('Could not retrieve timestamp info:', timestampError.message);
+          console.log(
+            'Could not retrieve timestamp info:',
+            timestampError.message
+          );
         }
       }
 
       return {
         total_documents: totalCount,
-        indexed_range: indexedRange
+        indexed_range: indexedRange,
       };
     } catch (error) {
       console.error('Error getting stats from Weaviate:', error);
@@ -464,28 +486,37 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
               {
                 path: ['organization_id'],
                 operator: 'Equal',
-                valueText: organizationId
+                valueText: organizationId,
               },
               {
                 path: ['project_id'],
                 operator: 'Equal',
-                valueText: projectId
-              }
-            ]
+                valueText: projectId,
+              },
+            ],
           })
           .withFields('meta { count }')
           .do();
 
-        countBefore = aggregateResult?.data?.Aggregate?.[this.className]?.[0]?.meta?.count || 0;
-        console.log(`📊 Found ${countBefore} documents to delete from Weaviate`);
+        countBefore =
+          aggregateResult?.data?.Aggregate?.[this.className]?.[0]?.meta
+            ?.count || 0;
+        console.log(
+          `📊 Found ${countBefore} documents to delete from Weaviate`
+        );
       } catch (countError) {
-        console.log('⚠️ Could not get count before deletion, proceeding with deletion anyway:', countError.message);
+        console.log(
+          '⚠️ Could not get count before deletion, proceeding with deletion anyway:',
+          countError.message
+        );
         countBefore = 0;
       }
 
       // Delete all documents for this org/project
-      console.log(`🗑️ Deleting documents for org: ${organizationId}, project: ${projectId}`);
-      
+      console.log(
+        `🗑️ Deleting documents for org: ${organizationId}, project: ${projectId}`
+      );
+
       // Weaviate batch deletion using the correct API
       const deleteResult = await this.client.batch
         .objectsBatchDeleter()
@@ -496,14 +527,14 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
             {
               path: ['organization_id'],
               operator: 'Equal',
-              valueText: organizationId
+              valueText: organizationId,
             },
             {
               path: ['project_id'],
               operator: 'Equal',
-              valueText: projectId
-            }
-          ]
+              valueText: projectId,
+            },
+          ],
         })
         .do();
 
@@ -516,7 +547,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
       }
 
       return {
-        deleted_count: finalCount
+        deleted_count: finalCount,
       };
     } catch (error) {
       console.error('Error clearing index from Weaviate:', error);
@@ -531,20 +562,77 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
 class PineconeVectorDB extends VectorDatabaseInterface {
   constructor(config) {
     super({ provider: 'pinecone', ...config });
-    
-    if (!PineconeStore) {
-      throw new Error('@pinecone-database/pinecone is not installed. Run: npm install @pinecone-database/pinecone');
+
+    if (!Pinecone) {
+      throw new Error(
+        '@pinecone-database/pinecone is not installed. Run: npm install @pinecone-database/pinecone'
+      );
     }
-    
+
     this.indexName = config.indexName;
+    this.apiKey = config.apiKey;
   }
 
   async connect() {
-    await super.connect();
-    this.index = this.client.Index(this.indexName);
+    // Initialize Pinecone client (v3+ uses different API)
+    this.client = new Pinecone({
+      apiKey: this.apiKey,
+    });
+
+    // Validate that the index exists and get its configuration
+    let indexInfo;
+    try {
+      indexInfo = await this.client.describeIndex(this.indexName);
+      console.log(`✅ Pinecone index '${this.indexName}' found`);
+      console.log(`   Index dimensions: ${indexInfo.dimension}`);
+      console.log(`   Index metric: ${indexInfo.metric}`);
+      console.log(`   Full index info:`, JSON.stringify(indexInfo, null, 2));
+    } catch (error) {
+      if (error.message?.includes('404')) {
+        throw new Error(
+          `Pinecone index '${this.indexName}' does not exist. ` +
+            `Please create it first in your Pinecone dashboard or via the API.`
+        );
+      }
+      throw new Error(`Failed to connect to Pinecone index: ${error.message}`);
+    }
+
+    // Store index dimension for validation
+    this.indexDimension = indexInfo.dimension;
+
+    // Get the index reference
+    this.index = this.client.index(this.indexName);
+
+    this.isConnected = true;
+    console.log('✅ Connected to Pinecone successfully');
   }
 
   async addDocuments(documents) {
+    // Validate embedding dimensions match the index
+    if (documents.length > 0 && documents[0].embedding) {
+      const embeddingDim = documents[0].embedding.length;
+      if (embeddingDim !== this.indexDimension) {
+        throw new Error(
+          `Embedding dimension mismatch: Your embeddings have ${embeddingDim} dimensions, ` +
+            `but Pinecone index '${this.indexName}' is configured for ${this.indexDimension} dimensions. ` +
+            `\n\nTo fix this:\n` +
+            `1. Recreate the index with dimension ${embeddingDim}, OR\n` +
+            `2. Change your embedding model to match ${this.indexDimension} dimensions\n` +
+            `   - For 1024 dims: Use text-embedding-3-small with dimensions parameter\n` +
+            `   - For 1536 dims: Use text-embedding-3-small (default)\n` +
+            `   - For 3072 dims: Use text-embedding-3-large (default)`
+        );
+      }
+    }
+
+    // Use project_id as namespace for data isolation
+    const namespace = documents[0]?.project_id;
+    if (!namespace) {
+      throw new Error(
+        'project_id is required for Pinecone namespace isolation'
+      );
+    }
+
     const vectors = documents.map(doc => ({
       id: doc.id || `doc_${Date.now()}_${Math.random()}`,
       values: doc.embedding,
@@ -555,60 +643,89 @@ class PineconeVectorDB extends VectorDatabaseInterface {
         document_id: doc.document_id,
         chunk_index: doc.chunk_index || 0,
         organization_id: doc.organization_id,
-        project_id: doc.project_id
-      }
+        project_id: doc.project_id,
+      },
     }));
 
-    await this.index.upsert(vectors);
+    console.log(
+      `  📦 Upserting ${vectors.length} vectors to Pinecone namespace: ${namespace}`
+    );
+    await this.index.namespace(namespace).upsert(vectors);
     return vectors.map(v => v.id);
   }
 
-  async search(query, embedding, limit = 10) {
-    const results = await this.index.query({
+  async search(query, embedding, limit = 10, filters = {}) {
+    // Validate embedding dimensions match the index
+    if (embedding && embedding.length !== this.indexDimension) {
+      throw new Error(
+        `Embedding dimension mismatch: Query embedding has ${embedding.length} dimensions, ` +
+          `but Pinecone index '${this.indexName}' is configured for ${this.indexDimension} dimensions.`
+      );
+    }
+
+    // Use project_id as namespace for data isolation
+    const namespace = filters.project_id;
+    if (!namespace) {
+      throw new Error(
+        'project_id is required in filters for Pinecone namespace isolation'
+      );
+    }
+
+    console.log(`  🔍 Querying Pinecone namespace: ${namespace}`);
+
+    // Build metadata filter (exclude project_id since it's used as namespace)
+    const metadataFilter = {};
+    if (filters.organization_id) {
+      metadataFilter.organization_id = filters.organization_id;
+    }
+
+    const queryOptions = {
       vector: embedding,
       topK: limit,
-      includeMetadata: true
-    });
+      includeMetadata: true,
+    };
+
+    // Add filter if we have metadata filters
+    if (Object.keys(metadataFilter).length > 0) {
+      queryOptions.filter = metadataFilter;
+    }
+
+    const results = await this.index.namespace(namespace).query(queryOptions);
 
     return results.matches.map(match => ({
       ...match.metadata,
-      score: match.score
+      score: match.score,
     }));
   }
 
   async deleteDocument(documentId) {
     await this.index.delete({
-      filter: { document_id: documentId }
+      filter: { document_id: documentId },
     });
     return true;
   }
 
   async getStats(organizationId, projectId) {
     try {
-      // Pinecone doesn't have a direct count/stats API, so we query with a large limit
-      // and analyze the results. This is not ideal for production with large datasets.
-      const queryResult = await this.index.query({
-        vector: new Array(1536).fill(0), // Zero vector for metadata-only query
-        topK: 10000, // Max limit
-        includeMetadata: true,
-        filter: {
-          organization_id: organizationId,
-          project_id: projectId
-        }
-      });
+      console.log(`  📊 Getting stats for Pinecone namespace: ${projectId}`);
 
-      const docs = queryResult.matches || [];
-      
-      // Calculate date range from indexed_at field
-      const indexedDates = docs.map(d => new Date(d.metadata?.indexed_at || Date.now()).getTime()).filter(t => !isNaN(t));
-      const dateRange = indexedDates.length > 0 ? {
-        oldest: Math.min(...indexedDates),
-        newest: Math.max(...indexedDates)
-      } : null;
+      // Use describeIndexStats with filter for the namespace
+      const stats = await this.index.describeIndexStats();
+
+      // Get stats for the specific namespace
+      const namespaceStats = stats.namespaces?.[projectId];
+
+      if (!namespaceStats) {
+        console.log(`  ℹ️ No data found in namespace: ${projectId}`);
+        return {
+          total_documents: 0,
+          indexed_range: null,
+        };
+      }
 
       return {
-        total_documents: docs.length,
-        indexed_range: dateRange
+        total_documents: namespaceStats.vectorCount || 0,
+        indexed_range: null, // Pinecone doesn't provide timestamp info in stats
       };
     } catch (error) {
       console.error('Error getting stats from Pinecone:', error);
@@ -622,16 +739,19 @@ class PineconeVectorDB extends VectorDatabaseInterface {
       const statsBefore = await this.getStats(organizationId, projectId);
       const countBefore = statsBefore.total_documents;
 
-      // Delete all vectors for this org/project
-      await this.index.deleteAll({
-        filter: {
-          organization_id: organizationId,
-          project_id: projectId
-        }
-      });
+      console.log(
+        `  🗑️ Deleting all vectors from Pinecone namespace: ${projectId} (${countBefore} vectors)`
+      );
+
+      // Delete all vectors in the namespace
+      await this.index.namespace(projectId).deleteAll();
+
+      console.log(
+        `  ✅ Deleted ${countBefore} vectors from namespace: ${projectId}`
+      );
 
       return {
-        deleted_count: countBefore
+        deleted_count: countBefore,
       };
     } catch (error) {
       console.error('Error clearing index from Pinecone:', error);
@@ -656,22 +776,22 @@ class MemoryVectorDB extends VectorDatabaseInterface {
 
   async addDocuments(documents) {
     const results = [];
-    
+
     for (const doc of documents) {
       const id = doc.id || `doc_${Date.now()}_${Math.random()}`;
       const docWithId = { ...doc, id };
-      
+
       // Add to memory storage
       this.documents.push(docWithId);
-      
+
       // Implement simple LRU if we exceed max documents
       if (this.documents.length > this.maxDocuments) {
         this.documents.shift(); // Remove oldest document
       }
-      
+
       results.push(id);
     }
-    
+
     return results;
   }
 
@@ -694,54 +814,64 @@ class MemoryVectorDB extends VectorDatabaseInterface {
 
   async deleteDocument(documentId) {
     const initialLength = this.documents.length;
-    this.documents = this.documents.filter(doc => doc.document_id !== documentId);
+    this.documents = this.documents.filter(
+      doc => doc.document_id !== documentId
+    );
     return this.documents.length < initialLength;
   }
 
   async getStats(organizationId, projectId) {
-    const docs = this.documents.filter(doc => 
-      doc.organization_id === organizationId &&
-      doc.project_id === projectId
+    const docs = this.documents.filter(
+      doc =>
+        doc.organization_id === organizationId && doc.project_id === projectId
     );
 
     // Calculate date range from indexed_at field
-    const indexedDates = docs.map(d => new Date(d.indexed_at || Date.now()).getTime()).filter(t => !isNaN(t));
-    const dateRange = indexedDates.length > 0 ? {
-      oldest: Math.min(...indexedDates),
-      newest: Math.max(...indexedDates)
-    } : null;
+    const indexedDates = docs
+      .map(d => new Date(d.indexed_at || Date.now()).getTime())
+      .filter(t => !isNaN(t));
+    const dateRange =
+      indexedDates.length > 0
+        ? {
+            oldest: Math.min(...indexedDates),
+            newest: Math.max(...indexedDates),
+          }
+        : null;
 
     return {
       total_documents: docs.length,
-      indexed_range: dateRange
+      indexed_range: dateRange,
     };
   }
 
   async clearIndex(organizationId, projectId) {
     const initialCount = this.documents.length;
-    this.documents = this.documents.filter(doc => 
-      !(doc.organization_id === organizationId && doc.project_id === projectId)
+    this.documents = this.documents.filter(
+      doc =>
+        !(
+          doc.organization_id === organizationId && doc.project_id === projectId
+        )
     );
     const deletedCount = initialCount - this.documents.length;
-    
+
     return {
-      deleted_count: deletedCount
+      deleted_count: deletedCount,
     };
   }
 
   cosineSimilarity(vecA, vecB) {
     if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
-    
+
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
-    
+
     for (let i = 0; i < vecA.length; i++) {
       dotProduct += vecA[i] * vecB[i];
       normA += vecA[i] * vecA[i];
       normB += vecB[i] * vecB[i];
     }
-    
+
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 }
@@ -758,7 +888,9 @@ function createVectorDatabase(config) {
     case 'memory':
       return new MemoryVectorDB(config);
     default:
-      throw new Error(`Unsupported vector database provider: ${config.provider}`);
+      throw new Error(
+        `Unsupported vector database provider: ${config.provider}`
+      );
   }
 }
 
@@ -767,5 +899,5 @@ module.exports = {
   WeaviateVectorDB,
   PineconeVectorDB,
   MemoryVectorDB,
-  createVectorDatabase
+  createVectorDatabase,
 };
