@@ -392,6 +392,38 @@ const deleteAgent = async (req, res) => {
   }
 };
 
+const toggleAgentStatus = async (req, res) => {
+  try {
+    const { is_active } = req.body;
+
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    agent.is_active = is_active;
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: `Agent ${is_active ? 'enabled' : 'disabled'} successfully`,
+      agent: {
+        id: agent._id,
+        name: agent.name,
+        is_active: agent.is_active,
+      },
+    });
+  } catch (error) {
+    console.error('Toggle agent status error:', error);
+    res.status(500).json({ error: 'Failed to update agent status' });
+  }
+};
+
 // ===== AGENT EXECUTION ENDPOINTS =====
 
 const executeChatbotAgent = async (req, res) => {
@@ -2369,6 +2401,7 @@ module.exports = {
   getAgent,
   updateAgent,
   deleteAgent,
+  toggleAgentStatus,
   executeChatbotAgent,
   executeChatbotAgentStream,
   executeTaskAgent,

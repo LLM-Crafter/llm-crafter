@@ -171,6 +171,15 @@ router.delete(
   agentController.deleteAgent
 );
 
+router.put(
+  '/:agentId/status',
+  auth,
+  orgAuth.hasRole('member'),
+  [body('is_active').isBoolean().withMessage('is_active must be a boolean')],
+  validate,
+  agentController.toggleAgentStatus
+);
+
 // ===== AGENT EXECUTION ROUTES =====
 
 router.post(

@@ -29,6 +29,12 @@ class AgentService {
       throw new Error('Agent not found');
     }
 
+    if (!agent.is_active) {
+      throw new Error(
+        'Agent is currently disabled. Please contact your administrator.'
+      );
+    }
+
     if (agent.type !== 'chatbot') {
       throw new Error('Agent is not a chatbot type');
     }
@@ -183,6 +189,12 @@ class AgentService {
     });
     if (!agent) {
       throw new Error('Agent not found');
+    }
+
+    if (!agent.is_active) {
+      throw new Error(
+        'Agent is currently disabled. Please contact your administrator.'
+      );
     }
 
     if (agent.type !== 'chatbot') {
@@ -340,6 +352,12 @@ class AgentService {
       throw new Error('Agent not found');
     }
 
+    if (!agent.is_active) {
+      throw new Error(
+        'Agent is currently disabled. Please contact your administrator.'
+      );
+    }
+
     if (agent.type !== 'task') {
       throw new Error('Agent is not a task type');
     }
@@ -401,6 +419,12 @@ class AgentService {
     });
     if (!agent) {
       throw new Error('Agent not found');
+    }
+
+    if (!agent.is_active) {
+      throw new Error(
+        'Agent is currently disabled. Please contact your administrator.'
+      );
     }
 
     if (agent.type !== 'task') {
