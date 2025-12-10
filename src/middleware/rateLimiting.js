@@ -61,7 +61,7 @@ const authLimiter = createRateLimiter({
 // Login specifically - Even stricter
 const loginLimiter = createRateLimiter({
   windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 5, // 5 login attempts per 10 minutes
+  max: 10, // 10 login attempts per 10 minutes
   skipSuccessfulRequests: true, // Don't count successful logins
   skipFailedRequests: false, // Count failed attempts
   message: {
@@ -86,11 +86,11 @@ const sensitiveOpLimiter = createRateLimiter({
 // API key operations - 1 request per second
 const apiKeyLimiter = createRateLimiter({
   windowMs: 1 * 1000, // 1 second
-  max: 1, // 1 request per second
+  max: 10, // 10 requests per second
   message: {
     error: 'Too many API key operations',
     message:
-      'API key operations are limited to 1 request per second. Please slow down.',
+      'API key operations are limited to 10 requests per second. Please slow down.',
     retryAfter: 1,
   },
 });
