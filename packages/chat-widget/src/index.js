@@ -13,17 +13,20 @@ class LLMCrafterChatWidget {
       projectId: config.projectId,
       apiUrl: config.apiUrl || 'https://api.llmcrafter.com',
 
-      // Customization options
+      // Customization options (can be string or array of {lang, text} objects)
       title: config.title || 'AI Assistant',
       subtitle: config.subtitle || 'Online • Typically replies instantly',
       placeholder: config.placeholder || 'Type your message...',
+      welcomeMessage:
+        config.welcomeMessage || 'Hello! 👋 How can I help you today?',
+
       avatarText: config.avatarText || 'AI',
       userAvatarText: config.userAvatarText || 'U',
       humanAvatarText: config.humanAvatarText || '👤',
+      botAvatarUrl: config.botAvatarUrl || null, // URL for bot avatar image
+      humanAvatarUrl: config.humanAvatarUrl || null, // URL for human operator avatar image
       botName: config.botName || 'AI', // Name shown for bot messages
       humanOperatorName: config.humanOperatorName || 'Human', // Name shown for human operator messages
-      welcomeMessage:
-        config.welcomeMessage || 'Hello! 👋 How can I help you today?',
 
       // Colors
       primaryColor: config.primaryColor || '#4a90e2',
@@ -34,12 +37,14 @@ class LLMCrafterChatWidget {
       // Behavior
       position: config.position || 'bottom-right', // bottom-right, bottom-left
       autoOpen: config.autoOpen || false,
+      autoOpenDelay: config.autoOpenDelay || null, // Delay in milliseconds before auto-opening (e.g., 30000 for 30 seconds)
       showPoweredBy: config.showPoweredBy !== false,
       poweredByUrl: config.poweredByUrl || '#',
       poweredByText: config.poweredByText || 'LLM Crafter',
       userIdentifier: config.userIdentifier || null,
       enableStreaming: config.enableStreaming !== false,
       pollingInterval: config.pollingInterval || 3000, // Poll for new messages every 3 seconds
+      conversationExpiryTime: config.conversationExpiryTime || 86400000, // 24 hours in milliseconds
 
       // Advanced
       onMessageSent: config.onMessageSent || null,
@@ -47,17 +52,20 @@ class LLMCrafterChatWidget {
       onError: config.onError || null,
       onHumanTakeover: config.onHumanTakeover || null,
       messageTransformer: config.messageTransformer || null, // Function to transform messages before display
+      dynamicContext: config.dynamicContext || null, // Additional context to send with messages (can be function or object)
     };
 
     this.conversationId = null;
     this.sessionToken = null;
     this.messages = [];
     this.isOpen = false;
+    this.isFirstOpen = true; // Track if this is the first time opening the chat
     this.isTyping = false;
     this.pollingIntervalId = null;
     this.lastPollTimestamp = null;
     this.isHumanControlled = false;
     this.displayedMessageIds = new Set(); // Track message IDs to prevent duplicates
+    this.localStorageKey = `llm-crafter-conversation-${this.config.agentId}`; // Unique key per agent
 
     this.init();
   }
@@ -67,16 +75,24 @@ class LLMCrafterChatWidget {
     this.attachEventListeners();
     this.applyCustomStyles();
 
-    if (this.config.welcomeMessage) {
-      this.addMessage(this.config.welcomeMessage, false);
-    }
+    // Try to restore previous conversation from localStorage
+    const restoredConversation = this.restoreConversation();
+
+    // Don't show welcome message immediately - wait until first open (unless restoring)
 
     if (this.config.autoOpen) {
       this.open();
+    } else if (this.config.autoOpenDelay && !restoredConversation) {
+      // Only set auto-open timer if not restoring a conversation
+      setTimeout(() => {
+        if (!this.isOpen) {
+          this.open();
+        }
+      }, this.config.autoOpenDelay);
     }
 
     // Initialize session
-    this.initializeSession();
+    this.initializeSession(restoredConversation);
   }
 
   createWidget() {
@@ -101,13 +117,25 @@ class LLMCrafterChatWidget {
     // Create chat window
     const chatWindow = document.createElement('div');
     chatWindow.className = 'llm-crafter-chat-window';
+
+    // Get localized text for UI elements
+    const localizedTitle = this.getLocalizedText(this.config.title);
+    const localizedSubtitle = this.getLocalizedText(this.config.subtitle);
+    const localizedPlaceholder = this.getLocalizedText(this.config.placeholder);
+
     chatWindow.innerHTML = `
       <div class="llm-crafter-chat-header">
-        <div class="llm-crafter-avatar">${this.config.avatarText}</div>
+        <div class="llm-crafter-avatar">${this.config.botAvatarUrl ? `<img src="${this.config.botAvatarUrl}" alt="Bot" />` : this.config.avatarText}</div>
         <div class="llm-crafter-header-info">
-          <h3>${this.config.title}</h3>
-          <p>${this.config.subtitle}</p>
+          <h3>${localizedTitle}</h3>
+          <p>${localizedSubtitle}</p>
         </div>
+        <button class="llm-crafter-reset-btn" title="Reset conversation">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+        </button>
         <button class="llm-crafter-close-btn" title="Close chat">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -117,7 +145,7 @@ class LLMCrafterChatWidget {
       </div>
       <div class="llm-crafter-chat-messages"></div>
       <div class="llm-crafter-chat-input">
-        <input type="text" placeholder="${this.config.placeholder}" />
+        <input type="text" placeholder="${localizedPlaceholder}" />
         <button class="llm-crafter-send-btn">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
@@ -131,11 +159,15 @@ class LLMCrafterChatWidget {
     container.appendChild(chatWindow);
     document.body.appendChild(container);
 
+    // Store localized subtitle for resetting later
+    this.localizedSubtitle = localizedSubtitle;
+
     // Store references
     this.elements = {
       container,
       button,
       chatWindow,
+      resetBtn: chatWindow.querySelector('.llm-crafter-reset-btn'),
       closeBtn: chatWindow.querySelector('.llm-crafter-close-btn'),
       messagesContainer: chatWindow.querySelector('.llm-crafter-chat-messages'),
       input: chatWindow.querySelector('.llm-crafter-chat-input input'),
@@ -146,6 +178,9 @@ class LLMCrafterChatWidget {
   attachEventListeners() {
     // Toggle chat window
     this.elements.button.addEventListener('click', () => this.toggle());
+    this.elements.resetBtn.addEventListener('click', () =>
+      this.resetConversation()
+    );
     this.elements.closeBtn.addEventListener('click', () => this.close());
 
     // Send message
@@ -194,7 +229,131 @@ class LLMCrafterChatWidget {
     document.head.appendChild(style);
   }
 
-  async initializeSession() {
+  getLocalizedText(configValue) {
+    // If it's a simple string, return it directly (backwards compatibility)
+    if (typeof configValue === 'string') {
+      return configValue;
+    }
+
+    // If it's an array of language objects
+    if (Array.isArray(configValue) && configValue.length > 0) {
+      // Get user's language (e.g., 'en-US' or 'en')
+      const userLang = navigator.language || navigator.userLanguage || 'en';
+      const userLangShort = userLang.split('-')[0].toLowerCase(); // e.g., 'en' from 'en-US'
+
+      // Try to find exact match first (e.g., 'en-US')
+      let match = configValue.find(
+        item => item.lang && item.lang.toLowerCase() === userLang.toLowerCase()
+      );
+
+      // If no exact match, try short language code (e.g., 'en')
+      if (!match) {
+        match = configValue.find(
+          item => item.lang && item.lang.toLowerCase() === userLangShort
+        );
+      }
+
+      // If match found, return the text
+      if (match && match.text) {
+        return match.text;
+      }
+
+      // Default to first language in array
+      if (configValue[0] && configValue[0].text) {
+        return configValue[0].text;
+      }
+    }
+
+    // Fallback to empty string
+    return '';
+  }
+
+  buildDynamicContext() {
+    // Start with default context
+    const context = {
+      url: window.location.href,
+      language: navigator.language || navigator.userLanguage,
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+    };
+
+    // If dynamicContext is a function, call it to get additional context
+    if (typeof this.config.dynamicContext === 'function') {
+      try {
+        const customContext = this.config.dynamicContext();
+        return { ...context, ...customContext };
+      } catch (error) {
+        console.warn('Error calling dynamicContext function:', error);
+        return context;
+      }
+    }
+
+    // If dynamicContext is an object, merge it with default context
+    if (
+      this.config.dynamicContext &&
+      typeof this.config.dynamicContext === 'object'
+    ) {
+      return { ...context, ...this.config.dynamicContext };
+    }
+
+    return context;
+  }
+
+  saveConversation() {
+    if (!this.conversationId) return;
+
+    try {
+      const expiryTime = Date.now() + this.config.conversationExpiryTime;
+      const conversationData = {
+        conversationId: this.conversationId,
+        expiryTime: expiryTime,
+        lastPollTimestamp: this.lastPollTimestamp,
+      };
+      localStorage.setItem(
+        this.localStorageKey,
+        JSON.stringify(conversationData)
+      );
+    } catch (error) {
+      console.warn('Failed to save conversation to localStorage:', error);
+    }
+  }
+
+  restoreConversation() {
+    try {
+      const stored = localStorage.getItem(this.localStorageKey);
+      if (!stored) return false;
+
+      const conversationData = JSON.parse(stored);
+      const now = Date.now();
+
+      // Check if conversation has expired
+      if (conversationData.expiryTime && conversationData.expiryTime < now) {
+        // Conversation expired, clear it
+        localStorage.removeItem(this.localStorageKey);
+        return false;
+      }
+
+      // Restore conversation state
+      this.conversationId = conversationData.conversationId;
+      this.lastPollTimestamp = conversationData.lastPollTimestamp;
+      this.isFirstOpen = false; // Don't show welcome message for restored conversations
+
+      return true;
+    } catch (error) {
+      console.warn('Failed to restore conversation from localStorage:', error);
+      return false;
+    }
+  }
+
+  clearStoredConversation() {
+    try {
+      localStorage.removeItem(this.localStorageKey);
+    } catch (error) {
+      console.warn('Failed to clear stored conversation:', error);
+    }
+  }
+
+  async initializeSession(hasRestoredConversation = false) {
     try {
       // Create a session using the API key
       const response = await fetch(`${this.config.apiUrl}/api/v1/sessions`, {
@@ -216,10 +375,92 @@ class LLMCrafterChatWidget {
       const result = await response.json();
       const data = result.data || result;
       this.sessionToken = data.session_token || data.token;
-      this.conversationId = data.conversationId;
+
+      // Only update conversationId if we didn't restore one
+      if (!hasRestoredConversation && data.conversationId) {
+        this.conversationId = data.conversationId;
+      }
+
+      // If we restored a conversation, load previous messages and start polling
+      if (hasRestoredConversation && this.conversationId) {
+        await this.loadPreviousMessages();
+        this.startPolling();
+      }
     } catch (error) {
       console.error('LLM Crafter Widget: Failed to initialize session', error);
       this.handleError('Failed to initialize chat session');
+    }
+  }
+
+  async loadPreviousMessages() {
+    if (!this.conversationId || !this.sessionToken) return;
+
+    try {
+      // Use messages/latest endpoint with a timestamp older than the conversation expiry
+      // This ensures we get all messages from the conversation
+      const oldTimestamp = new Date(
+        Date.now() - this.config.conversationExpiryTime - 1000
+      ).toISOString();
+
+      const url = new URL(
+        `${this.config.apiUrl}/api/v1/external/conversations/${this.conversationId}/messages/latest`
+      );
+      url.searchParams.append('since', oldTimestamp);
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'X-Session-Token': this.sessionToken,
+        },
+      });
+
+      if (!response.ok) {
+        console.warn('Failed to load previous messages:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      const messages = data.new_messages || [];
+
+      // Display previous messages (skip system messages)
+      for (const msg of messages) {
+        if (msg.role === 'user') {
+          this.addMessage(msg.content, true);
+          this.displayedMessageIds.add(msg._id);
+          this.displayedMessageIds.add(this.createMessageKey(msg.content));
+        } else if (
+          msg.role === 'assistant' ||
+          msg.role === 'human' ||
+          msg.role === 'human_operator'
+        ) {
+          const isHumanOperator =
+            msg.role === 'human' || msg.role === 'human_operator';
+          const senderName = isHumanOperator
+            ? this.config.humanOperatorName
+            : this.config.botName;
+          this.addMessage(msg.content, false, senderName, isHumanOperator);
+          this.displayedMessageIds.add(msg._id);
+          this.displayedMessageIds.add(this.createMessageKey(msg.content));
+        }
+      }
+
+      // Update last poll timestamp from response
+      if (data.last_poll) {
+        this.lastPollTimestamp = data.last_poll;
+      }
+
+      // Check if conversation is currently in human handoff mode
+      if (data.handoff_active) {
+        this.isHumanControlled = true;
+        const headerInfo = this.elements.chatWindow.querySelector(
+          '.llm-crafter-header-info p'
+        );
+        if (headerInfo) {
+          headerInfo.textContent = '👤 Human operator';
+        }
+      }
+    } catch (error) {
+      console.warn('Error loading previous messages:', error);
     }
   }
 
@@ -265,6 +506,7 @@ class LLMCrafterChatWidget {
     const requestBody = {
       message,
       userIdentifier: this.config.userIdentifier || 'anonymous',
+      dynamicContext: this.buildDynamicContext(),
     };
 
     // Include conversationId if we have one to continue the conversation
@@ -320,6 +562,7 @@ class LLMCrafterChatWidget {
     // Update conversation ID from response
     if (data.conversation_id) {
       this.conversationId = data.conversation_id;
+      this.saveConversation(); // Save to localStorage
 
       // Start polling if not already polling and we have a conversation
       if (!this.pollingIntervalId && this.conversationId) {
@@ -332,6 +575,7 @@ class LLMCrafterChatWidget {
     const requestBody = {
       message,
       userIdentifier: this.config.userIdentifier || 'anonymous',
+      dynamicContext: this.buildDynamicContext(),
     };
 
     // Include conversationId if we have one to continue the conversation
@@ -397,6 +641,7 @@ class LLMCrafterChatWidget {
       // Update conversation ID
       if (conversationId) {
         this.conversationId = conversationId;
+        this.saveConversation(); // Save to localStorage
         if (!this.pollingIntervalId && this.conversationId) {
           this.startPolling();
         }
@@ -408,8 +653,13 @@ class LLMCrafterChatWidget {
     // Create a message bubble for streaming response
     const messageDiv = document.createElement('div');
     messageDiv.className = 'llm-crafter-message bot';
+
+    const avatarContent = this.config.botAvatarUrl
+      ? `<div class="llm-crafter-message-avatar"><img src="${this.escapeHtml(this.config.botAvatarUrl)}" alt="Bot" /></div>`
+      : `<div class="llm-crafter-message-avatar">${this.config.avatarText}</div>`;
+
     messageDiv.innerHTML = `
-      <div class="llm-crafter-message-avatar">${this.config.avatarText}</div>
+      ${avatarContent}
       <div class="llm-crafter-message-content">
         ${this.config.botName ? `<div class="llm-crafter-message-sender">${this.escapeHtml(this.config.botName)}</div>` : ''}
         <div class="llm-crafter-message-bubble"></div>
@@ -484,6 +734,7 @@ class LLMCrafterChatWidget {
     // Update conversation ID
     if (conversationId) {
       this.conversationId = conversationId;
+      this.saveConversation(); // Save to localStorage
 
       // Start polling if not already polling
       if (!this.pollingIntervalId && this.conversationId) {
@@ -536,14 +787,24 @@ class LLMCrafterChatWidget {
     const messageDiv = document.createElement('div');
     messageDiv.className = `llm-crafter-message ${isUser ? 'user' : 'bot'}`;
 
-    // Determine avatar text based on sender type
-    let avatarText;
+    // Determine avatar content based on sender type
+    let avatarContent;
     if (isUser) {
-      avatarText = this.config.userAvatarText;
+      avatarContent = `<div class="llm-crafter-message-avatar">${this.escapeHtml(this.config.userAvatarText)}</div>`;
     } else if (isHumanOperator) {
-      avatarText = this.config.humanAvatarText;
+      // Use human avatar URL if available, otherwise use text
+      if (this.config.humanAvatarUrl) {
+        avatarContent = `<div class="llm-crafter-message-avatar"><img src="${this.escapeHtml(this.config.humanAvatarUrl)}" alt="Human" /></div>`;
+      } else {
+        avatarContent = `<div class="llm-crafter-message-avatar">${this.escapeHtml(this.config.humanAvatarText)}</div>`;
+      }
     } else {
-      avatarText = this.config.avatarText;
+      // Use bot avatar URL if available, otherwise use text
+      if (this.config.botAvatarUrl) {
+        avatarContent = `<div class="llm-crafter-message-avatar"><img src="${this.escapeHtml(this.config.botAvatarUrl)}" alt="Bot" /></div>`;
+      } else {
+        avatarContent = `<div class="llm-crafter-message-avatar">${this.escapeHtml(this.config.avatarText)}</div>`;
+      }
     }
 
     // Determine the sender name to display
@@ -553,7 +814,7 @@ class LLMCrafterChatWidget {
     const transformedText = this.transformMessage(text);
 
     messageDiv.innerHTML = `
-      <div class="llm-crafter-message-avatar">${this.escapeHtml(avatarText)}</div>
+      ${avatarContent}
       <div class="llm-crafter-message-content">
         ${displayName ? `<div class="llm-crafter-message-sender">${this.escapeHtml(displayName)}</div>` : ''}
         <div class="llm-crafter-message-bubble">${transformedText}</div>
@@ -580,8 +841,13 @@ class LLMCrafterChatWidget {
     const typingDiv = document.createElement('div');
     typingDiv.className = 'llm-crafter-message bot';
     typingDiv.id = 'llm-crafter-typing';
+
+    const avatarContent = this.config.botAvatarUrl
+      ? `<div class="llm-crafter-message-avatar"><img src="${this.escapeHtml(this.config.botAvatarUrl)}" alt="Bot" /></div>`
+      : `<div class="llm-crafter-message-avatar">${this.config.avatarText}</div>`;
+
     typingDiv.innerHTML = `
-      <div class="llm-crafter-message-avatar">${this.config.avatarText}</div>
+      ${avatarContent}
       <div class="llm-crafter-message-content">
         <div class="llm-crafter-typing-indicator">
           <div class="llm-crafter-typing-dot"></div>
@@ -621,6 +887,18 @@ class LLMCrafterChatWidget {
       this.elements.messagesContainer.scrollHeight;
   }
 
+  showAnimatedWelcomeMessage() {
+    // Show typing indicator
+    this.showTypingIndicator();
+
+    // Wait a bit to simulate typing, then show welcome message
+    setTimeout(() => {
+      this.hideTypingIndicator();
+      const localizedWelcome = this.getLocalizedWelcomeMessage();
+      this.addMessage(localizedWelcome, false);
+    }, 1000); // 1 second delay to simulate typing
+  }
+
   escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -633,6 +911,16 @@ class LLMCrafterChatWidget {
     this.elements.button.classList.remove('open');
     this.elements.button.classList.add('close');
     this.elements.input.focus();
+
+    // Show welcome message with typing animation on first open
+    if (this.isFirstOpen && this.config.welcomeMessage) {
+      this.isFirstOpen = false;
+      this.showAnimatedWelcomeMessage();
+    }
+  }
+
+  getLocalizedWelcomeMessage() {
+    return this.getLocalizedText(this.config.welcomeMessage);
   }
 
   close() {
@@ -729,7 +1017,7 @@ class LLMCrafterChatWidget {
           '.llm-crafter-header-info p'
         );
         if (headerInfo) {
-          headerInfo.textContent = this.config.subtitle;
+          headerInfo.textContent = this.localizedSubtitle;
         }
       }
 
@@ -793,13 +1081,22 @@ class LLMCrafterChatWidget {
     }
   }
 
-  clearMessages() {
-    this.messages = [];
+  resetConversation() {
+    // Stop polling
+    this.stopPolling();
+
+    // Clear localStorage
+    this.clearStoredConversation();
+
+    // Reset all state
     this.conversationId = null;
     this.lastPollTimestamp = null;
     this.isHumanControlled = false;
-    this.displayedMessageIds.clear(); // Clear tracked message IDs
-    this.stopPolling();
+    this.displayedMessageIds.clear();
+    this.isFirstOpen = true;
+    this.messages = [];
+
+    // Clear UI
     this.elements.messagesContainer.innerHTML = '';
 
     // Reset subtitle to original
@@ -807,12 +1104,39 @@ class LLMCrafterChatWidget {
       '.llm-crafter-header-info p'
     );
     if (headerInfo) {
-      headerInfo.textContent = this.config.subtitle;
+      headerInfo.textContent = this.localizedSubtitle;
     }
 
+    // Show welcome message with animation
     if (this.config.welcomeMessage) {
-      this.addMessage(this.config.welcomeMessage, false);
+      this.showAnimatedWelcomeMessage();
+      this.isFirstOpen = false; // Mark as shown
     }
+
+    // Reinitialize session
+    this.initializeSession(false);
+  }
+
+  clearMessages() {
+    this.messages = [];
+    this.conversationId = null;
+    this.lastPollTimestamp = null;
+    this.isHumanControlled = false;
+    this.displayedMessageIds.clear(); // Clear tracked message IDs
+    this.isFirstOpen = true; // Reset first open flag
+    this.stopPolling();
+    this.clearStoredConversation(); // Clear from localStorage
+    this.elements.messagesContainer.innerHTML = '';
+
+    // Reset subtitle to original
+    const headerInfo = this.elements.chatWindow.querySelector(
+      '.llm-crafter-header-info p'
+    );
+    if (headerInfo) {
+      headerInfo.textContent = this.localizedSubtitle;
+    }
+
+    // Welcome message will show again on next open
   }
 
   setUserIdentifier(identifier) {
@@ -846,12 +1170,17 @@ class LLMCrafterChatWidget {
       secondaryColor: script.getAttribute('data-secondary-color'),
       position: script.getAttribute('data-position'),
       autoOpen: script.getAttribute('data-auto-open') === 'true',
+      autoOpenDelay:
+        parseInt(script.getAttribute('data-auto-open-delay')) || null,
       showPoweredBy: script.getAttribute('data-show-powered-by') !== 'false',
       poweredByUrl: script.getAttribute('data-powered-by-url'),
       poweredByText: script.getAttribute('data-powered-by-text'),
       enableStreaming: script.getAttribute('data-enable-streaming') !== 'false',
       pollingInterval:
         parseInt(script.getAttribute('data-polling-interval')) || 3000,
+      conversationExpiryTime:
+        parseInt(script.getAttribute('data-conversation-expiry-time')) ||
+        86400000,
     };
 
     // Remove null/undefined values
