@@ -65,7 +65,9 @@ class LLMCrafterChatWidget {
     this.lastPollTimestamp = null;
     this.isHumanControlled = false;
     this.displayedMessageIds = new Set(); // Track message IDs to prevent duplicates
+    this.displayedMessageTimestamps = new Map(); // Track when messages were displayed
     this.localStorageKey = `llm-crafter-conversation-${this.config.agentId}`; // Unique key per agent
+    this.lastMessageSender = null; // Track last message sender for bundling
 
     this.init();
   }
@@ -424,10 +426,17 @@ class LLMCrafterChatWidget {
 
       // Display previous messages (skip system messages)
       for (const msg of messages) {
+        // Skip system messages
+        if (msg.role === 'system') {
+          continue;
+        }
+
         if (msg.role === 'user') {
           this.addMessage(msg.content, true);
-          this.displayedMessageIds.add(msg._id);
-          this.displayedMessageIds.add(this.createMessageKey(msg.content));
+          if (msg._id) {
+            this.displayedMessageIds.add(msg._id);
+          }
+          // Don't track content hash for user messages - they can send same message multiple times
         } else if (
           msg.role === 'assistant' ||
           msg.role === 'human' ||
@@ -435,12 +444,30 @@ class LLMCrafterChatWidget {
         ) {
           const isHumanOperator =
             msg.role === 'human' || msg.role === 'human_operator';
-          const senderName = isHumanOperator
-            ? this.config.humanOperatorName
-            : this.config.botName;
+
+          // For human operators, try to get name from handler_info
+          let senderName;
+          if (
+            isHumanOperator &&
+            msg.handler_info &&
+            msg.handler_info.human_operator &&
+            msg.handler_info.human_operator.name
+          ) {
+            senderName = msg.handler_info.human_operator.name;
+          } else if (isHumanOperator) {
+            senderName = this.config.humanOperatorName;
+          } else {
+            senderName = this.config.botName;
+          }
+
           this.addMessage(msg.content, false, senderName, isHumanOperator);
-          this.displayedMessageIds.add(msg._id);
-          this.displayedMessageIds.add(this.createMessageKey(msg.content));
+          if (msg._id) {
+            this.displayedMessageIds.add(msg._id);
+          }
+          // Only track content hash for AI messages (not human operators)
+          if (!isHumanOperator) {
+            this.displayedMessageIds.add(this.createMessageKey(msg.content));
+          }
         }
       }
 
@@ -783,7 +810,83 @@ class LLMCrafterChatWidget {
     return this.escapeHtml(text);
   }
 
+  addSystemMessage(text) {
+    // Reset sender tracking when system message is added
+    this.lastMessageSender = null;
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'llm-crafter-system-message';
+    messageDiv.innerHTML = `
+      <div class="llm-crafter-system-message-content">
+        <span>${this.escapeHtml(text)}</span>
+      </div>
+    `;
+
+    this.elements.messagesContainer.appendChild(messageDiv);
+    this.scrollToBottom();
+  }
+
   addMessage(text, isUser = false, senderName = null, isHumanOperator = false) {
+    // Determine the sender name to display
+    const displayName = senderName || (isUser ? null : this.config.botName);
+
+    // Create a unique sender identifier for bundling
+    // Important: user messages should always have 'user' identifier regardless of other state
+    const senderIdentifier = isUser
+      ? 'user'
+      : isHumanOperator
+        ? `human_${displayName}`
+        : `bot_${displayName}`;
+
+    // Check if this message is from the same sender as the last message
+    // Only bundle if lastMessageSender is not null and matches
+    const isSameSender =
+      this.lastMessageSender !== null &&
+      this.lastMessageSender === senderIdentifier;
+
+    // Transform the message if a transformer function is provided
+    const transformedText = this.transformMessage(text);
+
+    if (isSameSender) {
+      // Bundle with previous message - just add a new bubble
+      const lastMessage = this.elements.messagesContainer.lastElementChild;
+      if (
+        lastMessage &&
+        lastMessage.classList.contains('llm-crafter-message') &&
+        !lastMessage.id // Exclude typing indicator which has id='llm-crafter-typing'
+      ) {
+        // Verify the last message matches the expected sender type
+        const isLastMessageUser = lastMessage.classList.contains('user');
+        const shouldBeUser = isUser;
+
+        if (isLastMessageUser === shouldBeUser) {
+          const contentDiv = lastMessage.querySelector(
+            '.llm-crafter-message-content'
+          );
+          if (contentDiv) {
+            const newBubble = document.createElement('div');
+            newBubble.className = 'llm-crafter-message-bubble';
+            newBubble.innerHTML = transformedText;
+            contentDiv.appendChild(newBubble);
+            this.scrollToBottom();
+
+            // Store message
+            this.messages.push({
+              text,
+              isUser,
+              senderName,
+              isHumanOperator,
+              timestamp: new Date(),
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // Not same sender or no previous message - create new message group
+    this.lastMessageSender = senderIdentifier;
+
     const messageDiv = document.createElement('div');
     messageDiv.className = `llm-crafter-message ${isUser ? 'user' : 'bot'}`;
 
@@ -806,12 +909,6 @@ class LLMCrafterChatWidget {
         avatarContent = `<div class="llm-crafter-message-avatar">${this.escapeHtml(this.config.avatarText)}</div>`;
       }
     }
-
-    // Determine the sender name to display
-    const displayName = senderName || (isUser ? null : this.config.botName);
-
-    // Transform the message if a transformer function is provided
-    const transformedText = this.transformMessage(text);
 
     messageDiv.innerHTML = `
       ${avatarContent}
@@ -943,8 +1040,11 @@ class LLMCrafterChatWidget {
       return;
     }
 
-    // Set initial timestamp to now
-    this.lastPollTimestamp = new Date().toISOString();
+    // Set initial timestamp to now only if not already set
+    // (it may have been set by loadPreviousMessages when restoring a conversation)
+    if (!this.lastPollTimestamp) {
+      this.lastPollTimestamp = new Date().toISOString();
+    }
 
     // Poll for new messages at configured interval
     this.pollingIntervalId = setInterval(() => {
@@ -993,9 +1093,12 @@ class LLMCrafterChatWidget {
         this.lastPollTimestamp = data.last_poll;
       }
 
-      // Check if human has taken over
+      // Check if human has taken over and add system message BEFORE processing messages
       if (data.handoff_active && !this.isHumanControlled) {
         this.isHumanControlled = true;
+
+        // Add hardcoded system message to timeline
+        this.addSystemMessage('Human joined chat');
 
         // Update subtitle to show human operator
         const headerInfo = this.elements.chatWindow.querySelector(
@@ -1013,6 +1116,9 @@ class LLMCrafterChatWidget {
         // Human handed back to agent
         this.isHumanControlled = false;
 
+        // Add hardcoded system message for handback
+        this.addSystemMessage('AI assistant joined chat');
+
         const headerInfo = this.elements.chatWindow.querySelector(
           '.llm-crafter-header-info p'
         );
@@ -1021,16 +1127,28 @@ class LLMCrafterChatWidget {
         }
       }
 
-      // Add any new messages from human operators
+      // Process new messages (skip system messages, they're internal)
       if (data.new_messages && data.new_messages.length > 0) {
         for (const msg of data.new_messages) {
+          // Skip system messages - they are internal and not meant for users
+          if (msg.role === 'system') {
+            continue;
+          }
+
           // Skip if we've already displayed this message (prevent duplicates)
-          // Check both by _id and by content hash
+          // For human operators and users, only check message ID (they can send similar messages)
+          // For AI/assistant, check both ID and content hash to prevent duplicate responses
+          const isHumanMessage =
+            msg.role === 'user' ||
+            msg.role === 'human' ||
+            msg.role === 'human_operator';
           const contentKey = this.createMessageKey(msg.content);
-          if (
-            (msg._id && this.displayedMessageIds.has(msg._id)) ||
-            this.displayedMessageIds.has(contentKey)
-          ) {
+          const hasMsgId = msg._id && this.displayedMessageIds.has(msg._id);
+          const hasContentKey =
+            !isHumanMessage && this.displayedMessageIds.has(contentKey);
+          const isDuplicate = hasMsgId || hasContentKey;
+
+          if (isDuplicate) {
             continue;
           }
 
@@ -1044,17 +1162,33 @@ class LLMCrafterChatWidget {
             // Determine sender name and avatar based on role
             const isHumanOperator =
               msg.role === 'human' || msg.role === 'human_operator';
-            const senderName = isHumanOperator
-              ? this.config.humanOperatorName
-              : this.config.botName;
+
+            // For human operators, try to get name from handler_info, otherwise use default
+            let senderName;
+            if (
+              isHumanOperator &&
+              msg.handler_info &&
+              msg.handler_info.human_operator &&
+              msg.handler_info.human_operator.name
+            ) {
+              senderName = msg.handler_info.human_operator.name;
+            } else if (isHumanOperator) {
+              senderName = this.config.humanOperatorName;
+            } else {
+              senderName = this.config.botName;
+            }
 
             this.addMessage(msg.content, false, senderName, isHumanOperator);
 
-            // Track this message ID and content to prevent duplicates
+            // Track this message ID to prevent duplicates
             if (msg._id) {
               this.displayedMessageIds.add(msg._id);
             }
-            this.displayedMessageIds.add(contentKey);
+            // Only track content hash for AI messages (not human operators)
+            // Human operators should be able to send similar/identical messages
+            if (!isHumanOperator) {
+              this.displayedMessageIds.add(contentKey);
+            }
 
             // Call onMessageReceived callback for human messages
             if (this.config.onMessageReceived) {
@@ -1095,6 +1229,7 @@ class LLMCrafterChatWidget {
     this.displayedMessageIds.clear();
     this.isFirstOpen = true;
     this.messages = [];
+    this.lastMessageSender = null;
 
     // Clear UI
     this.elements.messagesContainer.innerHTML = '';
@@ -1124,6 +1259,7 @@ class LLMCrafterChatWidget {
     this.isHumanControlled = false;
     this.displayedMessageIds.clear(); // Clear tracked message IDs
     this.isFirstOpen = true; // Reset first open flag
+    this.lastMessageSender = null; // Reset sender tracking
     this.stopPolling();
     this.clearStoredConversation(); // Clear from localStorage
     this.elements.messagesContainer.innerHTML = '';
