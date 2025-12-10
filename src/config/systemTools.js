@@ -581,7 +581,7 @@ const systemTools = [
     name: 'request_human_handoff',
     display_name: 'Request Human Handoff',
     description:
-      'Request human operator to take over the conversation when the agent cannot adequately help the user. Use this when encountering complex issues, frustrated users, or requests requiring human judgment.',
+      'Tool to request a human operator to take over the conversation. Call this tool (ACTION: use_tool, TOOL: request_human_handoff) when you cannot adequately help the user due to complex issues, frustrated users, or requests requiring human judgment. Do NOT use this as a direct action.',
     category: 'communication',
     parameters_schema: {
       type: 'object',
@@ -589,7 +589,7 @@ const systemTools = [
         reason: {
           type: 'string',
           description:
-            'Detailed explanation of why human intervention is needed',
+            'Detailed explanation of why human intervention is needed (e.g., "Customer requested to speak with a human", "Issue too complex for automated resolution")',
         },
         urgency: {
           type: 'string',
@@ -600,7 +600,7 @@ const systemTools = [
         context_summary: {
           type: 'string',
           description:
-            'Brief summary of the conversation and current situation for the human operator',
+            'Brief summary of the conversation and current situation for the human operator (e.g., "User asked to speak with a human without providing additional context")',
         },
       },
       required: ['reason'],

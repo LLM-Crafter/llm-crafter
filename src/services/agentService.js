@@ -1504,11 +1504,17 @@ Current Iteration: ${iteration}
 
 You must respond in one of these formats:
 
-1. To use a tool:
+1. To use a tool (including request_human_handoff):
 ACTION: use_tool
 TOOL: tool_name
 PARAMETERS: {"param1": "value1", "param2": "value2"}
 REASONING: Why you need to use this tool
+
+IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool name as the action.
+Example for human handoff:
+ACTION: use_tool
+TOOL: request_human_handoff
+PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low"}
 
 For api_caller tool, use this format:
 PARAMETERS: {
@@ -1598,11 +1604,17 @@ Current Iteration: ${iteration}
 
 You must respond in one of these formats:
 
-1. To use a tool:
+1. To use a tool (including request_human_handoff):
 ACTION: use_tool
 TOOL: tool_name
 PARAMETERS: {"param1": "value1", "param2": "value2"}
 REASONING: Why you need to use this tool
+
+IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool name as the action.
+Example for human handoff:
+ACTION: use_tool
+TOOL: request_human_handoff
+PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low"}
 
 For api_caller tool, use this format:
 PARAMETERS: {
