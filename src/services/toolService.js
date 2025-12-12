@@ -2081,7 +2081,12 @@ class ToolService {
    * Human handoff tool handler
    */
   async humanHandoffHandler(parameters, config) {
-    const { reason, urgency = 'medium', context_summary } = parameters;
+    const {
+      reason,
+      urgency = 'medium',
+      context_summary,
+      handoff_message,
+    } = parameters;
 
     if (!reason) {
       throw new Error('Reason parameter is required for human handoff request');
@@ -2091,6 +2096,7 @@ class ToolService {
       reason,
       urgency,
       context_summary,
+      handoff_message,
     });
     console.log('Tool config keys:', Object.keys(config));
 
@@ -2143,11 +2149,16 @@ class ToolService {
         context_summary
       );
 
+      // Use custom handoff message if provided, otherwise use default
+      const defaultMessage =
+        'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+
+      const messageContent = handoff_message || defaultMessage;
+
       // Add agent's transition message
       await conversation.addMessage({
         role: 'assistant',
-        content:
-          'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.',
+        content: messageContent,
         handler_info: { agent_id: agent_id || 'unknown' },
       });
 

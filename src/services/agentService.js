@@ -112,15 +112,17 @@ class AgentService {
       dynamicContext
     );
 
-    // Add assistant response to conversation
-    await conversation.addMessage({
-      role: 'assistant',
-      content: response.content,
-      thinking_process: response.thinking_process,
-      tools_used: response.tools_used,
-      token_usage: response.token_usage,
-      timestamp: new Date(),
-    });
+    // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
+    if (response.content) {
+      await conversation.addMessage({
+        role: 'assistant',
+        content: response.content,
+        thinking_process: response.thinking_process,
+        tools_used: response.tools_used,
+        token_usage: response.token_usage,
+        timestamp: new Date(),
+      });
+    }
 
     // Generate question suggestions if enabled
     let suggestions = null;
@@ -283,15 +285,17 @@ class AgentService {
       streamCallback
     );
 
-    // Add assistant response to conversation
-    await conversation.addMessage({
-      role: 'assistant',
-      content: response.content,
-      thinking_process: response.thinking_process,
-      tools_used: response.tools_used,
-      token_usage: response.token_usage,
-      timestamp: new Date(),
-    });
+    // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
+    if (response.content) {
+      await conversation.addMessage({
+        role: 'assistant',
+        content: response.content,
+        thinking_process: response.thinking_process,
+        tools_used: response.tools_used,
+        token_usage: response.token_usage,
+        timestamp: new Date(),
+      });
+    }
 
     // Generate question suggestions if enabled
     let suggestions = null;
@@ -594,8 +598,13 @@ class AgentService {
           parsedResponse.tool_name === 'request_human_handoff' &&
           toolResult.success
         ) {
-          finalResponse =
+          // Get the handoff message from parameters or use default
+          const handoffMessage =
+            parsedResponse.tool_parameters.handoff_message ||
             'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+
+          // Set as final response so it appears in the response
+          finalResponse = handoffMessage;
           thinkingProcess.push({
             step: 'human_handoff_requested',
             reasoning:
@@ -622,7 +631,12 @@ class AgentService {
       }
     }
 
-    if (!finalResponse) {
+    // Check if handoff occurred - if so, don't show fallback error message
+    const handoffOccurred = thinkingProcess.some(
+      step => step.step === 'human_handoff_requested'
+    );
+
+    if (!finalResponse && !handoffOccurred) {
       finalResponse =
         "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
     }
@@ -794,8 +808,18 @@ class AgentService {
           parsedResponse.tool_name === 'request_human_handoff' &&
           toolResult.success
         ) {
-          finalResponse =
+          // Get the handoff message from parameters or use default
+          const handoffMessage =
+            parsedResponse.tool_parameters.handoff_message ||
             'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+
+          // Stream the handoff message to the frontend
+          if (streamCallback) {
+            streamCallback(handoffMessage);
+          }
+
+          // Set as final response so it appears in the response
+          finalResponse = handoffMessage;
           thinkingProcess.push({
             step: 'human_handoff_requested',
             reasoning:
@@ -822,7 +846,12 @@ class AgentService {
       }
     }
 
-    if (!finalResponse) {
+    // Check if handoff occurred - if so, don't show fallback error message
+    const handoffOccurred = thinkingProcess.some(
+      step => step.step === 'human_handoff_requested'
+    );
+
+    if (!finalResponse && !handoffOccurred) {
       finalResponse =
         "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
     }
@@ -1528,7 +1557,9 @@ IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool na
 Example for human handoff:
 ACTION: use_tool
 TOOL: request_human_handoff
-PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low"}
+PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low", "handoff_message": "I understand you'd like to speak with a human agent. Let me connect you with one of our team members who will assist you shortly. Please wait a moment."}
+
+Note: The handoff_message parameter is optional but recommended. It allows you to provide a contextual message in the user's language explaining why the handoff is happening.
 
 For api_caller tool, use this format:
 PARAMETERS: {
@@ -1628,7 +1659,9 @@ IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool na
 Example for human handoff:
 ACTION: use_tool
 TOOL: request_human_handoff
-PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low"}
+PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low", "handoff_message": "I understand you'd like to speak with a human agent. Let me connect you with one of our team members who will assist you shortly. Please wait a moment."}
+
+Note: The handoff_message parameter is optional but recommended. It allows you to provide a contextual message in the user's language explaining why the handoff is happening.
 
 For api_caller tool, use this format:
 PARAMETERS: {

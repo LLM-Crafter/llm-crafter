@@ -602,6 +602,11 @@ const systemTools = [
           description:
             'Brief summary of the conversation and current situation for the human operator (e.g., "User asked to speak with a human without providing additional context")',
         },
+        handoff_message: {
+          type: 'string',
+          description:
+            'Custom message to display to the user when handing off to a human agent. This message should be in the same language as the conversation and provide specific context about why the handoff is happening. If not provided, a default English message will be used. Example: "Since you\'ve requested to negotiate the price, our human agent will intervene. Please wait patiently and someone will reply in this conversation."',
+        },
       },
       required: ['reason'],
       additionalProperties: false,
