@@ -91,6 +91,13 @@ class AgentService {
       };
     }
 
+    // Update dynamic context if provided
+    if (dynamicContext && Object.keys(dynamicContext).length > 0) {
+      conversation.dynamic_context = dynamicContext;
+      conversation.dynamic_context_updated_at = new Date();
+      await conversation.save();
+    }
+
     // Add user message to conversation
     await conversation.addMessage({
       role: 'user',
@@ -252,6 +259,13 @@ class AgentService {
         },
         tools_used: [],
       };
+    }
+
+    // Update dynamic context if provided
+    if (dynamicContext && Object.keys(dynamicContext).length > 0) {
+      conversation.dynamic_context = dynamicContext;
+      conversation.dynamic_context_updated_at = new Date();
+      await conversation.save();
     }
 
     // Add user message to conversation

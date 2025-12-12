@@ -212,6 +212,16 @@ const conversationSchema = new mongoose.Schema(
         default: false,
       },
     },
+    // Dynamic context passed from external sources (stored as the most recent context)
+    dynamic_context: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    // Timestamp of when dynamic_context was last updated
+    dynamic_context_updated_at: {
+      type: Date,
+      default: null,
+    },
     summary: {
       type: String,
       trim: true,
