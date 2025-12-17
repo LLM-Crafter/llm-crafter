@@ -40,7 +40,7 @@ class LLMCrafterChatWidget {
       autoOpenDelay: config.autoOpenDelay || null, // Delay in milliseconds before auto-opening (e.g., 30000 for 30 seconds)
       showPoweredBy: config.showPoweredBy !== false,
       poweredByUrl: config.poweredByUrl || '#',
-      poweredByText: config.poweredByText || 'LLM Crafter',
+      poweredByText: config.poweredByText || 'Powered by LLM Crafter',
       userIdentifier: config.userIdentifier || null,
       enableStreaming: config.enableStreaming !== false,
       pollingInterval: config.pollingInterval || 3000, // Poll for new messages every 3 seconds
@@ -154,7 +154,7 @@ class LLMCrafterChatWidget {
           </svg>
         </button>
       </div>
-      ${this.config.showPoweredBy ? `<div class="llm-crafter-powered-by">Powered by <a href="${this.config.poweredByUrl}" target="_blank">${this.config.poweredByText}</a></div>` : ''}
+      ${this.config.showPoweredBy ? `<div class="llm-crafter-powered-by"><a href="${this.config.poweredByUrl}" target="_blank">${this.config.poweredByText}</a></div>` : ''}
     `;
 
     container.appendChild(button);
