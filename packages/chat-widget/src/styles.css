@@ -155,6 +155,7 @@
 .llm-crafter-header-info p {
   font-size: 12px;
   opacity: 0.9;
+  color: var(--white) !important;
 }
 
 .llm-crafter-reset-btn,
