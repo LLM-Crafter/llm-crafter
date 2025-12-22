@@ -7,7 +7,13 @@ const channelOrchestrator = require('../services/channelOrchestrator');
  */
 const getPendingHandoffs = async (req, res) => {
   try {
-    const { page = 1, limit = 20, urgency } = req.query;
+    const {
+      page = 1,
+      limit = 20,
+      urgency,
+      organizationId,
+      projectId,
+    } = req.query;
     const skip = (page - 1) * limit;
 
     // Get user's organizations
@@ -20,10 +26,27 @@ const getPendingHandoffs = async (req, res) => {
 
     const orgIds = userOrganizations.map(org => org._id);
 
-    // Find all agents belonging to user's organizations
-    const agents = await Agent.find({ organization: { $in: orgIds } }).select(
-      '_id'
-    );
+    // Build agent filter
+    const agentFilter = { organization: { $in: orgIds } };
+
+    // If organizationId is provided, filter by that organization only
+    if (organizationId) {
+      // Verify user has access to this organization
+      if (!orgIds.some(id => id.toString() === organizationId)) {
+        return res
+          .status(403)
+          .json({ error: 'Access denied to this organization' });
+      }
+      agentFilter.organization = organizationId;
+    }
+
+    // If projectId is provided, filter by that project
+    if (projectId) {
+      agentFilter.project = projectId;
+    }
+
+    // Find all agents belonging to user's organizations (filtered by params)
+    const agents = await Agent.find(agentFilter).select('_id');
     const agentIds = agents.map(agent => agent._id);
 
     // Build filter for conversations

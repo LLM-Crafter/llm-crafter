@@ -453,7 +453,7 @@ class LLMCrafterChatWidget {
             msg.handler_info.human_operator &&
             msg.handler_info.human_operator.name
           ) {
-            senderName = msg.handler_info.human_operator.name;
+            senderName = this.config.humanOperatorName;
           } else if (isHumanOperator) {
             senderName = this.config.humanOperatorName;
           } else {
@@ -689,7 +689,13 @@ class LLMCrafterChatWidget {
       ${avatarContent}
       <div class="llm-crafter-message-content">
         ${this.config.botName ? `<div class="llm-crafter-message-sender">${this.escapeHtml(this.config.botName)}</div>` : ''}
-        <div class="llm-crafter-message-bubble"></div>
+        <div class="llm-crafter-message-bubble">
+          <div class="llm-crafter-streaming-loader">
+            <div class="llm-crafter-typing-dot"></div>
+            <div class="llm-crafter-typing-dot"></div>
+            <div class="llm-crafter-typing-dot"></div>
+          </div>
+        </div>
       </div>
     `;
     this.elements.messagesContainer.appendChild(messageDiv);
@@ -726,7 +732,7 @@ class LLMCrafterChatWidget {
                   // Apply transformation to the accumulated response
                   const transformedText = this.transformMessage(fullResponse);
                   bubbleElement.innerHTML = transformedText;
-                  this.scrollToBottom();
+                  this.scrollToBottomIfNeeded();
                 } else if (parsed.type === 'complete') {
                   conversationId = parsed.conversation_id;
                   messageId = parsed.message_id;
@@ -982,6 +988,21 @@ class LLMCrafterChatWidget {
   scrollToBottom() {
     this.elements.messagesContainer.scrollTop =
       this.elements.messagesContainer.scrollHeight;
+  }
+
+  shouldAutoScroll() {
+    // Check if user is near the bottom (within 100px)
+    const container = this.elements.messagesContainer;
+    const threshold = 100;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    return distanceFromBottom < threshold;
+  }
+
+  scrollToBottomIfNeeded() {
+    if (this.shouldAutoScroll()) {
+      this.scrollToBottom();
+    }
   }
 
   showAnimatedWelcomeMessage() {
