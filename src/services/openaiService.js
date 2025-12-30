@@ -371,6 +371,7 @@ class OpenAIService {
         model,
         messages,
         stream: true,
+        stream_options: { include_usage: true },
         ...mappedParams,
       });
 
@@ -392,6 +393,14 @@ class OpenAIService {
           promptTokens = chunk.usage.prompt_tokens;
           completionTokens = chunk.usage.completion_tokens;
         }
+      }
+
+      // If usage wasn't provided in stream, estimate token counts
+      if (promptTokens === 0 && completionTokens === 0) {
+        // Estimate tokens: ~4 characters per token on average
+        const promptText = messages.map(m => m.content).join(' ');
+        promptTokens = Math.ceil(promptText.length / 4);
+        completionTokens = Math.ceil(fullContent.length / 4);
       }
 
       const cost = this.calculateCost(model, promptTokens, completionTokens);
