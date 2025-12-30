@@ -29,12 +29,6 @@ class AgentService {
       throw new Error('Agent not found');
     }
 
-    if (!agent.is_active) {
-      throw new Error(
-        'Agent is currently disabled. Please contact your administrator.'
-      );
-    }
-
     if (agent.type !== 'chatbot') {
       throw new Error('Agent is not a chatbot type');
     }
@@ -55,6 +49,35 @@ class AgentService {
         title: this.generateConversationTitle(userMessage),
       });
       await conversation.save();
+    }
+
+    // If agent is disabled, switch to human handler
+    if (!agent.is_active) {
+      // Add user message to conversation
+      await conversation.addMessage({
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date(),
+      });
+
+      // Switch conversation to human handler
+      conversation.current_handler = 'human';
+      conversation.status = 'human_controlled';
+      await conversation.save();
+
+      return {
+        conversation_id: conversation._id,
+        response:
+          'This agent is currently unavailable. Your conversation has been forwarded to a human operator who will assist you shortly.',
+        current_handler: 'human',
+        token_usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          cost: 0,
+        },
+        tools_used: [],
+      };
     }
 
     // Check if conversation is under human control or handoff requested
@@ -200,12 +223,6 @@ class AgentService {
       throw new Error('Agent not found');
     }
 
-    if (!agent.is_active) {
-      throw new Error(
-        'Agent is currently disabled. Please contact your administrator.'
-      );
-    }
-
     if (agent.type !== 'chatbot') {
       throw new Error('Agent is not a chatbot type');
     }
@@ -226,6 +243,35 @@ class AgentService {
         title: this.generateConversationTitle(userMessage),
       });
       await conversation.save();
+    }
+
+    // If agent is disabled, switch to human handler
+    if (!agent.is_active) {
+      // Add user message to conversation
+      await conversation.addMessage({
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date(),
+      });
+
+      // Switch conversation to human handler
+      conversation.current_handler = 'human';
+      conversation.status = 'human_controlled';
+      await conversation.save();
+
+      return {
+        conversation_id: conversation._id,
+        response: '',
+        current_handler: 'human',
+        handoff_status: 'human_controlled',
+        token_usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          cost: 0,
+        },
+        tools_used: [],
+      };
     }
 
     // Check if conversation is under human control or handoff requested

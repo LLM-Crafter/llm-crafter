@@ -231,8 +231,18 @@ const sendHumanMessage = async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
+    // Check if conversation is under human control
+    if (conversation.current_handler !== 'human') {
+      return res.status(403).json({
+        error: 'Conversation is not under human control',
+      });
+    }
+
+    // Only verify assigned human if there is one (from a formal handoff)
+    // This allows any human operator to respond when agent is disabled
     if (
-      conversation.current_handler !== 'human' ||
+      conversation.handoff_info &&
+      conversation.handoff_info.assigned_human &&
       conversation.handoff_info.assigned_human !== humanOperator._id.toString()
     ) {
       return res.status(403).json({
