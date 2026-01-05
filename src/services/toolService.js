@@ -2155,18 +2155,14 @@ class ToolService {
 
       const messageContent = handoff_message || defaultMessage;
 
-      // Add agent's transition message
-      await conversation.addMessage({
-        role: 'assistant',
-        content: messageContent,
-        handler_info: { agent_id: agent_id || 'unknown' },
-      });
-
+      // Return the handoff result with suggested message
+      // The agent execution flow will add the actual message to avoid duplicates
       return {
         success: true,
         result: 'Human handoff requested successfully',
         handoff_requested: true,
         conversation_status: 'handoff_requested',
+        suggested_message: messageContent,
       };
     } catch (error) {
       console.error('Human handoff request failed:', error.message);
