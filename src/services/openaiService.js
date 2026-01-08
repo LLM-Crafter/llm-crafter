@@ -3,7 +3,43 @@ const OpenAI = require('openai');
 // Price per 1K tokens (as of current OpenAI pricing)
 const PRICING = {
   openai: {
+    'gpt-5.2': {
+      input: 0.00175, // $1.75 per million tokens input
+      output: 0.014, // $14.00 per million tokens output
+    },
+    'gpt-5.2-pro': {
+      input: 0.021, // $21.00 per million tokens input
+      output: 0.168, // $168.00 per million tokens output
+    },
+    'gpt-5.2-chat-latest': {
+      input: 0.00175, // $1.75 per million tokens input
+      output: 0.014, // $14.00 per million tokens output
+    },
+    'gpt-5.1': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'gpt-5.1-chat-latest': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'gpt-5.1-codex': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'gpt-5.1-codex-max': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'gpt-5.1-codex-mini': {
+      input: 0.00025, // $0.25 per million tokens input
+      output: 0.002, // $2.00 per million tokens output
+    },
     'gpt-5': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'gpt-5-codex': {
       input: 0.00125, // $1.25 per million tokens input
       output: 0.01, // $10.00 per million tokens output
     },
@@ -36,20 +72,20 @@ const PRICING = {
       output: 0.03, // $30.00 per million tokens output
     },
     'gpt-4.1': {
-      input: 0.003, // $3.00 per million tokens input
-      output: 0.012, // $12.00 per million tokens output
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.008, // $8.00 per million tokens output
     },
     'gpt-4.1-mini': {
-      input: 0.0008, // $0.80 per million tokens input
-      output: 0.0032, // $3.20 per million tokens output
+      input: 0.0004, // $0.40 per million tokens input
+      output: 0.0016, // $1.60 per million tokens output
     },
     'gpt-4.1-nano': {
-      input: 0.0002, // $0.20 per million tokens input
-      output: 0.0008, // $0.80 per million tokens output
+      input: 0.0001, // $0.10 per million tokens input
+      output: 0.0004, // $0.40 per million tokens output
     },
     'o4-mini': {
-      input: 0.004, // $4.00 per million tokens input
-      output: 0.016, // $16.00 per million tokens output
+      input: 0.0011, // $1.10 per million tokens input
+      output: 0.0044, // $4.40 per million tokens output
     },
     o3: {
       input: 0.002, // $2.00 per million tokens input
@@ -66,6 +102,10 @@ const PRICING = {
     'o3-mini': {
       input: 0.0011, // $1.10 per million tokens input
       output: 0.0044, // $4.40 per million tokens output
+    },
+    'o1-pro': {
+      input: 0.15, // $150.00 per million tokens input
+      output: 0.6, // $600.00 per million tokens output
     },
     'o4-mini-deep-research': {
       input: 0.002, // $2.00 per million tokens input

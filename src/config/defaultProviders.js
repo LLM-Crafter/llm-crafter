@@ -4,46 +4,81 @@ const defaultProviders = [
   {
     name: 'openai',
     models: [
-      // GPT-5 series (latest)
-      'gpt-5',
-      'gpt-5-mini',
-      'gpt-5-nano',
-      'gpt-5-pro',
-      'gpt-5-chat',
+      // GPT-5.2 series (latest - January 2026)
+      'gpt-5.2', // Best model for coding and agentic tasks across industries
+      'gpt-5.2-pro', // Version of GPT-5.2 that produces smarter and more precise responses
+      'gpt-5.2-chat-latest', // GPT-5.2 model used in ChatGPT
+
+      // GPT-5.1 series
+      'gpt-5.1', // Previous intelligent reasoning model
+      'gpt-5.1-pro', // Version of GPT-5.1 with enhanced capabilities
+      'gpt-5.1-codex', // Optimized for agentic coding in Codex
+      'gpt-5.1-codex-max', // Most intelligent coding model for long-horizon, agentic coding tasks
+      'gpt-5.1-codex-mini', // Smaller, more cost-effective version of GPT-5.1-Codex
+      'gpt-5.1-chat-latest', // GPT-5.1 model used in ChatGPT
+
+      // GPT-5 series
+      'gpt-5', // Previous intelligent reasoning model for coding and agentic tasks
+      'gpt-5-mini', // Faster, cost-efficient version of GPT-5 for well-defined tasks
+      'gpt-5-nano', // Fastest, most cost-efficient version of GPT-5
+      'gpt-5-pro', // Version of GPT-5 that produces smarter and more precise responses
+      'gpt-5-codex', // Version of GPT-5 optimized for agentic coding in Codex
+      'gpt-5-chat-latest', // GPT-5 model used in ChatGPT
 
       // GPT-4.1 series
-      'gpt-4.1',
-      'gpt-4.1-mini',
-      'gpt-4.1-nano',
+      'gpt-4.1', // Smartest non-reasoning model
+      'gpt-4.1-mini', // Smaller, faster version of GPT-4.1
+      'gpt-4.1-nano', // Smallest, most cost-efficient version of GPT-4.1
 
-      // GPT-4o and related
-      'gpt-4o',
-      'gpt-4o-mini',
-      'gpt-4-turbo',
-      'o4-mini',
-      'o4-mini-deep-research',
+      // GPT-4o series
+      'gpt-4o', // Fast, intelligent, flexible GPT model
+      'gpt-4o-mini', // Fast, affordable small model for focused tasks
+      'gpt-4-turbo', // Older high-intelligence GPT model
+      'chatgpt-4o-latest', // GPT-4o model used in ChatGPT
 
-      // Reasoning & research (O-series)
-      'o3-deep-research',
-      'o3-pro',
-      'o3',
-      'o3-mini',
+      // GPT-4o search models
+      'gpt-4o-search-preview', // GPT model for web search in Chat Completions
+      'gpt-4o-mini-search-preview', // Fast, affordable small model for web search
 
-      // GPT-4 and 3.5 legacy
-      'gpt-4',
-      'gpt-3.5-turbo',
+      // Reasoning models (O-series)
+      'o4-mini', // Fast, cost-efficient reasoning model, succeeded by GPT-5 mini
+      'o4-mini-deep-research', // Deep research model
+      'o3', // Reasoning model for complex tasks, succeeded by GPT-5
+      'o3-pro', // Version of o3 with more compute for better responses
+      'o3-mini', // Small model alternative to o3
+      'o3-deep-research', // Most intelligent deep research model
+      'o1', // Previous full o-series reasoning model
+      'o1-mini', // Deprecated small model alternative to o1
+      'o1-preview', // Deprecated preview of first o-series reasoning model
+
+      // Legacy GPT-4 and GPT-3.5
+      'gpt-4', // Older high-intelligence GPT model
+      'gpt-4-turbo-preview', // Deprecated older fast GPT model
+      'gpt-4.5-preview', // Deprecated large model
+      'gpt-3.5-turbo', // Legacy GPT model for cheaper chat and non-chat tasks
 
       // Embedding models
-      'text-embedding-3-large',
-      'text-embedding-3-small',
-      'text-embedding-ada-002',
-      '3-large-256',
-      '3-large-1024',
-      '3-small-512',
+      'text-embedding-3-large', // Latest large embedding model
+      'text-embedding-3-small', // Latest small embedding model
+      'text-embedding-ada-002', // Legacy embedding model
+      '3-large-256', // Embedding model variant
+      '3-large-1024', // Embedding model variant
+      '3-small-512', // Embedding model variant
 
-      // Open-weight models
-      'gpt-oss-120b',
-      'gpt-oss-20b',
+      // Moderation models
+      'omni-moderation-latest', // Identify potentially harmful content in text and images
+      'text-moderation-latest', // Latest text-only moderation model
+      'text-moderation-stable', // Deprecated previous generation text-only moderation model
+
+      // Open-weight models (Apache 2.0 license)
+      'gpt-oss-120b', // Most powerful open-weight model, fits into an H100 GPU
+      'gpt-oss-20b', // Medium-sized open-weight model for low latency
+
+      // Deprecated/Legacy base models
+      'davinci-002', // Deprecated replacement for the GPT-3 curie and davinci base models
+      'babbage-002', // Deprecated replacement for the GPT-3 ada and babbage base models
+      'computer-use-preview', // Preview model with computer control tool
+      'codex-mini-latest', // Deprecated fast reasoning model optimized for the Codex CLI
     ],
   },
   {
