@@ -318,6 +318,42 @@ class OpenAIService {
     return inputCost + outputCost;
   }
 
+  /**
+   * Check if a model supports structured outputs
+   * Currently only OpenAI models gpt-4o-mini and later support this
+   */
+  supportsStructuredOutputs(model) {
+    // Only OpenAI provider supports structured outputs for now
+    if (this.provider !== 'openai') {
+      return false;
+    }
+
+    // Models that support structured outputs
+    const supportedModels = [
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-5',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'gpt-5-pro',
+      'gpt-5-chat-latest',
+      'gpt-5-codex',
+      'gpt-5.1',
+      'gpt-5.1-chat-latest',
+      'gpt-5.1-codex',
+      'gpt-5.1-codex-max',
+      'gpt-5.1-codex-mini',
+      'gpt-5.2',
+      'gpt-5.2-pro',
+      'gpt-5.2-chat-latest',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+    ];
+
+    return supportedModels.includes(model);
+  }
+
   mapParameters(parameters) {
     const mappedParams = { ...parameters };
 
@@ -339,7 +375,13 @@ class OpenAIService {
     return mappedParams;
   }
 
-  async generateCompletion(model, prompt, parameters, systemPrompt = null) {
+  async generateCompletion(
+    model,
+    prompt,
+    parameters,
+    systemPrompt = null,
+    responseFormat = null
+  ) {
     const mappedParams = this.mapParameters(parameters);
 
     // Build messages array
@@ -353,12 +395,20 @@ class OpenAIService {
     // Add user message
     messages.push({ role: 'user', content: prompt });
 
+    // Add structured output configuration if provided and supported
+    const completionOptions = {
+      model,
+      messages,
+      ...mappedParams,
+    };
+
+    if (responseFormat && this.supportsStructuredOutputs(model)) {
+      completionOptions.response_format = responseFormat;
+    }
+
     try {
-      const completion = await this.client.chat.completions.create({
-        model,
-        messages,
-        ...mappedParams,
-      });
+      const completion =
+        await this.client.chat.completions.create(completionOptions);
 
       if (!completion.choices || completion.choices.length === 0) {
         throw new Error('No completion choices returned');
@@ -391,7 +441,8 @@ class OpenAIService {
     prompt,
     parameters,
     systemPrompt = null,
-    onChunk = null
+    onChunk = null,
+    responseFormat = null
   ) {
     const mappedParams = this.mapParameters(parameters);
 
@@ -406,14 +457,21 @@ class OpenAIService {
     // Add user message
     messages.push({ role: 'user', content: prompt });
 
+    // Add structured output configuration if provided and supported
+    const streamOptions = {
+      model,
+      messages,
+      stream: true,
+      stream_options: { include_usage: true },
+      ...mappedParams,
+    };
+
+    if (responseFormat && this.supportsStructuredOutputs(model)) {
+      streamOptions.response_format = responseFormat;
+    }
+
     try {
-      const stream = await this.client.chat.completions.create({
-        model,
-        messages,
-        stream: true,
-        stream_options: { include_usage: true },
-        ...mappedParams,
-      });
+      const stream = await this.client.chat.completions.create(streamOptions);
 
       let fullContent = '';
       let promptTokens = 0;

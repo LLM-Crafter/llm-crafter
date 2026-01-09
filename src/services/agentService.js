@@ -9,6 +9,51 @@ const suggestionService = require('./suggestionService');
 
 class AgentService {
   /**
+   * Get the structured output schema for agent responses
+   * This ensures the LLM always returns properly formatted responses
+   * Note: Not using strict mode to allow flexible tool_parameters
+   */
+  getAgentResponseSchema() {
+    return {
+      type: 'json_schema',
+      json_schema: {
+        name: 'agent_response',
+        strict: false,
+        schema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['use_tool', 'respond', 'think'],
+              description: 'The action the agent wants to take',
+            },
+            tool_name: {
+              type: 'string',
+              description:
+                'Name of the tool to use (required when action is use_tool)',
+            },
+            tool_parameters: {
+              type: 'object',
+              description:
+                'Parameters to pass to the tool (required when action is use_tool)',
+            },
+            response: {
+              type: 'string',
+              description:
+                'Response to send to the user (required when action is respond)',
+            },
+            reasoning: {
+              type: 'string',
+              description: 'Explanation of why this action was chosen',
+            },
+          },
+          required: ['action', 'reasoning'],
+        },
+      },
+    };
+  }
+
+  /**
    * Execute a chatbot agent with a user message
    */
   async executeChatbotAgent(
@@ -584,11 +629,20 @@ class AgentService {
         agent.system_prompt,
         dynamicContext
       );
+
+      // Use structured outputs if model supports it
+      const responseFormat = openai.supportsStructuredOutputs(
+        agent.llm_settings.model
+      )
+        ? this.getAgentResponseSchema()
+        : null;
+
       const llmResponse = await openai.generateCompletion(
         agent.llm_settings.model,
         prompt,
         agent.llm_settings.parameters,
-        enhancedSystemPrompt
+        enhancedSystemPrompt,
+        responseFormat
       );
 
       // Update token usage
@@ -750,14 +804,93 @@ class AgentService {
         dynamicContext
       );
 
+      // Use structured outputs if model supports it
+      const responseFormat = openai.supportsStructuredOutputs(
+        agent.llm_settings.model
+      )
+        ? this.getAgentResponseSchema()
+        : null;
+
       let streamBuffer = '';
-      let isStreaming = false;
-      let streamingStarted = false;
       let responseContentSent = '';
+      let inResponseField = false;
 
       const onChunk = chunk => {
         streamBuffer += chunk;
 
+        // For structured outputs, extract response field content incrementally
+        if (responseFormat) {
+          // Look for the "response" field in the JSON stream
+          if (!inResponseField) {
+            const responseFieldMatch = /"response"\s*:\s*"/.exec(streamBuffer);
+            if (responseFieldMatch) {
+              inResponseField = true;
+            }
+          }
+
+          if (inResponseField) {
+            // Extract everything after "response":"
+            const responseFieldMatch = /"response"\s*:\s*"/.exec(streamBuffer);
+            if (responseFieldMatch) {
+              const startPos =
+                responseFieldMatch.index + responseFieldMatch[0].length;
+              let rawContent = streamBuffer.substring(startPos);
+
+              // Find the end of the response string (unescaped quote)
+              let endPos = rawContent.length;
+              let i = 0;
+              while (i < rawContent.length) {
+                if (rawContent[i] === '\\' && i + 1 < rawContent.length) {
+                  // Skip escaped character
+                  i += 2;
+                } else if (rawContent[i] === '"') {
+                  // Found unescaped quote - this is the end
+                  endPos = i;
+                  break;
+                } else {
+                  i++;
+                }
+              }
+
+              // Extract the content up to end position
+              let content = rawContent.substring(0, endPos);
+
+              // Find a safe position to stream (don't send incomplete escape sequences)
+              let safeLength = content.length;
+              if (content.endsWith('\\')) {
+                // Ends with backslash - might be start of escape sequence
+                // Only send up to before the backslash
+                safeLength = content.length - 1;
+              }
+
+              const safeContent = content.substring(0, safeLength);
+              
+              // Properly JSON-unescape by parsing as JSON string
+              let unescapedContent = safeContent;
+              try {
+                unescapedContent = JSON.parse('"' + safeContent + '"');
+              } catch (e) {
+                // If parsing fails, use raw content
+              }
+
+              // Stream new content
+              if (unescapedContent.length > responseContentSent.length) {
+                const newContent = unescapedContent.substring(
+                  responseContentSent.length
+                );
+                if (newContent && streamCallback) {
+                  streamCallback(newContent);
+                  responseContentSent = unescapedContent;
+                }
+              }
+            }
+          }
+          return;
+        }
+
+        // Legacy text-based streaming for non-structured outputs
+        let isStreaming = false;
+        let streamingStarted = false;
         // Check if we've detected a RESPONSE action and should start streaming
         if (!streamingStarted && this.shouldStartStreaming(streamBuffer)) {
           isStreaming = true;
@@ -798,7 +931,8 @@ class AgentService {
         prompt,
         agent.llm_settings.parameters,
         enhancedSystemPrompt,
-        onChunk
+        onChunk,
+        responseFormat
       );
 
       // Update token usage
@@ -1177,6 +1311,7 @@ class AgentService {
         agent.system_prompt,
         dynamicContext
       );
+
       const llmResponse = await openai.generateCompletion(
         agent.llm_settings.model,
         prompt,
@@ -1363,13 +1498,14 @@ class AgentService {
       );
 
       let streamBuffer = '';
-      let isStreaming = false;
-      let streamingStarted = false;
       let responseContentSent = '';
 
       const onChunk = chunk => {
         streamBuffer += chunk;
 
+        // Legacy text-based streaming for non-structured outputs
+        let isStreaming = false;
+        let streamingStarted = false;
         // Check if we've detected a RESPONSE action and should start streaming
         if (!streamingStarted && this.shouldStartStreaming(streamBuffer)) {
           isStreaming = true;
@@ -1440,7 +1576,7 @@ class AgentService {
           this.getAgentToolConfig(
             agent,
             parsedResponse.tool_name,
-            conversation ? conversation._id : execution ? execution._id : null
+            execution ? execution._id : null
           )
         );
 
@@ -1734,10 +1870,45 @@ Choose your action:`;
 
   /**
    * Parse agent response to determine action
+   * Handles both structured JSON outputs and legacy text-based formats
    */
   parseAgentResponse(content) {
     console.log('Raw LLM response:', content); // Debug log
 
+    // Try to parse as JSON first (structured output)
+    try {
+      const jsonResponse = JSON.parse(content);
+
+      // Validate it has the expected structure
+      if (jsonResponse.action && jsonResponse.reasoning) {
+        console.log('Parsed structured JSON response:', jsonResponse);
+
+        // Normalize the response format
+        const result = {
+          action: jsonResponse.action,
+          reasoning: jsonResponse.reasoning,
+        };
+
+        if (jsonResponse.tool_name) {
+          result.tool_name = jsonResponse.tool_name;
+        }
+
+        if (jsonResponse.tool_parameters) {
+          result.tool_parameters = jsonResponse.tool_parameters;
+        }
+
+        if (jsonResponse.response) {
+          result.response = jsonResponse.response;
+        }
+
+        return result;
+      }
+    } catch (e) {
+      // Not JSON or invalid structure, continue with text parsing
+      console.log('Content is not structured JSON, using text parser');
+    }
+
+    // Legacy text-based parsing
     const lines = content.split('\n');
     const result = {};
 
