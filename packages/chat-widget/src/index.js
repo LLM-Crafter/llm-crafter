@@ -698,7 +698,15 @@ class LLMCrafterChatWidget {
         </div>
       </div>
     `;
-    this.elements.messagesContainer.appendChild(messageDiv);
+
+    // Delay showing the bubble to prevent flash if stream completes quickly
+    let bubbleShown = false;
+    let showBubbleTimeout = setTimeout(() => {
+      this.elements.messagesContainer.appendChild(messageDiv);
+      bubbleShown = true;
+      this.scrollToBottomIfNeeded();
+    }, 300); // 300ms delay
+
     const bubbleElement = messageDiv.querySelector(
       '.llm-crafter-message-bubble'
     );
@@ -729,6 +737,14 @@ class LLMCrafterChatWidget {
 
                 if (parsed.type === 'response_chunk') {
                   fullResponse += parsed.content;
+
+                  // Show bubble immediately if we have content and it's not shown yet
+                  if (!bubbleShown) {
+                    clearTimeout(showBubbleTimeout);
+                    this.elements.messagesContainer.appendChild(messageDiv);
+                    bubbleShown = true;
+                  }
+
                   // Apply transformation to the accumulated response
                   const transformedText = this.transformMessage(fullResponse);
                   bubbleElement.innerHTML = transformedText;
@@ -749,22 +765,39 @@ class LLMCrafterChatWidget {
       reader.releaseLock();
     }
 
-    // Store the complete message with sender name
-    this.messages.push({
-      text: fullResponse,
-      isUser: false,
-      senderName: this.config.botName,
-      timestamp: new Date(),
-    });
+    // Check if we received any content from the stream
+    if (fullResponse.trim() === '') {
+      // No content received (e.g., AI agent is disabled, only humans will respond)
+      // Clear the timeout and remove the bubble if it was shown
+      clearTimeout(showBubbleTimeout);
+      if (bubbleShown) {
+        messageDiv.remove();
+      }
+    } else {
+      // Store the complete message with sender name
+      this.messages.push({
+        text: fullResponse,
+        isUser: false,
+        senderName: this.config.botName,
+        timestamp: new Date(),
+      });
 
-    // Track the message to prevent duplicate from polling
-    if (messageId) {
-      this.displayedMessageIds.add(messageId);
+      // Track the message to prevent duplicate from polling
+      if (messageId) {
+        this.displayedMessageIds.add(messageId);
+      }
+      // Also track by content hash as fallback (for streaming responses without message_id)
+      this.displayedMessageIds.add(this.createMessageKey(fullResponse));
+
+      // Call onMessageReceived callback
+      if (this.config.onMessageReceived) {
+        this.config.onMessageReceived(fullResponse, {
+          conversation_id: conversationId,
+        });
+      }
     }
-    // Also track by content hash as fallback (for streaming responses without message_id)
-    this.displayedMessageIds.add(this.createMessageKey(fullResponse));
 
-    // Update conversation ID
+    // Update conversation ID (regardless of whether we got content)
     if (conversationId) {
       this.conversationId = conversationId;
       this.saveConversation(); // Save to localStorage
@@ -773,13 +806,6 @@ class LLMCrafterChatWidget {
       if (!this.pollingIntervalId && this.conversationId) {
         this.startPolling();
       }
-    }
-
-    // Call onMessageReceived callback
-    if (this.config.onMessageReceived) {
-      this.config.onMessageReceived(fullResponse, {
-        conversation_id: conversationId,
-      });
     }
   }
 
@@ -1043,7 +1069,16 @@ class LLMCrafterChatWidget {
 
   close() {
     this.isOpen = false;
+
+    // Add closing animation
+    this.elements.chatWindow.classList.add('closing');
     this.elements.chatWindow.classList.remove('open');
+
+    // Wait for animation to complete before hiding
+    setTimeout(() => {
+      this.elements.chatWindow.classList.remove('closing');
+    }, 300); // Match animation duration
+
     this.elements.button.classList.remove('close');
     this.elements.button.classList.add('open');
   }

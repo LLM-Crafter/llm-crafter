@@ -89,11 +89,16 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   flex-direction: column;
   overflow: hidden;
-  animation: slideUp 0.3s ease;
 }
 
 .llm-crafter-chat-window.open {
   display: flex;
+  animation: slideUp 0.3s ease;
+}
+
+.llm-crafter-chat-window.closing {
+  display: flex;
+  animation: slideDown 0.3s ease;
 }
 
 @keyframes slideUp {
@@ -104,6 +109,17 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
   }
 }
 
