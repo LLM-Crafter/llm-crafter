@@ -274,7 +274,7 @@ class LLMCrafterChatWidget {
     // Start with default context
     const context = {
       url: window.location.href,
-      language: navigator.language || navigator.userLanguage,
+      // language: navigator.language || navigator.userLanguage,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
     };
