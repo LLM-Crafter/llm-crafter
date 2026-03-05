@@ -162,7 +162,7 @@ class VectorDatabaseInterface {
     throw new Error('search method must be implemented by subclass');
   }
 
-  async deleteDocument(documentId) {
+  async deleteDocument(documentId, projectId) {
     throw new Error('deleteDocument method must be implemented by subclass');
   }
 
@@ -366,7 +366,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
     }
   }
 
-  async deleteDocument(documentId) {
+  async deleteDocument(documentId, projectId) {
     try {
       await this.client.data
         .deleter()
@@ -698,9 +698,11 @@ class PineconeVectorDB extends VectorDatabaseInterface {
     }));
   }
 
-  async deleteDocument(documentId) {
-    await this.index.delete({
-      filter: { document_id: documentId },
+  async deleteDocument(documentId, projectId) {
+    // Use deleteMany with filter to delete all chunks with this document_id
+    // Note: Need to use namespace for proper scoping
+    await this.index.namespace(projectId).deleteMany({
+      document_id: documentId,
     });
     return true;
   }
@@ -812,7 +814,7 @@ class MemoryVectorDB extends VectorDatabaseInterface {
       });
   }
 
-  async deleteDocument(documentId) {
+  async deleteDocument(documentId, projectId) {
     const initialLength = this.documents.length;
     this.documents = this.documents.filter(
       doc => doc.document_id !== documentId

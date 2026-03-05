@@ -1141,6 +1141,78 @@ class RAGService {
 
     return result;
   }
+
+  /**
+   * Delete documents by document_id
+   */
+  async deleteByDocumentId(documentId, organizationId, projectId) {
+    console.log('🗑️ RAGService.deleteByDocumentId - Start');
+    console.log('  Document ID:', documentId);
+    console.log('  Organization ID:', organizationId);
+    console.log('  Project ID:', projectId);
+
+    try {
+      // Try to delete from vector database first
+      const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+
+      if (vectorDB && typeof vectorDB.deleteDocument === 'function') {
+        console.log('  🗑️ Deleting from vector database');
+        await vectorDB.deleteDocument(documentId, projectId);
+
+        // Also delete from memory store to keep it in sync
+        const toDeleteFromMemory = [];
+        for (const [id, doc] of this.vectorStore.entries()) {
+          if (
+            doc.organization_id === organizationId &&
+            doc.project_id === projectId &&
+            doc.document_id === documentId
+          ) {
+            toDeleteFromMemory.push(id);
+          }
+        }
+        toDeleteFromMemory.forEach(id => this.vectorStore.delete(id));
+
+        console.log(`  ✅ Delete complete: ${toDeleteFromMemory.length} chunks removed`);
+        return {
+          success: true,
+          deleted_count: toDeleteFromMemory.length,
+          document_id: documentId,
+        };
+      }
+    } catch (error) {
+      console.warn(
+        '  ⚠️ Failed to delete from vector database, falling back to memory:',
+        error.message
+      );
+    }
+
+    // Fallback to in-memory store only
+    console.log('  🗑️ Deleting from in-memory store');
+    const toDelete = [];
+
+    for (const [id, doc] of this.vectorStore.entries()) {
+      if (
+        doc.organization_id === organizationId &&
+        doc.project_id === projectId &&
+        doc.document_id === documentId
+      ) {
+        toDelete.push(id);
+      }
+    }
+
+    toDelete.forEach(id => this.vectorStore.delete(id));
+
+    const result = {
+      success: true,
+      deleted_count: toDelete.length,
+      document_id: documentId,
+    };
+
+    console.log('  🗑️ Memory delete result:', result);
+    console.log('  ✅ Delete complete (from memory)');
+
+    return result;
+  }
 }
 
 module.exports = new RAGService();

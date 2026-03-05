@@ -146,4 +146,18 @@ router.delete(
   ragController.cancelJob
 );
 
+/**
+ * @route   DELETE /rag/documents/:documentId
+ * @desc    Delete document by document_id (all chunks)
+ * @access  Private (Organization Member)
+ */
+router.delete(
+  '/documents/:documentId',
+  auth,
+  orgAuth.hasRole('member'),
+  param('documentId').notEmpty().withMessage('Document ID is required'),
+  validate,
+  ragController.deleteByDocumentId
+);
+
 module.exports = router;

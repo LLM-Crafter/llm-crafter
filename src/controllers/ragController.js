@@ -454,6 +454,35 @@ class RAGController {
       });
     }
   }
+
+  /**
+   * Delete document by document_id
+   * DELETE /api/v1/organizations/:organizationId/projects/:projectId/rag/documents/:documentId
+   */
+  async deleteByDocumentId(req, res) {
+    try {
+      const { orgId, projectId, documentId } = req.params;
+
+      const result = await ragService.deleteByDocumentId(
+        documentId,
+        orgId,
+        projectId
+      );
+
+      res.json({
+        success: true,
+        message: `Deleted ${result.deleted_count} document chunks`,
+        deleted_count: result.deleted_count,
+        document_id: documentId,
+      });
+    } catch (error) {
+      console.error('RAG document deletion error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
 }
 
 const ragController = new RAGController();
@@ -468,5 +497,6 @@ ragController.getJobStatus = ragController.getJobStatus.bind(ragController);
 ragController.getJobs = ragController.getJobs.bind(ragController);
 ragController.getJobStats = ragController.getJobStats.bind(ragController);
 ragController.cancelJob = ragController.cancelJob.bind(ragController);
+ragController.deleteByDocumentId = ragController.deleteByDocumentId.bind(ragController);
 
 module.exports = ragController;
