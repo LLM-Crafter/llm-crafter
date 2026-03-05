@@ -37,7 +37,7 @@
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.4",
-    "rollup": "^4.9.0",
+    "rollup": "^4.59.0",
     "rollup-plugin-postcss": "^4.0.2"
   }
 }
