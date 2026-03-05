@@ -596,6 +596,7 @@ class AgentService {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
+      cached_tokens: 0,
       cost: 0,
     };
 
@@ -624,9 +625,10 @@ class AgentService {
         currentIteration
       );
 
-      // Get LLM response
+      // Get LLM response with optimized system prompt for caching
       const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
         agent.system_prompt,
+        agent,
         dynamicContext
       );
 
@@ -642,14 +644,22 @@ class AgentService {
         prompt,
         agent.llm_settings.parameters,
         enhancedSystemPrompt,
-        responseFormat
+        responseFormat,
+        { prompt_cache_key: `agent_${agent._id}` } // Improve cache hit rate via routing stickiness
       );
 
       // Update token usage
       totalTokenUsage.prompt_tokens += llmResponse.usage.prompt_tokens;
       totalTokenUsage.completion_tokens += llmResponse.usage.completion_tokens;
       totalTokenUsage.total_tokens += llmResponse.usage.total_tokens;
+      totalTokenUsage.cached_tokens += llmResponse.usage.cached_tokens || 0;
       totalTokenUsage.cost += llmResponse.usage.cost;
+
+      // Log cache performance
+      const cacheHitRate = totalTokenUsage.prompt_tokens > 0 
+        ? ((totalTokenUsage.cached_tokens / totalTokenUsage.prompt_tokens) * 100).toFixed(1)
+        : '0.0';
+      console.log(`[Cache] Iteration ${currentIteration}: ${llmResponse.usage.cached_tokens || 0} cached tokens | Total: ${totalTokenUsage.cached_tokens} / ${totalTokenUsage.prompt_tokens} (${cacheHitRate}% hit rate)`);
 
       // Parse LLM response to determine next action
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
@@ -770,6 +780,7 @@ class AgentService {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
+      cached_tokens: 0,
       cost: 0,
     };
 
@@ -798,9 +809,10 @@ class AgentService {
         currentIteration
       );
 
-      // Get LLM response with streaming
+      // Get LLM response with streaming and optimized system prompt for caching
       const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
         agent.system_prompt,
+        agent,
         dynamicContext
       );
 
@@ -932,14 +944,22 @@ class AgentService {
         agent.llm_settings.parameters,
         enhancedSystemPrompt,
         onChunk,
-        responseFormat
+        responseFormat,
+        { prompt_cache_key: `agent_${agent._id}` } // Improve cache hit rate via routing stickiness
       );
 
       // Update token usage
       totalTokenUsage.prompt_tokens += llmResponse.usage.prompt_tokens;
       totalTokenUsage.completion_tokens += llmResponse.usage.completion_tokens;
       totalTokenUsage.total_tokens += llmResponse.usage.total_tokens;
+      totalTokenUsage.cached_tokens += llmResponse.usage.cached_tokens || 0;
       totalTokenUsage.cost += llmResponse.usage.cost;
+
+      // Log cache performance
+      const cacheHitRate = totalTokenUsage.prompt_tokens > 0 
+        ? ((totalTokenUsage.cached_tokens / totalTokenUsage.prompt_tokens) * 100).toFixed(1)
+        : '0.0';
+      console.log(`[Cache] Stream Iteration ${currentIteration}: ${llmResponse.usage.cached_tokens || 0} cached tokens | Total: ${totalTokenUsage.cached_tokens} / ${totalTokenUsage.prompt_tokens} (${cacheHitRate}% hit rate)`);
 
       // Parse LLM response to determine next action
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
@@ -1277,6 +1297,7 @@ class AgentService {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
+      cached_tokens: 0,
       cost: 0,
     };
 
@@ -1306,9 +1327,10 @@ class AgentService {
         currentIteration
       );
 
-      // Get LLM response
+      // Get LLM response with optimized system prompt for caching
       const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
         agent.system_prompt,
+        agent,
         dynamicContext
       );
 
@@ -1316,14 +1338,23 @@ class AgentService {
         agent.llm_settings.model,
         prompt,
         agent.llm_settings.parameters,
-        enhancedSystemPrompt
+        enhancedSystemPrompt,
+        null, // no responseFormat for task agents
+        { prompt_cache_key: `agent_${agent._id}` } // Improve cache hit rate via routing stickiness
       );
 
       // Update token usage
       totalTokenUsage.prompt_tokens += llmResponse.usage.prompt_tokens;
       totalTokenUsage.completion_tokens += llmResponse.usage.completion_tokens;
       totalTokenUsage.total_tokens += llmResponse.usage.total_tokens;
+      totalTokenUsage.cached_tokens += llmResponse.usage.cached_tokens || 0;
       totalTokenUsage.cost += llmResponse.usage.cost;
+
+      // Log cache performance
+      const cacheHitRate = totalTokenUsage.prompt_tokens > 0 
+        ? ((totalTokenUsage.cached_tokens / totalTokenUsage.prompt_tokens) * 100).toFixed(1)
+        : '0.0';
+      console.log(`[Cache] Task Iteration ${currentIteration}: ${llmResponse.usage.cached_tokens || 0} cached tokens | Total: ${totalTokenUsage.cached_tokens} / ${totalTokenUsage.prompt_tokens} (${cacheHitRate}% hit rate)`);
 
       // Parse LLM response to determine next action
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
@@ -1462,6 +1493,7 @@ class AgentService {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
+      cached_tokens: 0,
       cost: 0,
     };
 
@@ -1491,9 +1523,10 @@ class AgentService {
         currentIteration
       );
 
-      // Get LLM response with streaming
+      // Get LLM response with streaming and optimized system prompt for caching
       const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
         agent.system_prompt,
+        agent,
         dynamicContext
       );
 
@@ -1546,14 +1579,23 @@ class AgentService {
         prompt,
         agent.llm_settings.parameters,
         enhancedSystemPrompt,
-        onChunk
+        onChunk,
+        null, // no responseFormat for task agents
+        { prompt_cache_key: `agent_${agent._id}` } // Improve cache hit rate via routing stickiness
       );
 
       // Update token usage
       totalTokenUsage.prompt_tokens += llmResponse.usage.prompt_tokens;
       totalTokenUsage.completion_tokens += llmResponse.usage.completion_tokens;
       totalTokenUsage.total_tokens += llmResponse.usage.total_tokens;
+      totalTokenUsage.cached_tokens += llmResponse.usage.cached_tokens || 0;
       totalTokenUsage.cost += llmResponse.usage.cost;
+
+      // Log cache performance
+      const cacheHitRate = totalTokenUsage.prompt_tokens > 0 
+        ? ((totalTokenUsage.cached_tokens / totalTokenUsage.prompt_tokens) * 100).toFixed(1)
+        : '0.0';
+      console.log(`[Cache] Task Stream Iteration ${currentIteration}: ${llmResponse.usage.cached_tokens || 0} cached tokens | Total: ${totalTokenUsage.cached_tokens} / ${totalTokenUsage.prompt_tokens} (${cacheHitRate}% hit rate)`);
 
       // Parse LLM response to determine next action
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
@@ -1687,81 +1729,36 @@ class AgentService {
   }
 
   /**
-   * Build reasoning prompt for the agent
+   * Build reasoning prompt for the agent (optimized for caching)
+   * Static content (tools, format) is now in system prompt and gets cached.
+   * This prompt contains only dynamic, per-iteration data.
    */
   buildReasoningPrompt(agent, context, thinkingProcess, toolsUsed, iteration) {
-    const prompt = `You are an AI agent. Your task is to analyze the conversation and decide on the next action.
-
-Conversation History:
-${context.conversation_history.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
-
-Available Tools:
-${agent.tools
-  .map(tool => {
-    let toolInfo = `- ${tool.name}: ${tool.description}`;
-    if (
-      tool.name === 'api_caller' &&
-      tool.parameters &&
-      tool.parameters.endpoints
-    ) {
-      const endpoints = Object.keys(tool.parameters.endpoints);
-      toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
+    // Only include dynamic content that changes each iteration
+    // Static content (tools, format instructions) is in the system prompt for caching
+    let prompt = `## Current Task\nAnalyze the conversation and decide on the next action.\n\n`;
+    
+    prompt += `## Conversation History\n`;
+    prompt += context.conversation_history.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    
+    if (thinkingProcess.length > 0) {
+      prompt += `\n\n## Previous Thinking Process\n`;
+      prompt += thinkingProcess.map(step => `${step.step}: ${step.reasoning}`).join('\n');
     }
-    return toolInfo;
-  })
-  .join('\n')}
-
-Previous Thinking Process:
-${thinkingProcess.map(step => `${step.step}: ${step.reasoning}`).join('\n')}
-
-Tools Used So Far:
-${toolsUsed
-  .map(tool => {
-    if (tool.success) {
-      return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
-    } else {
-      return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+    
+    if (toolsUsed.length > 0) {
+      prompt += `\n\n## Tools Used So Far\n`;
+      prompt += toolsUsed.map(tool => {
+        if (tool.success) {
+          return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+        } else {
+          return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+        }
+      }).join('\n');
     }
-  })
-  .join('\n')}
-
-Current Iteration: ${iteration}
-
-You must respond in one of these formats:
-
-1. To use a tool (including request_human_handoff):
-ACTION: use_tool
-TOOL: tool_name
-PARAMETERS: {"param1": "value1", "param2": "value2"}
-REASONING: Why you need to use this tool
-
-IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool name as the action.
-Example for human handoff:
-ACTION: use_tool
-TOOL: request_human_handoff
-PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low", "handoff_message": "I understand you'd like to speak with a human agent. Let me connect you with one of our team members who will assist you shortly. Please wait a moment."}
-
-Note: The handoff_message parameter is optional but recommended. It allows you to provide a contextual message in the user's language explaining why the handoff is happening.
-
-For api_caller tool, use this format:
-PARAMETERS: {
-  "endpoint_name": "endpoint_name",
-  "method": "GET|POST|PUT|DELETE",
-  "query_params": {"key": "value"},
-  "path_params": {"key": "value"}, 
-  "body_data": {"key": "value"}
-}
-
-2. To respond to the user:
-ACTION: respond
-RESPONSE: Your response to the user
-REASONING: Why this response is appropriate
-
-3. To continue thinking:
-ACTION: think
-REASONING: What you're thinking about
-
-Choose your action:`;
+    
+    prompt += `\n\n## Current Iteration\n${iteration} of ${agent.config.max_tool_calls || 5}\n\n`;
+    prompt += `Choose your action based on the response format defined in the system instructions:`;
 
     return prompt;
   }
@@ -1783,7 +1780,9 @@ Your response:`;
   }
 
   /**
-   * Build reasoning prompt for task agents
+   * Build reasoning prompt for task agents (optimized for caching)
+   * Static content (tools, format) is now in system prompt and gets cached.
+   * This prompt contains only dynamic, per-iteration data.
    */
   buildTaskReasoningPrompt(
     agent,
@@ -1792,78 +1791,29 @@ Your response:`;
     toolsUsed,
     iteration
   ) {
-    const prompt = `You are an AI task agent. Your goal is to complete the given task by using available tools when necessary.
-
-Task Input:
-${JSON.stringify(input)}
-
-Available Tools:
-${agent.tools
-  .map(tool => {
-    let toolInfo = `- ${tool.name}: ${tool.description}`;
-    if (
-      tool.name === 'api_caller' &&
-      tool.parameters &&
-      tool.parameters.endpoints
-    ) {
-      const endpoints = Object.keys(tool.parameters.endpoints);
-      toolInfo += `\n  Available endpoints: ${endpoints.join(', ')}`;
+    // Only include dynamic content that changes each iteration
+    let prompt = `## Task Input\n${JSON.stringify(input, null, 2)}\n\n`;
+    
+    if (thinkingProcess.length > 0) {
+      prompt += `## Previous Thinking Process\n`;
+      prompt += thinkingProcess.map(step => `${step.step}: ${step.reasoning}`).join('\n');
+      prompt += `\n\n`;
     }
-    return toolInfo;
-  })
-  .join('\n')}
-
-Previous Thinking Process:
-${thinkingProcess.map(step => `${step.step}: ${step.reasoning}`).join('\n')}
-
-Tools Used So Far:
-${toolsUsed
-  .map(tool => {
-    if (tool.success) {
-      return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
-    } else {
-      return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+    
+    if (toolsUsed.length > 0) {
+      prompt += `## Tools Used So Far\n`;
+      prompt += toolsUsed.map(tool => {
+        if (tool.success) {
+          return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+        } else {
+          return `- ${tool.tool_name}: FAILED - ${tool.error}`;
+        }
+      }).join('\n');
+      prompt += `\n\n`;
     }
-  })
-  .join('\n')}
-
-Current Iteration: ${iteration}
-
-You must respond in one of these formats:
-
-1. To use a tool (including request_human_handoff):
-ACTION: use_tool
-TOOL: tool_name
-PARAMETERS: {"param1": "value1", "param2": "value2"}
-REASONING: Why you need to use this tool
-
-IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool name as the action.
-Example for human handoff:
-ACTION: use_tool
-TOOL: request_human_handoff
-PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low", "handoff_message": "I understand you'd like to speak with a human agent. Let me connect you with one of our team members who will assist you shortly. Please wait a moment."}
-
-Note: The handoff_message parameter is optional but recommended. It allows you to provide a contextual message in the user's language explaining why the handoff is happening.
-
-For api_caller tool, use this format:
-PARAMETERS: {
-  "endpoint_name": "endpoint_name",
-  "method": "GET|POST|PUT|DELETE",
-  "query_params": {"key": "value"},
-  "path_params": {"key": "value"}, 
-  "body_data": {"key": "value"}
-}
-
-2. To provide final task output:
-ACTION: respond
-RESPONSE: Your final output/result for the task
-REASONING: Why this completes the task
-
-3. To continue analyzing:
-ACTION: think
-REASONING: What you're thinking about and what you need to do next
-
-Choose your action:`;
+    
+    prompt += `## Current Iteration\n${iteration} of ${agent.config.max_tool_calls || 5}\n\n`;
+    prompt += `Analyze the task and choose your action based on the response format in the system instructions:`;
 
     return prompt;
   }
@@ -2175,18 +2125,74 @@ Choose your action:`;
   }
 
   /**
-   * Build enhanced system prompt with dynamic context
+   * Build enhanced system prompt with static content for caching optimization
+   * OpenAI caches prompts >= 1024 tokens automatically. To maximize cache hits:
+   * - Static content (personality, tools, format) goes first and gets cached
+   * - Dynamic context is appended last and changes per request
    */
-  buildEnhancedSystemPrompt(baseSystemPrompt, dynamicContext = {}) {
+  buildEnhancedSystemPrompt(baseSystemPrompt, agent, dynamicContext = {}) {
+    // LAYER 1: Base personality and behavior (static per agent)
     let enhancedPrompt = baseSystemPrompt;
 
-    // Add context information if provided
+    // LAYER 2: Tool definitions (static per agent) - critical for caching
+    enhancedPrompt += `\n\n## Available Tools\n\nYou have access to the following tools:\n\n`;
+    
+    agent.tools.forEach(tool => {
+      enhancedPrompt += `### ${tool.name}\n`;
+      enhancedPrompt += `Description: ${tool.description}\n`;
+      
+      // Include endpoint information for api_caller
+      if (tool.name === 'api_caller' && tool.parameters && tool.parameters.endpoints) {
+        const endpoints = Object.keys(tool.parameters.endpoints);
+        enhancedPrompt += `Available endpoints: ${endpoints.join(', ')}\n`;
+      }
+      
+      enhancedPrompt += `\n`;
+    });
+
+    // LAYER 3: Response format instructions (static) - critical for caching
+    enhancedPrompt += `\n## Response Format\n\nYou must respond in one of these formats:\n\n`;
+    enhancedPrompt += `**1. To use a tool (including request_human_handoff):**\n`;
+    enhancedPrompt += `ACTION: use_tool\n`;
+    enhancedPrompt += `TOOL: tool_name\n`;
+    enhancedPrompt += `PARAMETERS: {"param1": "value1", "param2": "value2"}\n`;
+    enhancedPrompt += `REASONING: Why you need to use this tool\n\n`;
+    
+    enhancedPrompt += `IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool name as the action.\n\n`;
+    
+    enhancedPrompt += `Example for human handoff:\n`;
+    enhancedPrompt += `ACTION: use_tool\n`;
+    enhancedPrompt += `TOOL: request_human_handoff\n`;
+    enhancedPrompt += `PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low", "handoff_message": "I understand you'd like to speak with a human agent. Let me connect you with one of our team members."}\n`;
+    enhancedPrompt += `REASONING: User explicitly asked to speak with a human representative\n\n`;
+    
+    enhancedPrompt += `Note: The handoff_message parameter is optional but recommended. It allows you to provide a contextual message in the user's language.\n\n`;
+    
+    enhancedPrompt += `For api_caller tool, use this format:\n`;
+    enhancedPrompt += `PARAMETERS: {\n`;
+    enhancedPrompt += `  "endpoint_name": "endpoint_name",\n`;
+    enhancedPrompt += `  "method": "GET|POST|PUT|DELETE",\n`;
+    enhancedPrompt += `  "query_params": {"key": "value"},\n`;
+    enhancedPrompt += `  "path_params": {"key": "value"},\n`;
+    enhancedPrompt += `  "body_data": {"key": "value"}\n`;
+    enhancedPrompt += `}\n\n`;
+    
+    enhancedPrompt += `**2. To respond to the user:**\n`;
+    enhancedPrompt += `ACTION: respond\n`;
+    enhancedPrompt += `RESPONSE: Your response to the user\n`;
+    enhancedPrompt += `REASONING: Why this response is appropriate\n\n`;
+    
+    enhancedPrompt += `**3. To continue thinking:**\n`;
+    enhancedPrompt += `ACTION: think\n`;
+    enhancedPrompt += `REASONING: What you're thinking about\n`;
+
+    // LAYER 4: Dynamic context (changes per request) - appended last to preserve cache
     if (Object.keys(dynamicContext).length > 0) {
       const contextString = Object.entries(dynamicContext)
         .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
         .join('\n');
 
-      enhancedPrompt += `\n\nAdditional Context:\n${contextString}`;
+      enhancedPrompt += `\n\n## Additional Context\n${contextString}`;
     }
 
     return enhancedPrompt;

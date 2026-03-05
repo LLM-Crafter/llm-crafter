@@ -38,7 +38,9 @@ class SummarizationService {
         summaryModel,
         prompt,
         summaryParams,
-        systemPrompt
+        systemPrompt,
+        null, // no responseFormat
+        { prompt_cache_key: `agent_${agent._id}_summary` } // Improve cache hit rate
       );
 
       // Parse the structured summary from the response
