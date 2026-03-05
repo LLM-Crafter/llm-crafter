@@ -60,7 +60,9 @@ class SuggestionService {
           temperature: 1,
           max_tokens: 1000,
         },
-        systemPrompt
+        systemPrompt,
+        null, // no responseFormat
+        { prompt_cache_key: `agent_${agent._id}_suggestions` } // Improve cache hit rate
       );
       console.log('Suggestion response:', response);
       const executionTime = Date.now() - startTime;

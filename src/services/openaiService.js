@@ -304,7 +304,7 @@ class OpenAIService {
     }
   }
 
-  calculateCost(model, promptTokens, completionTokens) {
+  calculateCost(model, promptTokens, completionTokens, cachedTokens = 0) {
     console.log(this.provider);
     console.log(model);
     const pricing = PRICING[this.provider]?.[model];
@@ -312,7 +312,17 @@ class OpenAIService {
       return 0;
     }
 
-    const inputCost = (promptTokens / 1000) * pricing.input;
+    // For OpenAI, cached tokens are 10% of the normal input token cost
+    let inputCost = (promptTokens / 1000) * pricing.input;
+    if (this.provider === 'openai' && cachedTokens > 0) {
+      // Calculate cost for non-cached tokens at full price
+      const nonCachedTokens = promptTokens - cachedTokens;
+      const nonCachedCost = (nonCachedTokens / 1000) * pricing.input;
+      // Calculate cost for cached tokens at 10% price
+      const cachedCost = (cachedTokens / 1000) * pricing.input * 0.1;
+      inputCost = nonCachedCost + cachedCost;
+    }
+
     const outputCost = (completionTokens / 1000) * pricing.output;
 
     return inputCost + outputCost;
@@ -380,7 +390,8 @@ class OpenAIService {
     prompt,
     parameters,
     systemPrompt = null,
-    responseFormat = null
+    responseFormat = null,
+    extraOptions = {}
   ) {
     const mappedParams = this.mapParameters(parameters);
 
@@ -400,6 +411,7 @@ class OpenAIService {
       model,
       messages,
       ...mappedParams,
+      ...extraOptions, // Include extra options like prompt_cache_key
     };
 
     if (responseFormat && this.supportsStructuredOutputs(model)) {
@@ -415,10 +427,15 @@ class OpenAIService {
       }
 
       const usage = completion.usage;
+      
+      // Extract cached token information if available
+      const cachedTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+      
       const cost = this.calculateCost(
         model,
         usage.prompt_tokens,
-        usage.completion_tokens
+        usage.completion_tokens,
+        cachedTokens
       );
 
       return {
@@ -428,6 +445,7 @@ class OpenAIService {
           prompt_tokens: usage.prompt_tokens,
           completion_tokens: usage.completion_tokens,
           total_tokens: usage.total_tokens,
+          cached_tokens: cachedTokens,
           cost,
         },
       };
@@ -442,7 +460,8 @@ class OpenAIService {
     parameters,
     systemPrompt = null,
     onChunk = null,
-    responseFormat = null
+    responseFormat = null,
+    extraOptions = {}
   ) {
     const mappedParams = this.mapParameters(parameters);
 
@@ -464,6 +483,7 @@ class OpenAIService {
       stream: true,
       stream_options: { include_usage: true },
       ...mappedParams,
+      ...extraOptions, // Include extra options like prompt_cache_key
     };
 
     if (responseFormat && this.supportsStructuredOutputs(model)) {
@@ -476,6 +496,7 @@ class OpenAIService {
       let fullContent = '';
       let promptTokens = 0;
       let completionTokens = 0;
+      let cachedTokens = 0;
 
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content;
@@ -490,6 +511,7 @@ class OpenAIService {
         if (chunk.usage) {
           promptTokens = chunk.usage.prompt_tokens;
           completionTokens = chunk.usage.completion_tokens;
+          cachedTokens = chunk.usage.prompt_tokens_details?.cached_tokens ?? 0;
         }
       }
 
@@ -501,7 +523,7 @@ class OpenAIService {
         completionTokens = Math.ceil(fullContent.length / 4);
       }
 
-      const cost = this.calculateCost(model, promptTokens, completionTokens);
+      const cost = this.calculateCost(model, promptTokens, completionTokens, cachedTokens);
 
       return {
         content: fullContent,
@@ -510,6 +532,7 @@ class OpenAIService {
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,
           total_tokens: promptTokens + completionTokens,
+          cached_tokens: cachedTokens,
           cost,
         },
       };
