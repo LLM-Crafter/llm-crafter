@@ -192,6 +192,25 @@ class AgentService {
       });
     }
 
+    // Generate AI-powered conversation title after second user message
+    const userMessageCount = conversation.messages.filter(
+      msg => msg.role === 'user'
+    ).length;
+    
+    if (
+      userMessageCount === 2 &&
+      conversation.title === 'New Conversation'
+    ) {
+      const aiTitle = await this.generateAIConversationTitle(
+        conversation,
+        agent
+      );
+      if (aiTitle) {
+        conversation.title = aiTitle;
+        await conversation.save();
+      }
+    }
+
     // Generate question suggestions if enabled
     let suggestions = null;
     let suggestionUsage = null;
@@ -386,6 +405,25 @@ class AgentService {
         token_usage: response.token_usage,
         timestamp: new Date(),
       });
+    }
+
+    // Generate AI-powered conversation title after second user message
+    const userMessageCount = conversation.messages.filter(
+      msg => msg.role === 'user'
+    ).length;
+    
+    if (
+      userMessageCount === 2 &&
+      conversation.title === 'New Conversation'
+    ) {
+      const aiTitle = await this.generateAIConversationTitle(
+        conversation,
+        agent
+      );
+      if (aiTitle) {
+        conversation.title = aiTitle;
+        await conversation.save();
+      }
     }
 
     // Generate question suggestions if enabled
@@ -2022,13 +2060,65 @@ Choose your action:`;
   }
 
   /**
-   * Generate conversation title from first message
+   * Generate placeholder conversation title
    */
   generateConversationTitle(message) {
-    if (message.length > 50) {
-      return `${message.substring(0, 47)}...`;
+    return 'New Conversation';
+  }
+
+  /**
+   * Generate AI-powered conversation title based on conversation history
+   * Uses a cost-effective model and generates concise titles (max 10 words)
+   */
+  async generateAIConversationTitle(conversation, agent) {
+    try {
+      // Get the conversation messages (first 4 messages for context)
+      const messages = conversation.messages.slice(0, 4);
+      
+      if (messages.length < 2) {
+        return null; // Not enough context yet
+      }
+
+      // Build context from messages
+      const conversationContext = messages
+        .map(msg => `${msg.role}: ${msg.content}`)
+        .join('\n');
+
+      const decryptedApiKey = agent.api_key.getDecryptedKey();
+      const openai = new OpenAIService(
+        decryptedApiKey,
+        agent.api_key.provider.name
+      );
+
+      // Use a cost-effective model (gpt-3.5-turbo or gpt-4o-mini)
+      const model = 'gpt-4.1-nano';
+      
+      const prompt = `Based on the following conversation, generate a concise title (maximum 10 words) that captures the main topic or intent. Respond with only the title, no quotes or additional text.\n\n${conversationContext}`;
+
+      const systemPrompt = 'You are a helpful assistant that generates concise, descriptive conversation titles. Keep titles under 10 words and make them clear and informative.';
+
+      const response = await openai.generateCompletion(
+        model,
+        prompt,
+        { temperature: 0.7, max_tokens: 30 },
+        systemPrompt
+      );
+
+      // Clean up the title (remove quotes if present)
+      let title = response.content.trim();
+      title = title.replace(/^["']|["']$/g, '');
+      
+      // Ensure title is not too long (max 10 words)
+      const words = title.split(' ');
+      if (words.length > 10) {
+        title = words.slice(0, 10).join(' ') + '...';
+      }
+
+      return title;
+    } catch (error) {
+      console.error('Failed to generate AI conversation title:', error);
+      return null; // Fallback to existing title on error
     }
-    return message;
   }
 
   /**
