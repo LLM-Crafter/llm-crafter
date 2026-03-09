@@ -864,12 +864,28 @@ class AgentService {
       let streamBuffer = '';
       let responseContentSent = '';
       let inResponseField = false;
+      let actionChecked = false;
+      let isRespondAction = false;
 
       const onChunk = chunk => {
         streamBuffer += chunk;
 
         // For structured outputs, extract response field content incrementally
         if (responseFormat) {
+          // First, check if the action is "respond" before streaming any response content
+          if (!actionChecked) {
+            const actionMatch = /"action"\s*:\s*"([^"]+)"/.exec(streamBuffer);
+            if (actionMatch) {
+              actionChecked = true;
+              isRespondAction = actionMatch[1] === 'respond';
+            }
+          }
+
+          // Only proceed to stream response field if action is "respond"
+          if (!isRespondAction) {
+            return;
+          }
+
           // Look for the "response" field in the JSON stream
           if (!inResponseField) {
             const responseFieldMatch = /"response"\s*:\s*"/.exec(streamBuffer);
