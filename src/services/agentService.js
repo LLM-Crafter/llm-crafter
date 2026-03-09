@@ -1885,8 +1885,14 @@ Your response:`;
           result.tool_parameters = jsonResponse.tool_parameters;
         }
 
-        if (jsonResponse.response) {
+        // Only include response field when action is 'respond'
+        if (jsonResponse.response && jsonResponse.action === 'respond') {
           result.response = jsonResponse.response;
+        }
+        
+        // Only include plan_steps when action is 'plan'
+        if (jsonResponse.plan_steps && jsonResponse.action === 'plan') {
+          result.plan_steps = jsonResponse.plan_steps;
         }
 
         return result;
