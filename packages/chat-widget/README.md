@@ -93,12 +93,13 @@ const widget = new LLMCrafterChatWidget({
 
 ### Styling Options
 
-| Option            | Type   | Default     | Description           |
-| ----------------- | ------ | ----------- | --------------------- |
-| `primaryColor`    | string | `'#4a90e2'` | Primary brand color   |
-| `secondaryColor`  | string | `'#357abd'` | Secondary/hover color |
-| `backgroundColor` | string | `'#f5f7fa'` | Background color      |
-| `textColor`       | string | `'#333333'` | Text color            |
+| Option            | Type   | Default     | Description                                       |
+| ----------------- | ------ | ----------- | ------------------------------------------------- |
+| `designStyle`     | string | `'default'` | Design style (`'default'` or `'modern'`)          |
+| `primaryColor`    | string | `'#4a90e2'` | Primary brand color                               |
+| `secondaryColor`  | string | `'#357abd'` | Secondary/hover color                             |
+| `backgroundColor` | string | `'#f5f7fa'` | Background color (only applies to default design) |
+| `textColor`       | string | `'#333333'` | Text color (only applies to default design)       |
 
 ### Behavior Options
 
@@ -215,7 +216,40 @@ const widget = new LLMCrafterChatWidget({
 ></script>
 ```
 
-### Example 3: JavaScript API
+### Example 3: Modern Design Style
+
+```html
+<script
+  src="https://unpkg.com/@llm-crafter/chat-widget@latest/dist/chat-widget.min.js"
+  data-api-key="sk_live_abc123..."
+  data-agent-id="agent_xyz789"
+  data-organization-id="org_123"
+  data-project-id="proj_456"
+  data-design-style="modern"
+  data-title="Aria"
+  data-subtitle="Online — replies instantly"
+  data-primary-color="#2563eb"
+  data-secondary-color="#1d4ed8"
+></script>
+```
+
+Or using JavaScript:
+
+```javascript
+const widget = new LLMCrafterChatWidget({
+  apiKey: 'sk_live_abc123...',
+  agentId: 'agent_xyz789',
+  organizationId: 'org_123',
+  projectId: 'proj_456',
+  designStyle: 'modern', // Use modern design
+  title: 'Aria',
+  subtitle: 'Online — replies instantly',
+  primaryColor: '#2563eb',
+  secondaryColor: '#1d4ed8',
+});
+```
+
+### Example 4: JavaScript API
 
 ```html
 <script src="https://unpkg.com/@llm-crafter/chat-widget@latest/dist/chat-widget.min.js"></script>
@@ -265,7 +299,7 @@ const widget = new LLMCrafterChatWidget({
 </script>
 ```
 
-### Example 4: React Integration
+### Example 5: React Integration
 
 ```jsx
 import { useEffect, useRef } from 'react';
@@ -305,7 +339,7 @@ function App() {
 }
 ```
 
-### Example 5: Vue Integration
+### Example 6: Vue Integration
 
 ```vue
 <template>

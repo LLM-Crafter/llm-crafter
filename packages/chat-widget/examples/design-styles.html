@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LLM Crafter Chat Widget - Design Styles Comparison</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        width: 100%;
+        background: white;
+        border-radius: 20px;
+        padding: 60px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      h1 {
+        text-align: center;
+        color: #333;
+        font-size: 32px;
+        margin-bottom: 16px;
+      }
+
+      .subtitle {
+        text-align: center;
+        color: #666;
+        font-size: 18px;
+        margin-bottom: 50px;
+      }
+
+      .design-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 40px;
+        margin-bottom: 50px;
+      }
+
+      .design-card {
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 30px;
+        text-align: center;
+        transition: transform 0.2s;
+        border: 2px solid transparent;
+      }
+
+      .design-card:hover {
+        transform: translateY(-4px);
+        border-color: #667eea;
+      }
+
+      .design-card h2 {
+        font-size: 24px;
+        margin-bottom: 12px;
+        color: #333;
+      }
+
+      .design-card p {
+        color: #666;
+        margin-bottom: 24px;
+        line-height: 1.6;
+      }
+
+      .design-features {
+        text-align: left;
+        margin-bottom: 24px;
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+      }
+
+      .design-features ul {
+        list-style: none;
+        padding: 0;
+      }
+
+      .design-features li {
+        padding: 8px 0;
+        color: #555;
+        font-size: 14px;
+      }
+
+      .design-features li::before {
+        content: '✓ ';
+        color: #10b981;
+        font-weight: bold;
+        margin-right: 8px;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 14px 32px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        text-decoration: none;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: all 0.2s;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+      }
+
+      .btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      .code-section {
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 30px;
+        border-radius: 16px;
+        margin-top: 40px;
+        overflow-x: auto;
+      }
+
+      .code-section h3 {
+        color: #fff;
+        margin-bottom: 20px;
+        font-size: 20px;
+      }
+
+      .code-block {
+        background: #0f172a;
+        padding: 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        position: relative;
+      }
+
+      .code-block code {
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        display: block;
+      }
+
+      .code-label {
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-bottom: 12px;
+        letter-spacing: 0.05em;
+      }
+
+      .highlight {
+        color: #22d3ee;
+      }
+
+      .string {
+        color: #86efac;
+      }
+
+      .note {
+        background: #eff6ff;
+        border-left: 4px solid #3b82f6;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 30px;
+        color: #1e40af;
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 16px;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 30px 20px;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        .subtitle {
+          font-size: 16px;
+        }
+
+        .design-grid {
+          grid-template-columns: 1fr;
+          gap: 30px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🎨 LLM Crafter Chat Widget Design Styles</h1>
+      <p class="subtitle">
+        Choose between classic simplicity or modern elegance
+      </p>
+
+      <div class="design-grid">
+        <!-- Default Design -->
+        <div class="design-card">
+          <h2>🔷 Default Design</h2>
+          <p>Classic, clean, and professional design that works everywhere</p>
+          <div class="design-features">
+            <ul>
+              <li>Circular avatars</li>
+              <li>Rounded message bubbles</li>
+              <li>Soft shadows</li>
+              <li>Roboto font family</li>
+              <li>Fully customizable colors</li>
+            </ul>
+          </div>
+          <button class="btn" onclick="switchToDefault()">Try Default</button>
+        </div>
+
+        <!-- Modern Design -->
+        <div class="design-card">
+          <h2>✨ Modern Design</h2>
+          <p>
+            Contemporary design with smooth animations and refined aesthetics
+          </p>
+          <div class="design-features">
+            <ul>
+              <li>Square-rounded avatars</li>
+              <li>Asymmetric bubble corners</li>
+              <li>Bouncing typing indicator</li>
+              <li>DM Sans font family</li>
+              <li>Scale & fade animations</li>
+            </ul>
+          </div>
+          <button class="btn" onclick="switchToModern()">Try Modern</button>
+        </div>
+      </div>
+
+      <!-- Code Examples -->
+      <div class="code-section">
+        <h3>📝 Implementation Examples</h3>
+
+        <div class="code-label">HTML Script Tag (Default Design)</div>
+        <div class="code-block">
+          <code
+            >&lt;script src=<span class="string"
+              >"../dist/chat-widget.min.js"</span
+            >
+            data-api-key=<span class="string">"your-api-key"</span>
+            data-agent-id=<span class="string">"your-agent-id"</span>
+            data-organization-id=<span class="string">"your-org-id"</span>
+            data-project-id=<span class="string">"your-project-id"</span>
+            <span class="highlight"
+              >data-design-style=<span class="string">"default"</span></span
+            >
+            data-primary-color=<span class="string">"#4a90e2"</span>
+            &gt;&lt;/script&gt;</code
+          >
+        </div>
+
+        <div class="code-label">HTML Script Tag (Modern Design)</div>
+        <div class="code-block">
+          <code
+            >&lt;script src=<span class="string"
+              >"../dist/chat-widget.min.js"</span
+            >
+            data-api-key=<span class="string">"your-api-key"</span>
+            data-agent-id=<span class="string">"your-agent-id"</span>
+            data-organization-id=<span class="string">"your-org-id"</span>
+            data-project-id=<span class="string">"your-project-id"</span>
+            <span class="highlight"
+              >data-design-style=<span class="string">"modern"</span></span
+            >
+            data-primary-color=<span class="string">"#2563eb"</span>
+            &gt;&lt;/script&gt;</code
+          >
+        </div>
+
+        <div class="code-label">JavaScript API</div>
+        <div class="code-block">
+          <code
+            ><span class="highlight">const</span> widget =
+            <span class="highlight">new</span> LLMCrafterChatWidget({ apiKey:
+            <span class="string">'your-api-key'</span>, agentId:
+            <span class="string">'your-agent-id'</span>, organizationId:
+            <span class="string">'your-org-id'</span>, projectId:
+            <span class="string">'your-project-id'</span>,
+            <span class="highlight"
+              >designStyle: <span class="string">'modern'</span></span
+            >, <span class="comment">// 'default' or 'modern'</span> title:
+            <span class="string">'AI Assistant'</span>, primaryColor:
+            <span class="string">'#2563eb'</span>, });</code
+          >
+        </div>
+      </div>
+
+      <div class="note">
+        <strong>💡 Note:</strong>
+        Both design styles are fully responsive and support all widget features
+        including streaming, human handoff, message bundling, and conversation
+        persistence. The design style only affects the visual appearance and
+        animations.
+      </div>
+    </div>
+
+    <!-- Widget will be initialized via JavaScript below -->
+    <script src="../dist/chat-widget.min.js"></script>
+
+    <script>
+      let currentWidget = null;
+
+      // Initialize with modern design by default
+      function initWidget(designStyle) {
+        // Destroy existing widget if any
+        if (currentWidget) {
+          currentWidget.destroy();
+        }
+
+        // Create new widget
+        currentWidget = new LLMCrafterChatWidget({
+          // Note: You'll need to replace these with your actual credentials
+          apiKey: 'demo-key',
+          agentId: 'demo-agent',
+          organizationId: 'demo-org',
+          projectId: 'demo-project',
+
+          // Design style
+          designStyle: designStyle,
+
+          // Content
+          title: designStyle === 'modern' ? 'Aria' : 'AI Assistant',
+          subtitle:
+            designStyle === 'modern'
+              ? 'Online — replies instantly'
+              : 'Online • Typically replies instantly',
+          welcomeMessage:
+            designStyle === 'modern'
+              ? "Hey there 👋 I'm Aria. How can I help you today?"
+              : 'Hello! 👋 How can I help you today?',
+
+          // Colors
+          primaryColor: designStyle === 'modern' ? '#2563eb' : '#4a90e2',
+          secondaryColor: designStyle === 'modern' ? '#1d4ed8' : '#357abd',
+
+          // Behavior
+          autoOpen: true,
+
+          // This is a demo, so these won't actually work
+          onError: error => {
+            console.log(
+              'Demo mode - API calls will not work without real credentials'
+            );
+          },
+        });
+      }
+
+      function switchToDefault() {
+        initWidget('default');
+      }
+
+      function switchToModern() {
+        initWidget('modern');
+      }
+
+      // Initialize with modern design on load
+      initWidget('modern');
+    </script>
+  </body>
+</html>

@@ -34,6 +34,9 @@ class LLMCrafterChatWidget {
       backgroundColor: config.backgroundColor || '#f5f7fa',
       textColor: config.textColor || '#333333',
 
+      // Design
+      designStyle: config.designStyle || 'default', // 'default' or 'modern'
+
       // Behavior
       position: config.position || 'bottom-right', // bottom-right, bottom-left
       autoOpen: config.autoOpen || false,
@@ -102,6 +105,7 @@ class LLMCrafterChatWidget {
     const container = document.createElement('div');
     container.className = 'llm-crafter-widget-container';
     container.setAttribute('data-widget-id', 'llm-crafter-chat');
+    container.setAttribute('data-design', this.config.designStyle); // Apply design style
 
     // Create floating button
     const button = document.createElement('button');
@@ -1360,6 +1364,7 @@ class LLMCrafterChatWidget {
       welcomeMessage: script.getAttribute('data-welcome-message'),
       primaryColor: script.getAttribute('data-primary-color'),
       secondaryColor: script.getAttribute('data-secondary-color'),
+      designStyle: script.getAttribute('data-design-style'),
       position: script.getAttribute('data-position'),
       autoOpen: script.getAttribute('data-auto-open') === 'true',
       autoOpenDelay:
