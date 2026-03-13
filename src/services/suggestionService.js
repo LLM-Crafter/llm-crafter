@@ -51,6 +51,26 @@ class SuggestionService {
       const decryptedApiKey = apiKey.getDecryptedKey();
       const openai = new OpenAIService(decryptedApiKey, apiKey.provider.name);
 
+      // Schema to enforce structured JSON output for suggestions
+      const responseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'suggestions_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              suggestions: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+            },
+            required: ['suggestions'],
+            additionalProperties: false,
+          },
+        },
+      };
+
       // Generate suggestions
       const startTime = Date.now();
       const response = await openai.generateCompletion(
@@ -61,7 +81,7 @@ class SuggestionService {
           max_tokens: 1000,
         },
         systemPrompt,
-        null, // no responseFormat
+        responseFormat,
         { prompt_cache_key: `agent_${agent._id}_suggestions` } // Improve cache hit rate
       );
       console.log('Suggestion response:', response);
