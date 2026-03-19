@@ -3,6 +3,22 @@ const OpenAI = require('openai');
 // Price per 1K tokens (as of current OpenAI pricing)
 const PRICING = {
   openai: {
+    'gpt-5.4': {
+      input: 0.0025, // $2.50 per million tokens input
+      output: 0.015, // $15.00 per million tokens output
+    },
+    'gpt-5.4-mini': {
+      input: 0.00075, // $0.75 per million tokens input
+      output: 0.0045, // $4.50 per million tokens output
+    },
+    'gpt-5.4-nano': {
+      input: 0.0002, // $0.20 per million tokens input
+      output: 0.00125, // $1.25 per million tokens output
+    },
+    'gpt-5.3': {
+      input: 0.00175, // $1.75 per million tokens input
+      output: 0.014, // $14.00 per million tokens output
+    },
     'gpt-5.2': {
       input: 0.00175, // $1.75 per million tokens input
       output: 0.014, // $14.00 per million tokens output

@@ -4,7 +4,15 @@ const defaultProviders = [
   {
     name: 'openai',
     models: [
-      // GPT-5.2 series (latest - January 2026)
+      // GPT-5.4 series (latest)
+      'gpt-5.4', // Most capable model for complex reasoning and agentic tasks
+      'gpt-5.4-mini', // Faster, cost-efficient version of GPT-5.4
+      'gpt-5.4-nano', // Smallest, most cost-efficient version of GPT-5.4
+
+      // GPT-5.3 series
+      'gpt-5.3', // Intelligent reasoning model for coding and agentic tasks
+
+      // GPT-5.2 series (January 2026)
       'gpt-5.2', // Best model for coding and agentic tasks across industries
       'gpt-5.2-pro', // Version of GPT-5.2 that produces smarter and more precise responses
       'gpt-5.2-chat-latest', // GPT-5.2 model used in ChatGPT
