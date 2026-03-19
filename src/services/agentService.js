@@ -6,6 +6,7 @@ const toolService = require('./toolService');
 const APIKey = require('../models/ApiKey');
 const summarizationService = require('./summarizationService');
 const suggestionService = require('./suggestionService');
+const languageDetectionService = require('./languageDetectionService');
 
 class AgentService {
   /**
@@ -172,6 +173,20 @@ class AgentService {
       content: userMessage,
       timestamp: new Date(),
     });
+
+    // Detect language of the user message (runs unless explicitly disabled)
+    let detectedLanguage = null;
+    if (agent.config.enforce_language_detection !== false) {
+      const decryptedKey = agent.api_key.getDecryptedKey();
+      const detection = await languageDetectionService.detectLanguage(
+        userMessage,
+        decryptedKey,
+        agent.api_key.provider.name
+      );
+      detectedLanguage = detection.language;
+      conversation.current_turn_language = detectedLanguage;
+      await conversation.save();
+    }
 
     // Execute agent reasoning
     const response = await this.executeAgentReasoning(
@@ -386,6 +401,20 @@ class AgentService {
       content: userMessage,
       timestamp: new Date(),
     });
+
+    // Detect language of the user message (runs unless explicitly disabled)
+    let detectedLanguage = null;
+    if (agent.config.enforce_language_detection !== false) {
+      const decryptedKey = agent.api_key.getDecryptedKey();
+      const detection = await languageDetectionService.detectLanguage(
+        userMessage,
+        decryptedKey,
+        agent.api_key.provider.name
+      );
+      detectedLanguage = detection.language;
+      conversation.current_turn_language = detectedLanguage;
+      await conversation.save();
+    }
 
     // Execute agent reasoning with streaming
     const response = await this.executeAgentReasoningStream(
@@ -667,7 +696,8 @@ class AgentService {
       const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
         agent.system_prompt,
         agent,
-        dynamicContext
+        dynamicContext,
+        conversation.current_turn_language
       );
 
       // Use structured outputs if model supports it
@@ -851,7 +881,8 @@ class AgentService {
       const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
         agent.system_prompt,
         agent,
-        dynamicContext
+        dynamicContext,
+        conversation.current_turn_language
       );
 
       // Use structured outputs if model supports it
@@ -2242,7 +2273,7 @@ Your response:`;
    * - Static content (personality, tools, format) goes first and gets cached
    * - Dynamic context is appended last and changes per request
    */
-  buildEnhancedSystemPrompt(baseSystemPrompt, agent, dynamicContext = {}) {
+  buildEnhancedSystemPrompt(baseSystemPrompt, agent, dynamicContext = {}, currentTurnLanguage = null) {
     // LAYER 1: Base personality and behavior (static per agent)
     let enhancedPrompt = baseSystemPrompt;
 
@@ -2305,6 +2336,15 @@ Your response:`;
         .join('\n');
 
       enhancedPrompt += `\n\n## Additional Context\n${contextString}`;
+    }
+
+    // LAYER 5: Language enforcement (per-turn, appended last)
+    if (currentTurnLanguage && agent.config.enforce_language_detection !== false) {
+      enhancedPrompt += `\n\n## Language Requirement\n`;
+      enhancedPrompt += `CRITICAL: The user's current message is written in language code "${currentTurnLanguage}" (ISO 639-1). `;
+      enhancedPrompt += `You MUST write your entire response (the RESPONSE field) in this language ("${currentTurnLanguage}"). `;
+      enhancedPrompt += `Do NOT switch to another language unless the user explicitly asks you to. `;
+      enhancedPrompt += `Tool parameters, action fields, and reasoning may remain in English.`;
     }
 
     return enhancedPrompt;

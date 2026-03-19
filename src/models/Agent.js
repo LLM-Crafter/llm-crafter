@@ -137,6 +137,11 @@ const agentSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
+      // Language enforcement config
+      enforce_language_detection: {
+        type: Boolean,
+        default: true,
+      },
       // Human handoff configuration
       handoff_config: {
         allow_agent_handoff: {

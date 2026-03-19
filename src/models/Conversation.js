@@ -212,6 +212,11 @@ const conversationSchema = new mongoose.Schema(
         default: false,
       },
     },
+    // Detected language of the current user turn (ISO 639-1 code, e.g. "en", "fr", "pt")
+    current_turn_language: {
+      type: String,
+      default: null,
+    },
     // Dynamic context passed from external sources (stored as the most recent context)
     dynamic_context: {
       type: mongoose.Schema.Types.Mixed,
