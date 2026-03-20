@@ -181,7 +181,9 @@ class AgentService {
       const detection = await languageDetectionService.detectLanguage(
         userMessage,
         decryptedKey,
-        agent.api_key.provider.name
+        agent.api_key.provider.name,
+        conversation.messages || [],
+        conversation.current_turn_language || null
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;
@@ -409,7 +411,9 @@ class AgentService {
       const detection = await languageDetectionService.detectLanguage(
         userMessage,
         decryptedKey,
-        agent.api_key.provider.name
+        agent.api_key.provider.name,
+        conversation.messages || [],
+        conversation.current_turn_language || null
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;
@@ -2093,8 +2097,8 @@ Your response:`;
         agent.api_key.provider.name
       );
 
-      // Use a cost-effective model (gpt-3.5-turbo or gpt-4o-mini)
-      const model = 'gpt-4.1-nano';
+      // Use a cost-effective model
+      const model = 'gpt-5.4-nano';
       
       const prompt = `Based on the following conversation, generate a concise title (maximum 10 words) that captures the main topic or intent. Respond with only the title, no quotes or additional text.\n\n${conversationContext}`;
 

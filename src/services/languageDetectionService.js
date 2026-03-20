@@ -9,14 +9,18 @@ const OpenAIService = require('./openaiService');
  * Picks the cheapest available model for the agent's provider so the
  * cost per detection is negligible.  This approach is far more accurate
  * on short messages than n-gram libraries like franc-min.
+ *
+ * Conversation history is passed as context so the model can resolve
+ * ambiguous inputs (emails, numbers, mixed-language greetings, etc.)
+ * by looking at what language the conversation has been using.
  */
 class LanguageDetectionService {
   constructor() {
     // Cheapest model per provider — used exclusively for language detection.
     // If a provider is missing or its model is unavailable the service
-    // falls back gracefully to "en".
+    // falls back gracefully to the previous turn language or "en".
     this.modelByProvider = {
-      openai: 'gpt-4.1-nano',           // ~$0.10 / 1M input tokens
+      openai: 'gpt-5.4-nano',           // newest cheapest OpenAI model
       anthropic: 'claude-3-5-haiku-20241022', // cheapest Anthropic model
       google: 'gemini-2.0-flash',        // cheapest Google model
       deepseek: 'deepseek-chat',         // DeepSeek V3 chat, very cheap
@@ -24,21 +28,63 @@ class LanguageDetectionService {
       openrouter: 'deepseek/deepseek-chat', // cheapest openrouter route
     };
 
-    // System prompt is kept short to minimize tokens & maximize cache hits
-    this.systemPrompt =
-      'You are a language identifier. Given a user message, reply with ONLY the ISO 639-1 two-letter language code (e.g. en, fr, pt, es, de, nl, it, ja, zh, ko, ar, ru, hi, tr, pl, sv, da, fi, no, cs, ro, hu, el, he, th, vi, id, ms, uk, bg, hr, sk, sl, sr, lt, lv, et, ca, gl, eu, cy). Output nothing else — no punctuation, no explanation.';
+    this.systemPrompt = [
+      'You are an expert language identifier.',
+      'Given a user message and optional conversation history, determine the PRIMARY language the user is communicating in.',
+      '',
+      'Rules:',
+      '- Reply with ONLY the ISO 639-1 two-letter code (en, fr, pt, es, de, nl, it, ja, zh, ko, ar, ru, hi, tr, pl, sv, da, fi, no, cs, ro, hu, etc.).',
+      '- If the message is a mix of multiple languages (e.g. Arabic greeting + Dutch sentence), identify the DOMINANT language of the overall message, not borrowed words or greetings.',
+      '- If the message contains ONLY numbers, email addresses, URLs, emojis, or other non-linguistic content, use the conversation history to determine the language. If there is no history, reply with "en".',
+      '- Use conversation history as strong context: if the user has been writing in Dutch and sends a number, the language is still Dutch.',
+      '- Output ONLY the two-letter code. No punctuation, no explanation.',
+    ].join('\n');
   }
 
   /**
    * Return the cheapest detection model for a given provider.
-   * Falls back to 'gpt-4.1-nano' when the provider is unknown.
+   * Falls back to 'gpt-5.4-nano' when the provider is unknown.
    *
    * @param {string} providerName
    * @returns {string} model identifier
    */
   getModelForProvider(providerName) {
     const key = (providerName || '').toLowerCase();
-    return this.modelByProvider[key] || 'gpt-4.1-nano';
+    return this.modelByProvider[key] || 'gpt-5.4-nano';
+  }
+
+  /**
+   * Build the user prompt for language detection.
+   * Includes recent conversation history so the model can disambiguate
+   * non-linguistic messages (numbers, emails) and mixed-language inputs.
+   *
+   * @param {string} text - Current user message
+   * @param {Array} conversationMessages - Recent messages [{role, content}]
+   * @returns {string}
+   */
+  buildDetectionPrompt(text, conversationMessages = []) {
+    let prompt = '';
+
+    // Add recent conversation context (last 4 messages, excluding the current one)
+    if (conversationMessages.length > 0) {
+      const recentMessages = conversationMessages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(-4);
+
+      if (recentMessages.length > 0) {
+        prompt += 'Conversation history:\n';
+        for (const msg of recentMessages) {
+          const label = msg.role === 'user' ? 'User' : 'Assistant';
+          // Truncate long messages to save tokens
+          const content = (msg.content || '').substring(0, 150);
+          prompt += `${label}: ${content}\n`;
+        }
+        prompt += '\n';
+      }
+    }
+
+    prompt += `Current user message to classify:\n${text}`;
+    return prompt;
   }
 
   /**
@@ -47,23 +93,38 @@ class LanguageDetectionService {
    * @param {string} text - The user message to analyse
    * @param {string} decryptedApiKey - Decrypted API key string
    * @param {string} providerName - Provider name (e.g. "openai", "anthropic", "google", …)
+   * @param {Array} [conversationMessages=[]] - Recent conversation messages for context
+   * @param {string|null} [previousLanguage=null] - Language detected on the previous turn
    * @returns {Promise<{ language: string, confidence: string }>}
    *   language  — ISO 639-1 code (lowercase), e.g. "en"
    *   confidence — "high" when the detector produced a clean code, "low" otherwise
    */
-  async detectLanguage(text, decryptedApiKey, providerName) {
-    // Guard: empty / very short input → default to "en"
+  async detectLanguage(text, decryptedApiKey, providerName, conversationMessages = [], previousLanguage = null) {
+    // Guard: empty input → use previous language or default to "en"
     if (!text || text.trim().length === 0) {
-      return { language: 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low' };
+    }
+
+    // Fast path: if the message is ONLY numbers, punctuation, emails, or URLs
+    // skip the LLM call and carry forward the previous language
+    const stripped = text.trim();
+    if (/^[\d\s\-+().,:;@#&*!?\/\\=<>{}[\]|~`$%^_"']+$/.test(stripped)) {
+      return { language: previousLanguage || 'en', confidence: 'low' };
+    }
+    // Email-only check
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(stripped)) {
+      return { language: previousLanguage || 'en', confidence: 'low' };
     }
 
     try {
       const openai = new OpenAIService(decryptedApiKey, providerName);
       const model = this.getModelForProvider(providerName);
 
+      const prompt = this.buildDetectionPrompt(text, conversationMessages);
+
       const response = await openai.generateCompletion(
         model,
-        text,
+        prompt,
         { temperature: 0, max_tokens: 5 },
         this.systemPrompt
       );
@@ -74,7 +135,6 @@ class LanguageDetectionService {
       const isoMatch = raw.match(/^([a-z]{2})$/);
 
       if (isoMatch) {
-        console.log(`[LanguageDetection] Detected language "${isoMatch[1]}" with high confidence for input: "${text}"`);
         return { language: isoMatch[1], confidence: 'high' };
       }
 
@@ -84,15 +144,15 @@ class LanguageDetectionService {
         return { language: fallbackMatch[1], confidence: 'low' };
       }
 
-      // Unable to parse — default
+      // Unable to parse — use previous language or default
       console.warn(
-        `[LanguageDetection] Could not parse LLM response: "${raw}", defaulting to "en"`
+        `[LanguageDetection] Could not parse LLM response: "${raw}", falling back`
       );
-      return { language: 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low' };
     } catch (error) {
       console.error('[LanguageDetection] Detection failed:', error.message);
-      // Non-blocking — fall back to English so the conversation continues
-      return { language: 'en', confidence: 'low' };
+      // Non-blocking — fall back so the conversation continues
+      return { language: previousLanguage || 'en', confidence: 'low' };
     }
   }
 }
