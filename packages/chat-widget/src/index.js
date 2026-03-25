@@ -1212,16 +1212,29 @@ class LLMCrafterChatWidget {
             continue;
           }
 
+          // Determine if this is from a human operator
+          const isHumanOperator =
+            msg.role === 'human' || msg.role === 'human_operator';
+
           // Only show messages from assistant (bot) or human operators
           // Skip user messages as they're already displayed when sent
+          // Skip assistant messages when NOT human controlled - they're already
+          // displayed from the direct API response (streaming or non-streaming)
           if (
             msg.role === 'assistant' ||
             msg.role === 'human' ||
             msg.role === 'human_operator'
           ) {
-            // Determine sender name and avatar based on role
-            const isHumanOperator =
-              msg.role === 'human' || msg.role === 'human_operator';
+            // When not human controlled, only display human operator messages from polling
+            // AI messages are already shown from the direct chat response
+            if (!this.isHumanControlled && !isHumanOperator) {
+              // Still track the message ID so it won't be shown if handoff happens later
+              if (msg._id) {
+                this.displayedMessageIds.add(msg._id);
+              }
+              this.displayedMessageIds.add(contentKey);
+              continue;
+            }
 
             // For human operators, try to get name from handler_info, otherwise use default
             let senderName;
