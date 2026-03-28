@@ -429,8 +429,9 @@ class AgentService {
     );
 
     // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
+    let assistantMessageId = null;
     if (response.content) {
-      await conversation.addMessage({
+      const savedConversation = await conversation.addMessage({
         role: 'assistant',
         content: response.content,
         thinking_process: response.thinking_process,
@@ -438,6 +439,8 @@ class AgentService {
         token_usage: response.token_usage,
         timestamp: new Date(),
       });
+      const lastMsg = savedConversation.messages[savedConversation.messages.length - 1];
+      assistantMessageId = lastMsg?._id || null;
     }
 
     // Generate AI-powered conversation title after second user message
@@ -486,6 +489,7 @@ class AgentService {
 
     const result = {
       conversation_id: conversation._id,
+      message_id: assistantMessageId,
       response: response.content,
       thinking_process: response.thinking_process,
       tools_used: response.tools_used,
@@ -901,6 +905,8 @@ class AgentService {
       let inResponseField = false;
       let actionChecked = false;
       let isRespondAction = false;
+      let isStreaming = false;
+      let streamingStarted = false;
 
       const onChunk = chunk => {
         streamBuffer += chunk;
@@ -990,8 +996,6 @@ class AgentService {
         }
 
         // Legacy text-based streaming for non-structured outputs
-        let isStreaming = false;
-        let streamingStarted = false;
         // Check if we've detected a RESPONSE action and should start streaming
         if (!streamingStarted && this.shouldStartStreaming(streamBuffer)) {
           isStreaming = true;
@@ -1621,13 +1625,13 @@ class AgentService {
 
       let streamBuffer = '';
       let responseContentSent = '';
+      let isStreaming = false;
+      let streamingStarted = false;
 
       const onChunk = chunk => {
         streamBuffer += chunk;
 
         // Legacy text-based streaming for non-structured outputs
-        let isStreaming = false;
-        let streamingStarted = false;
         // Check if we've detected a RESPONSE action and should start streaming
         if (!streamingStarted && this.shouldStartStreaming(streamBuffer)) {
           isStreaming = true;

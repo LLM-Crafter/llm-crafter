@@ -1729,6 +1729,7 @@ const executeChatbotAgentWithSessionStream = async (req, res) => {
       const completionData = JSON.stringify({
         type: 'complete',
         conversation_id: result.conversation_id,
+        message_id: result.message_id || null,
         suggestions: result.suggestions,
         handoff_requested: result.handoff_requested || false,
         handoff_info: result.handoff_info || null,
