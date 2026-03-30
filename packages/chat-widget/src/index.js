@@ -1013,6 +1013,9 @@ class LLMCrafterChatWidget {
   setInputState(enabled) {
     this.elements.input.disabled = !enabled;
     this.elements.sendBtn.disabled = !enabled;
+    if (enabled) {
+      this.elements.input.focus();
+    }
   }
 
   scrollToBottom() {
