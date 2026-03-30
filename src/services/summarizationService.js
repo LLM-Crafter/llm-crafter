@@ -111,10 +111,23 @@ class SummarizationService {
 
       prompt += `${role}: ${content}\n\n`;
 
-      // Include key tool usage information
+      // Include detailed tool usage information (parameters and results)
       if (msg.tools_used && msg.tools_used.length > 0) {
-        const toolNames = msg.tools_used.map(t => t.tool_name).join(', ');
-        prompt += `[Tools used: ${toolNames}]\n\n`;
+        msg.tools_used.forEach(t => {
+          prompt += `[Tool: ${t.tool_name}`;
+          if (t.parameters) {
+            prompt += `, Parameters: ${JSON.stringify(t.parameters)}`;
+          }
+          if (t.success) {
+            const resultStr = JSON.stringify(t.result);
+            // Truncate very long tool results
+            prompt += `, Result: ${resultStr.length > 500 ? resultStr.substring(0, 497) + '...' : resultStr}`;
+          } else if (t.error) {
+            prompt += `, Error: ${t.error}`;
+          }
+          prompt += `]\n`;
+        });
+        prompt += `\n`;
       }
     });
 
@@ -124,7 +137,8 @@ class SummarizationService {
   "important_decisions": ["decision1", "decision2"],
   "unresolved_issues": ["issue1", "issue2"],
   "user_preferences": {"preference_type": "value"},
-  "context_data": {"important_key": "important_value"}
+  "context_data": {"important_key": "important_value"},
+  "tool_results": [{"tool": "tool_name", "key_data": "important data returned by the tool"}]
 }`;
 
     return prompt;
@@ -142,6 +156,7 @@ Focus on:
 3. UNRESOLVED ISSUES: Questions or problems that need follow-up
 4. USER PREFERENCES: User's stated preferences, constraints, or requirements
 5. CONTEXT DATA: Important facts, numbers, names, or references that should be remembered
+6. TOOL RESULTS: Key data returned by tool executions (API responses, lookups, search results) - preserve specific values like IDs, statuses, names, dates, and numbers
 
 Guidelines:
 - Be concise but comprehensive
@@ -149,6 +164,7 @@ Guidelines:
 - Preserve important details that affect future conversations
 - Merge with existing summary information when provided
 - Use clear, specific language
+- CRITICAL: Preserve specific factual data from tool results (order numbers, account details, statuses, dates, etc.)
 - Return ONLY valid JSON in the exact format requested`;
   }
 
@@ -184,6 +200,9 @@ Guidelines:
           typeof summaryData.context_data === 'object'
             ? summaryData.context_data
             : {},
+        tool_results: Array.isArray(summaryData.tool_results)
+          ? summaryData.tool_results
+          : [],
       };
     } catch (error) {
       console.error('Failed to parse summary response:', error);
@@ -196,6 +215,7 @@ Guidelines:
         unresolved_issues: [],
         user_preferences: {},
         context_data: {},
+        tool_results: [],
       };
     }
   }

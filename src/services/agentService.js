@@ -1831,8 +1831,18 @@ class AgentService {
     // Static content (tools, format instructions) is in the system prompt for caching
     let prompt = `## Current Task\nAnalyze the conversation and decide on the next action.\n\n`;
     
+    // Separate summary context from conversation messages to prevent tone contamination
+    const summaryMessages = context.conversation_history.filter(msg => msg.is_summarized);
+    const conversationMessages = context.conversation_history.filter(msg => !msg.is_summarized);
+    
+    if (summaryMessages.length > 0) {
+      prompt += `## Previous Context Summary\n`;
+      prompt += summaryMessages.map(msg => msg.content).join('\n');
+      prompt += `\n\n`;
+    }
+    
     prompt += `## Conversation History\n`;
-    prompt += context.conversation_history.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
     
     if (thinkingProcess.length > 0) {
       prompt += `\n\n## Previous Thinking Process\n`;
@@ -2336,6 +2346,13 @@ Your response:`;
     enhancedPrompt += `**3. To continue thinking:**\n`;
     enhancedPrompt += `ACTION: think\n`;
     enhancedPrompt += `REASONING: What you're thinking about\n`;
+
+    // LAYER 3.5: Summary handling instructions (static)
+    enhancedPrompt += `\n## Summary Handling\n`;
+    enhancedPrompt += `When a "Previous Context Summary" is provided, treat it as background knowledge about earlier parts of the conversation. `;
+    enhancedPrompt += `NEVER reference or repeat the summary format, structure, or categories (topics, decisions, issues, etc.) in your response to the user. `;
+    enhancedPrompt += `Always respond naturally and conversationally as if you remember the full conversation. `;
+    enhancedPrompt += `Use the factual data from the summary (names, numbers, statuses, dates) when relevant to the user's question.\n`;
 
     // LAYER 4: Dynamic context (changes per request) - appended last to preserve cache
     if (Object.keys(dynamicContext).length > 0) {

@@ -238,6 +238,10 @@ const conversationSchema = new mongoose.Schema(
       important_decisions: [String],
       unresolved_issues: [String],
       context_data: mongoose.Schema.Types.Mixed,
+      tool_results: [{
+        tool: String,
+        key_data: String,
+      }],
       created_at: {
         type: Date,
         default: Date.now,
@@ -318,7 +322,20 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
       is_summarized: true,
     });
 
-    // Include only recent messages after the last summary
+    // Include a small overlap of messages before the summary cutoff for continuity
+    // This ensures the agent has context about the transition between summarized and recent messages
+    const overlapCount = 4; // Keep 4 messages before the cutoff as overlap
+    const overlapStart = Math.max(0, this.metadata.last_summary_index + 1 - overlapCount);
+    const overlapMessages = this.messages.slice(
+      overlapStart,
+      this.metadata.last_summary_index + 1
+    ).filter(m => m.role !== 'system'); // Exclude system messages from overlap
+    
+    if (overlapMessages.length > 0) {
+      messages.push(...overlapMessages);
+    }
+
+    // Include recent messages after the last summary
     const recentMessages = this.messages.slice(
       this.metadata.last_summary_index + 1
     );
@@ -382,33 +399,48 @@ conversationSchema.methods.buildSummaryContext = function () {
   }
 
   const summary = this.conversation_summary;
-  let context = '=== CONVERSATION SUMMARY ===\n';
+  
+  // Build a natural-language briefing instead of analytical headers
+  // This prevents the LLM from mimicking the analytical format in its responses
+  let parts = [];
 
   if (summary.key_topics && summary.key_topics.length > 0) {
-    context += `Key Topics Discussed: ${summary.key_topics.join(', ')}\n`;
+    parts.push(`The conversation has covered: ${summary.key_topics.join(', ')}.`);
   }
 
   if (summary.important_decisions && summary.important_decisions.length > 0) {
-    context += `Important Decisions Made: ${summary.important_decisions.join('; ')}\n`;
+    parts.push(`Key decisions made: ${summary.important_decisions.join('. ')}.`);
   }
 
   if (summary.unresolved_issues && summary.unresolved_issues.length > 0) {
-    context += `Unresolved Issues: ${summary.unresolved_issues.join('; ')}\n`;
+    parts.push(`Still pending: ${summary.unresolved_issues.join('. ')}.`);
   }
 
   if (
     summary.user_preferences &&
     Object.keys(summary.user_preferences).length > 0
   ) {
-    context += `User Preferences: ${JSON.stringify(summary.user_preferences)}\n`;
+    const prefs = Object.entries(summary.user_preferences)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(', ');
+    parts.push(`User preferences: ${prefs}.`);
   }
 
   if (summary.context_data && Object.keys(summary.context_data).length > 0) {
-    context += `Important Context: ${JSON.stringify(summary.context_data)}\n`;
+    const data = Object.entries(summary.context_data)
+      .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+      .join(', ');
+    parts.push(`Important details: ${data}.`);
   }
 
-  context += `(Summary covers ${summary.message_count_when_summarized} messages up to ${summary.created_at.toISOString()})\n`;
-  context += '=== END SUMMARY ===\n';
+  if (summary.tool_results && summary.tool_results.length > 0) {
+    const toolData = summary.tool_results
+      .map(t => `${t.tool}: ${t.key_data}`)
+      .join('; ');
+    parts.push(`Data from previous tool lookups: ${toolData}.`);
+  }
+
+  let context = `[Previous conversation context (${summary.message_count_when_summarized} messages): ${parts.join(' ')}]`;
 
   return context;
 };
@@ -421,11 +453,15 @@ conversationSchema.methods.updateSummary = function (summaryData) {
     important_decisions: summaryData.important_decisions || [],
     unresolved_issues: summaryData.unresolved_issues || [],
     context_data: summaryData.context_data || {},
+    tool_results: summaryData.tool_results || [],
     created_at: new Date(),
     message_count_when_summarized: this.messages.length,
   };
 
-  this.metadata.last_summary_index = this.messages.length - 1;
+  // Leave a buffer of recent messages outside the summary window
+  // so the agent retains raw conversation context for continuity
+  const bufferSize = 6;
+  this.metadata.last_summary_index = Math.max(0, this.messages.length - 1 - bufferSize);
   this.metadata.summary_version += 1;
   this.metadata.requires_summarization = false;
 
