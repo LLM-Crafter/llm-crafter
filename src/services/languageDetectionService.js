@@ -36,6 +36,9 @@ class LanguageDetectionService {
       '- Reply with ONLY the ISO 639-1 two-letter code (en, fr, pt, es, de, nl, it, ja, zh, ko, ar, ru, hi, tr, pl, sv, da, fi, no, cs, ro, hu, etc.).',
       '- If the message is a mix of multiple languages (e.g. Arabic greeting + Dutch sentence), identify the DOMINANT language of the overall message, not borrowed words or greetings.',
       '- If the message contains ONLY numbers, email addresses, URLs, emojis, or other non-linguistic content, use the conversation history to determine the language. If there is no history, reply with "en".',
+      '- PROPER NOUNS RULE: City names, country names, street names, person names, brand names, and product names are NOT language indicators on their own. If the message consists solely of a proper noun (e.g. a city like "Amsterdam", "Paris", "Berlin"), treat it as non-linguistic content and use conversation history to determine the language. Do NOT infer language from where a city is located.',
+      '- URL/LINK RULE: If the message consists solely of a URL or hyperlink (e.g. https://..., www...), treat it as non-linguistic content and use conversation history to determine the language.',
+      '- CONVERSATION HISTORY IS AUTHORITATIVE: When the current message is ambiguous, a single word, a proper noun, a number, or a URL, the conversation history ALWAYS takes precedence. If the last few messages were in French, the answer is "fr" unless there is clear multi-word evidence of a language switch.',
       '- Use conversation history as strong context: if the user has been writing in Dutch and sends a number, the language is still Dutch.',
       '- Output ONLY the two-letter code. No punctuation, no explanation.',
     ].join('\n');
@@ -115,6 +118,10 @@ class LanguageDetectionService {
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(stripped)) {
       return { language: previousLanguage || 'en', confidence: 'low' };
     }
+    // URL-only check (http/https/www links) — words inside URLs are not language indicators
+    if (/^(https?:\/\/|www\.)[^\s]+$/i.test(stripped)) {
+      return { language: previousLanguage || 'en', confidence: 'low' };
+    }
 
     try {
       const openai = new OpenAIService(decryptedApiKey, providerName);
@@ -135,6 +142,7 @@ class LanguageDetectionService {
       const isoMatch = raw.match(/^([a-z]{2})$/);
 
       if (isoMatch) {
+        console.log(`[LanguageDetection] Detected language "${isoMatch[1]}" with high confidence for message: "${text}"`);
         return { language: isoMatch[1], confidence: 'high' };
       }
 
