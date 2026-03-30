@@ -42,8 +42,8 @@ class LLMCrafterChatWidget {
       autoOpen: config.autoOpen || false,
       autoOpenDelay: config.autoOpenDelay || null, // Delay in milliseconds before auto-opening (e.g., 30000 for 30 seconds)
       showPoweredBy: config.showPoweredBy !== false,
-      poweredByUrl: config.poweredByUrl || '#',
-      poweredByText: config.poweredByText || 'Powered by LLM Crafter',
+      poweredByUrl: config.poweredByUrl || '#', // can be string or array of {lang, text} objects
+      poweredByText: config.poweredByText || 'Powered by LLM Crafter', // can be string or array of {lang, text} objects
       userIdentifier: config.userIdentifier || null,
       enableStreaming: config.enableStreaming !== false,
       pollingInterval: config.pollingInterval || 3000, // Poll for new messages every 3 seconds
@@ -128,6 +128,8 @@ class LLMCrafterChatWidget {
     const localizedTitle = this.getLocalizedText(this.config.title);
     const localizedSubtitle = this.getLocalizedText(this.config.subtitle);
     const localizedPlaceholder = this.getLocalizedText(this.config.placeholder);
+    const localizedPoweredByUrl = this.getLocalizedText(this.config.poweredByUrl);
+    const localizedPoweredByText = this.getLocalizedText(this.config.poweredByText);
 
     chatWindow.innerHTML = `
       <div class="llm-crafter-chat-header">
@@ -158,7 +160,7 @@ class LLMCrafterChatWidget {
           </svg>
         </button>
       </div>
-      ${this.config.showPoweredBy ? `<div class="llm-crafter-powered-by"><a href="${this.config.poweredByUrl}" target="_blank">${this.config.poweredByText}</a></div>` : ''}
+      ${this.config.showPoweredBy ? `<div class="llm-crafter-powered-by"><a href="${localizedPoweredByUrl}" target="_blank">${localizedPoweredByText}</a></div>` : ''}
     `;
 
     container.appendChild(button);
