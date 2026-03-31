@@ -88,12 +88,15 @@ class LLMCrafterChatWidget {
     if (this.config.autoOpen) {
       this.open();
     } else if (this.config.autoOpenDelay && !restoredConversation) {
-      // Only set auto-open timer if not restoring a conversation
-      setTimeout(() => {
-        if (!this.isOpen) {
-          this.open();
-        }
-      }, this.config.autoOpenDelay);
+      // Only set auto-open timer if not restoring a conversation and not on mobile
+      const isMobile = window.innerWidth <= 480;
+      if (!isMobile) {
+        setTimeout(() => {
+          if (!this.isOpen) {
+            this.open();
+          }
+        }, this.config.autoOpenDelay);
+      }
     }
 
     // Initialize session
