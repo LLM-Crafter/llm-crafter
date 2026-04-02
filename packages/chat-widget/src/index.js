@@ -56,6 +56,7 @@ class LLMCrafterChatWidget {
       onHumanTakeover: config.onHumanTakeover || null,
       messageTransformer: config.messageTransformer || null, // Function to transform messages before display
       dynamicContext: config.dynamicContext || null, // Additional context to send with messages (can be function or object)
+      quickButtons: config.quickButtons || null, // Array of {label, message} objects or strings shown at conversation start
     };
 
     this.conversationId = null;
@@ -71,6 +72,7 @@ class LLMCrafterChatWidget {
     this.displayedMessageTimestamps = new Map(); // Track when messages were displayed
     this.localStorageKey = `llm-crafter-conversation-${this.config.agentId}`; // Unique key per agent
     this.lastMessageSender = null; // Track last message sender for bundling
+    this.quickButtonsElement = null; // Reference to the quick buttons element
 
     this.init();
   }
@@ -503,6 +505,9 @@ class LLMCrafterChatWidget {
   async sendMessage() {
     const message = this.elements.input.value.trim();
     if (!message || this.isTyping) return;
+
+    // Hide quick buttons on first user message
+    this.hideQuickButtons();
 
     // Add user message
     this.addMessage(message, true);
@@ -1052,7 +1057,46 @@ class LLMCrafterChatWidget {
       this.hideTypingIndicator();
       const localizedWelcome = this.getLocalizedWelcomeMessage();
       this.addMessage(localizedWelcome, false);
+
+      // Show quick buttons after the welcome message
+      if (this.config.quickButtons && this.config.quickButtons.length > 0) {
+        setTimeout(() => this.showQuickButtons(), 200);
+      }
     }, 1000); // 1 second delay to simulate typing
+  }
+
+  showQuickButtons() {
+    if (!this.config.quickButtons || this.config.quickButtons.length === 0) return;
+    if (this.quickButtonsElement) return; // Already shown
+
+    const container = document.createElement('div');
+    container.className = 'llm-crafter-quick-buttons';
+
+    this.config.quickButtons.forEach(item => {
+      const label = typeof item === 'string' ? item : this.getLocalizedText(item.label);
+      const message = typeof item === 'string' ? item : this.getLocalizedText(item.message || item.label);
+
+      const btn = document.createElement('button');
+      btn.className = 'llm-crafter-quick-btn';
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        this.hideQuickButtons();
+        this.elements.input.value = message;
+        this.sendMessage();
+      });
+      container.appendChild(btn);
+    });
+
+    this.quickButtonsElement = container;
+    this.elements.messagesContainer.appendChild(container);
+    this.scrollToBottom();
+  }
+
+  hideQuickButtons() {
+    if (this.quickButtonsElement) {
+      this.quickButtonsElement.remove();
+      this.quickButtonsElement = null;
+    }
   }
 
   escapeHtml(text) {
@@ -1311,6 +1355,7 @@ class LLMCrafterChatWidget {
     this.isFirstOpen = true;
     this.messages = [];
     this.lastMessageSender = null;
+    this.quickButtonsElement = null; // Reset quick buttons reference
 
     // Clear UI
     this.elements.messagesContainer.innerHTML = '';
@@ -1341,6 +1386,7 @@ class LLMCrafterChatWidget {
     this.displayedMessageIds.clear(); // Clear tracked message IDs
     this.isFirstOpen = true; // Reset first open flag
     this.lastMessageSender = null; // Reset sender tracking
+    this.quickButtonsElement = null; // Reset quick buttons reference
     this.stopPolling();
     this.clearStoredConversation(); // Clear from localStorage
     this.elements.messagesContainer.innerHTML = '';
