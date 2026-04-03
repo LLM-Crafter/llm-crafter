@@ -798,6 +798,15 @@ class AgentService {
           });
           break;
         }
+        // If LLM returned both a tool call and a response, use the pending response after tool execution
+        if (parsedResponse._pendingResponse && toolResult.success) {
+          finalResponse = parsedResponse._pendingResponse;
+          thinkingProcess.push({
+            step: 'final_response',
+            reasoning: 'Tool executed successfully, using combined response from LLM output',
+          });
+          break;
+        }
         // Continue reasoning with tool result (success or failure)
         continue;
       } else if (parsedResponse.action === 'respond') {
@@ -1117,6 +1126,18 @@ class AgentService {
             step: 'human_handoff_requested',
             reasoning:
               'Human handoff was requested, stopping agent processing and waiting for human operator',
+          });
+          break;
+        }
+        // If LLM returned both a tool call and a response, use the pending response after tool execution
+        if (parsedResponse._pendingResponse && toolResult.success) {
+          finalResponse = parsedResponse._pendingResponse;
+          if (streamCallback) {
+            streamCallback(parsedResponse._pendingResponse);
+          }
+          thinkingProcess.push({
+            step: 'final_response',
+            reasoning: 'Tool executed successfully, using combined response from LLM output',
           });
           break;
         }
@@ -1519,6 +1540,19 @@ class AgentService {
 
         toolsUsed.push(toolResultForAgent);
 
+        // If LLM returned both a tool call and a response, use the pending response after tool execution
+        if (parsedResponse._pendingResponse && toolResult.success) {
+          finalOutput = parsedResponse._pendingResponse;
+          thinkingProcess.push({
+            step: 'task_completed',
+            reasoning: 'Tool executed successfully, using combined response from LLM output',
+          });
+          await execution.addThinkingStep(
+            'task_completed',
+            'Task processing completed with combined tool + response output'
+          );
+          break;
+        }
         // Continue reasoning with tool result (success or failure)
         continue;
       } else if (parsedResponse.action === 'respond') {
@@ -1760,6 +1794,22 @@ class AgentService {
 
         toolsUsed.push(toolResultForAgent);
 
+        // If LLM returned both a tool call and a response, use the pending response after tool execution
+        if (parsedResponse._pendingResponse && toolResult.success) {
+          finalOutput = parsedResponse._pendingResponse;
+          if (streamCallback) {
+            streamCallback(parsedResponse._pendingResponse);
+          }
+          thinkingProcess.push({
+            step: 'task_completed',
+            reasoning: 'Tool executed successfully, using combined response from LLM output',
+          });
+          await execution.addThinkingStep(
+            'task_completed',
+            'Task processing completed with combined tool + response output'
+          );
+          break;
+        }
         // Continue reasoning with tool result (success or failure)
         continue;
       } else if (parsedResponse.action === 'respond') {
@@ -1922,6 +1972,69 @@ Your response:`;
   }
 
   /**
+   * Extract individual JSON objects from a string that may contain multiple
+   * concatenated JSON objects. Handles the case where the LLM returns a
+   * use_tool action followed by a respond action in a single response.
+   */
+  extractJsonObjects(content) {
+    const objects = [];
+    let i = 0;
+
+    while (i < content.length) {
+      if (content[i] === '{') {
+        let braceCount = 0;
+        let inString = false;
+        let escape = false;
+
+        for (let j = i; j < content.length; j++) {
+          const ch = content[j];
+
+          if (escape) {
+            escape = false;
+            continue;
+          }
+
+          if (ch === '\\' && inString) {
+            escape = true;
+            continue;
+          }
+
+          if (ch === '"') {
+            inString = !inString;
+            continue;
+          }
+
+          if (!inString) {
+            if (ch === '{') braceCount++;
+            if (ch === '}') {
+              braceCount--;
+              if (braceCount === 0) {
+                const jsonStr = content.substring(i, j + 1);
+                try {
+                  objects.push(JSON.parse(jsonStr));
+                } catch (e) {
+                  // Skip malformed JSON fragments
+                }
+                i = j + 1;
+                break;
+              }
+            }
+          }
+
+          // If we reach the end without closing, skip this opening brace
+          if (j === content.length - 1) {
+            i = j + 1;
+          }
+        }
+      } else {
+        i++;
+      }
+    }
+
+    return objects;
+  }
+
+  /**
    * Parse agent response to determine action
    * Handles both structured JSON outputs and legacy text-based formats
    */
@@ -1963,7 +2076,42 @@ Your response:`;
         return result;
       }
     } catch (e) {
-      // Not JSON or invalid structure, continue with text parsing
+      // Try to extract multiple concatenated JSON objects
+      // (LLM sometimes returns a use_tool + respond pair in a single response)
+      const jsonObjects = this.extractJsonObjects(content);
+      const validObjects = jsonObjects.filter(obj => obj.action && obj.reasoning);
+
+      if (validObjects.length > 0) {
+        console.log(`Extracted ${validObjects.length} valid JSON action(s) from concatenated response`);
+
+        const toolAction = validObjects.find(obj => obj.action === 'use_tool');
+        const respondAction = validObjects.find(obj => obj.action === 'respond');
+
+        // If both a tool call and a response exist, return the tool call with a pending response
+        if (toolAction && respondAction) {
+          console.log('Detected combined use_tool + respond pattern, will execute tool then use pending response');
+          return {
+            action: toolAction.action,
+            reasoning: toolAction.reasoning,
+            tool_name: toolAction.tool_name,
+            tool_parameters: toolAction.tool_parameters || {},
+            _pendingResponse: respondAction.response,
+          };
+        }
+
+        // Otherwise return the first valid action
+        const first = validObjects[0];
+        const result = {
+          action: first.action,
+          reasoning: first.reasoning,
+        };
+        if (first.tool_name) result.tool_name = first.tool_name;
+        if (first.tool_parameters) result.tool_parameters = first.tool_parameters;
+        if (first.response && first.action === 'respond') result.response = first.response;
+        return result;
+      }
+
+      // Fall through to legacy text-based parsing
       console.log('Content is not structured JSON, using text parser');
     }
 
