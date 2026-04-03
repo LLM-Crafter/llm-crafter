@@ -956,6 +956,7 @@ class ToolService {
       const finalHeaders = {
         'Content-Type': 'application/json',
         ...authHeaders,
+        ...(config.conversation_id ? { 'X-Conversation-ID': config.conversation_id } : {}),
         ...headers,
       };
 
