@@ -2158,7 +2158,10 @@ Your response:`;
     config.organization_id = agent.organization;
     config.project_id = agent.project;
 
-    // Add conversation context for human handoff tool
+    // Add conversation context (available for all tools when in a chatbot conversation)
+    config.conversation_id = conversationId || null; // May be null for task agents
+
+    // Add extra context for human handoff tool
     if (toolName === 'request_human_handoff') {
       console.log(
         'Setting handoff config - conversationId:',
@@ -2166,7 +2169,6 @@ Your response:`;
         'agent._id:',
         agent._id
       );
-      config.conversation_id = conversationId; // May be null for task agents
       config.agent_id = agent._id;
     }
 
