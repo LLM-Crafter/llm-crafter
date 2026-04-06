@@ -312,9 +312,16 @@ class WhatsAppService extends BaseChannelService {
     // Meta sends nested structure
     const entry = rawMessage.entry?.[0];
     const change = entry?.changes?.[0];
-    const message = change?.value?.messages?.[0];
+    const value = change?.value;
+    const message = value?.messages?.[0];
 
     if (!message) {
+      // Status updates (sent, delivered, read) have no messages field - ignore silently
+      const status = value?.statuses?.[0];
+      if (status) {
+        this.log(`Message status update: ${status.status}`, { messageId: status.id, recipient: status.recipient_id });
+        return null;
+      }
       throw new Error('Invalid Meta webhook format');
     }
 

@@ -48,7 +48,9 @@ const handleWhatsAppWebhook = async (req, res) => {
         ip_address: req.ip,
       })
       .then(result => {
-        console.log('[WhatsApp] Message processed:', result.conversation_id);
+        if (result?.conversation_id) {
+          console.log('[WhatsApp] Message processed:', result.conversation_id);
+        }
       })
       .catch(error => {
         console.error('[WhatsApp] Error processing message:', error);

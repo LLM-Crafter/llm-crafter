@@ -155,6 +155,11 @@ class ChannelOrchestrator {
         // Normalize the message using channel service
         normalizedMessage =
           await channelService.handleIncomingMessage(rawMessage);
+
+        // null means a non-message webhook (e.g. status updates) - nothing to process
+        if (!normalizedMessage) {
+          return { success: true, status: 'ignored', reason: 'non_message_webhook' };
+        }
       }
 
       // Show typing indicator for channels that support it
