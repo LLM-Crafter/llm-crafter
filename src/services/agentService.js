@@ -744,7 +744,8 @@ class AgentService {
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
+          tool_name: parsedResponse.tool_name,
+          reasoning: parsedResponse.reasoning || `Decided to use tool: ${parsedResponse.tool_name}`,
         });
 
         const toolResult = await toolService.executeToolWithConfig(
@@ -793,8 +794,7 @@ class AgentService {
           finalResponse = handoffMessage;
           thinkingProcess.push({
             step: 'human_handoff_requested',
-            reasoning:
-              'Human handoff was requested, stopping agent processing and waiting for human operator',
+            reasoning: parsedResponse.reasoning || 'Human handoff was requested, stopping agent processing and waiting for human operator',
           });
           break;
         }
@@ -803,7 +803,7 @@ class AgentService {
           finalResponse = parsedResponse._pendingResponse;
           thinkingProcess.push({
             step: 'final_response',
-            reasoning: 'Tool executed successfully, using combined response from LLM output',
+            reasoning: parsedResponse.reasoning || 'Tool executed successfully, using combined response from LLM output',
           });
           break;
         }
@@ -814,7 +814,7 @@ class AgentService {
         finalResponse = parsedResponse.response;
         thinkingProcess.push({
           step: 'final_response',
-          reasoning: 'Determined sufficient information to respond to user',
+          reasoning: parsedResponse.reasoning || 'Determined sufficient information to respond to user',
         });
         break;
       } else {
@@ -1070,7 +1070,8 @@ class AgentService {
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
+          tool_name: parsedResponse.tool_name,
+          reasoning: parsedResponse.reasoning || `Decided to use tool: ${parsedResponse.tool_name}`,
         });
 
         const toolResult = await toolService.executeToolWithConfig(
@@ -1124,8 +1125,7 @@ class AgentService {
           finalResponse = handoffMessage;
           thinkingProcess.push({
             step: 'human_handoff_requested',
-            reasoning:
-              'Human handoff was requested, stopping agent processing and waiting for human operator',
+            reasoning: parsedResponse.reasoning || 'Human handoff was requested, stopping agent processing and waiting for human operator',
           });
           break;
         }
@@ -1137,7 +1137,7 @@ class AgentService {
           }
           thinkingProcess.push({
             step: 'final_response',
-            reasoning: 'Tool executed successfully, using combined response from LLM output',
+            reasoning: parsedResponse.reasoning || 'Tool executed successfully, using combined response from LLM output',
           });
           break;
         }
@@ -1148,7 +1148,7 @@ class AgentService {
         finalResponse = parsedResponse.response;
         thinkingProcess.push({
           step: 'final_response',
-          reasoning: 'Determined sufficient information to respond to user',
+          reasoning: parsedResponse.reasoning || 'Determined sufficient information to respond to user',
         });
         break;
       } else {
@@ -1474,15 +1474,17 @@ class AgentService {
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
 
       if (parsedResponse.action === 'use_tool') {
+        const toolReasoning = parsedResponse.reasoning || `Decided to use tool: ${parsedResponse.tool_name}`;
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
+          tool_name: parsedResponse.tool_name,
+          reasoning: toolReasoning,
         });
 
         await execution.addThinkingStep(
           'tool_execution',
-          `Using tool: ${parsedResponse.tool_name}`
+          toolReasoning
         );
 
         const toolResult = await toolService.executeToolWithConfig(
@@ -1543,13 +1545,14 @@ class AgentService {
         // If LLM returned both a tool call and a response, use the pending response after tool execution
         if (parsedResponse._pendingResponse && toolResult.success) {
           finalOutput = parsedResponse._pendingResponse;
+          const pendingReasoning = parsedResponse.reasoning || 'Tool executed successfully, using combined response from LLM output';
           thinkingProcess.push({
             step: 'task_completed',
-            reasoning: 'Tool executed successfully, using combined response from LLM output',
+            reasoning: pendingReasoning,
           });
           await execution.addThinkingStep(
             'task_completed',
-            'Task processing completed with combined tool + response output'
+            pendingReasoning
           );
           break;
         }
@@ -1558,14 +1561,15 @@ class AgentService {
       } else if (parsedResponse.action === 'respond') {
         // Agent decided to provide final output
         finalOutput = parsedResponse.response;
+        const respondReasoning = parsedResponse.reasoning || 'Determined sufficient information to complete the task';
         thinkingProcess.push({
           step: 'task_completed',
-          reasoning: 'Determined sufficient information to complete the task',
+          reasoning: respondReasoning,
         });
 
         await execution.addThinkingStep(
           'task_completed',
-          'Task processing completed with final output'
+          respondReasoning
         );
         break;
       } else {
@@ -1728,15 +1732,17 @@ class AgentService {
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
 
       if (parsedResponse.action === 'use_tool') {
+        const toolReasoning = parsedResponse.reasoning || `Decided to use tool: ${parsedResponse.tool_name}`;
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
-          reasoning: `Decided to use tool: ${parsedResponse.tool_name}`,
+          tool_name: parsedResponse.tool_name,
+          reasoning: toolReasoning,
         });
 
         await execution.addThinkingStep(
           'tool_execution',
-          `Using tool: ${parsedResponse.tool_name}`
+          toolReasoning
         );
 
         const toolResult = await toolService.executeToolWithConfig(
@@ -1800,13 +1806,14 @@ class AgentService {
           if (streamCallback) {
             streamCallback(parsedResponse._pendingResponse);
           }
+          const pendingReasoning = parsedResponse.reasoning || 'Tool executed successfully, using combined response from LLM output';
           thinkingProcess.push({
             step: 'task_completed',
-            reasoning: 'Tool executed successfully, using combined response from LLM output',
+            reasoning: pendingReasoning,
           });
           await execution.addThinkingStep(
             'task_completed',
-            'Task processing completed with combined tool + response output'
+            pendingReasoning
           );
           break;
         }
@@ -1815,14 +1822,15 @@ class AgentService {
       } else if (parsedResponse.action === 'respond') {
         // Agent decided to provide final output
         finalOutput = parsedResponse.response;
+        const respondReasoning = parsedResponse.reasoning || 'Determined sufficient information to complete the task';
         thinkingProcess.push({
           step: 'task_completed',
-          reasoning: 'Determined sufficient information to complete the task',
+          reasoning: respondReasoning,
         });
 
         await execution.addThinkingStep(
           'task_completed',
-          'Task processing completed with final output'
+          respondReasoning
         );
         break;
       } else {
