@@ -853,16 +853,94 @@ class LLMCrafterChatWidget {
         html = this.config.messageTransformer(text);
       } catch (error) {
         console.warn('Message transformer error:', error);
-        // Fallback to escaped HTML if transformer fails
-        html = this.escapeHtml(text);
+        // Fallback to markdown parsing if transformer fails
+        html = this.parseMarkdown(text);
       }
     } else {
-      // Default: escape HTML
-      html = this.escapeHtml(text);
+      // Default: parse markdown
+      html = this.parseMarkdown(text);
     }
 
     // Replace component tokens (e.g. [product:123]) with async loading placeholders
     return this.parseComponentTokens(html);
+  }
+
+  parseMarkdown(text) {
+    // Step 1: extract and protect fenced code blocks before any HTML escaping
+    const codeBlocks = [];
+    let out = text.replace(/```([^\n]*)\n?([\s\S]*?)```/g, (_m, lang, code) => {
+      const idx = codeBlocks.length;
+      const safeLang = lang.trim()
+        ? ` class="language-${lang.trim().replace(/[^a-zA-Z0-9-]/g, '')}"` : '';
+      codeBlocks.push(
+        `<pre class="llm-crafter-md-pre"><code${safeLang}>` +
+        `${this.escapeHtml(code.replace(/\n$/, ''))}</code></pre>`
+      );
+      return `\x02CODE${idx}\x03`;
+    });
+
+    // Step 2: extract and protect inline code
+    const inlineCodes = [];
+    out = out.replace(/`([^`\n]+)`/g, (_m, code) => {
+      const idx = inlineCodes.length;
+      inlineCodes.push(`<code class="llm-crafter-md-code">${this.escapeHtml(code)}</code>`);
+      return `\x02INLINE${idx}\x03`;
+    });
+
+    // Step 3: escape remaining HTML
+    out = this.escapeHtml(out);
+
+    // Step 4: links [text](url)
+    out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, linkText, url) => {
+      const rawUrl = url.replace(/&amp;/g, '&');
+      const safe = /^(https?:\/\/|mailto:|\/#|\/[^/])/.test(rawUrl) ? rawUrl : '#';
+      return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+    });
+
+    // Step 5: headings (only at line start)
+    out = out.replace(/^### (.+)$/gm, '<h3 class="llm-crafter-md-h3">$1</h3>');
+    out = out.replace(/^## (.+)$/gm,  '<h2 class="llm-crafter-md-h2">$1</h2>');
+    out = out.replace(/^# (.+)$/gm,   '<h1 class="llm-crafter-md-h1">$1</h1>');
+
+    // Step 6: bold + italic combinations, then bold, then italic
+    out = out.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    out = out.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    out = out.replace(/_([^_\n]+)_/g,   '<em>$1</em>');
+
+    // Step 7: unordered lists — group consecutive bullet lines
+    out = out.replace(/((?:^[ \t]*[-*+] .+(?:\n|$))+)/gm, block => {
+      const items = block.trim().split('\n')
+        .map(line => `<li>${line.replace(/^[ \t]*[-*+] /, '').trim()}</li>`)
+        .join('');
+      return `<ul class="llm-crafter-md-ul">${items}</ul>`;
+    });
+
+    // Step 8: ordered lists — group consecutive numbered lines
+    out = out.replace(/((?:^[ \t]*\d+\. .+(?:\n|$))+)/gm, block => {
+      const items = block.trim().split('\n')
+        .map(line => `<li>${line.replace(/^[ \t]*\d+\. /, '').trim()}</li>`)
+        .join('');
+      return `<ol class="llm-crafter-md-ol">${items}</ol>`;
+    });
+
+    // Step 9: horizontal rule
+    out = out.replace(/^(-{3,}|\*{3,}|_{3,})$/gm, '<hr class="llm-crafter-md-hr">');
+
+    // Step 10: newlines — double becomes paragraph break, single becomes <br>
+    out = out.replace(/\n\n+/g, '<br><br>');
+    out = out.replace(/\n/g, '<br>');
+
+    // Step 11: restore protected code
+    codeBlocks.forEach((block, i) => {
+      out = out.replace(`\x02CODE${i}\x03`, block);
+    });
+    inlineCodes.forEach((code, i) => {
+      out = out.replace(`\x02INLINE${i}\x03`, code);
+    });
+
+    return out;
   }
 
   /**
