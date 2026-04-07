@@ -57,6 +57,7 @@ class LLMCrafterChatWidget {
       messageTransformer: config.messageTransformer || null, // Function to transform messages before display
       dynamicContext: config.dynamicContext || null, // Additional context to send with messages (can be function or object)
       quickButtons: config.quickButtons || null, // Array of {label, message} objects or strings shown at conversation start
+      componentResolvers: config.componentResolvers || null, // Object mapping component type names to async resolver functions
     };
 
     this.conversationId = null;
@@ -796,6 +797,9 @@ class LLMCrafterChatWidget {
         timestamp: new Date(),
       });
 
+      // Resolve any async component tokens now that streaming is complete (fire-and-forget)
+      this.resolveComponents(messageDiv);
+
       // Track the message to prevent duplicate from polling
       if (messageId) {
         this.displayedMessageIds.add(messageId);
@@ -838,22 +842,123 @@ class LLMCrafterChatWidget {
   }
 
   transformMessage(text) {
+    let html;
+
     // Apply custom transformer if provided
     if (
       this.config.messageTransformer &&
       typeof this.config.messageTransformer === 'function'
     ) {
       try {
-        return this.config.messageTransformer(text);
+        html = this.config.messageTransformer(text);
       } catch (error) {
         console.warn('Message transformer error:', error);
         // Fallback to escaped HTML if transformer fails
-        return this.escapeHtml(text);
+        html = this.escapeHtml(text);
       }
+    } else {
+      // Default: escape HTML
+      html = this.escapeHtml(text);
     }
 
-    // Default: escape HTML
-    return this.escapeHtml(text);
+    // Replace component tokens (e.g. [product:123]) with async loading placeholders
+    return this.parseComponentTokens(html);
+  }
+
+  /**
+   * Scans an HTML string for component tokens like [product:abc123] and replaces
+   * them with a loading placeholder span. The resolver is called later by
+   * resolveComponents() once the element is in the DOM.
+   *
+   * Tokens are only replaced when a matching key exists in config.componentResolvers.
+   * Token names are case-insensitive; the resolver key is looked up lowercased.
+   */
+  parseComponentTokens(html) {
+    if (
+      !this.config.componentResolvers ||
+      typeof this.config.componentResolvers !== 'object'
+    ) {
+      return html;
+    }
+
+    return html.replace(/\[([a-zA-Z][a-zA-Z0-9_-]*):([^\]]*)\]/g, (match, typeName, args) => {
+      const resolverKey = typeName.toLowerCase();
+      const hasResolver =
+        typeof this.config.componentResolvers[resolverKey] === 'function' ||
+        typeof this.config.componentResolvers[typeName] === 'function';
+
+      if (!hasResolver) {
+        return match; // Leave unknown tokens as-is
+      }
+
+      // Escape attributes to prevent XSS
+      const safeKey = resolverKey.replace(/"/g, '');
+      const safeArgs = args.replace(/"/g, '&quot;');
+
+      return (
+        `<span class="llm-crafter-async-component" ` +
+        `data-resolver="${safeKey}" data-args="${safeArgs}" data-resolved="false">` +
+        `<span class="llm-crafter-component-loading">` +
+        `<span class="llm-crafter-loading-dot"></span>` +
+        `<span class="llm-crafter-loading-dot"></span>` +
+        `<span class="llm-crafter-loading-dot"></span>` +
+        `</span></span>`
+      );
+    });
+  }
+
+  /**
+   * Finds all unresolved component placeholders inside containerElement and
+   * calls the matching resolver. Each resolver receives the args string and
+   * must return either an HTMLElement or an HTML string.
+   *
+   * This is fire-and-forget — call without await after inserting a message.
+   */
+  async resolveComponents(containerElement) {
+    if (
+      !this.config.componentResolvers ||
+      typeof this.config.componentResolvers !== 'object'
+    ) {
+      return;
+    }
+
+    const placeholders = containerElement.querySelectorAll(
+      '.llm-crafter-async-component[data-resolved="false"]'
+    );
+
+    for (const placeholder of placeholders) {
+      const resolverKey = placeholder.dataset.resolver;
+      const args = placeholder.dataset.args || '';
+
+      // Mark immediately to prevent double-resolution if called again
+      placeholder.dataset.resolved = 'true';
+
+      const resolver =
+        this.config.componentResolvers[resolverKey] ||
+        this.config.componentResolvers[
+          resolverKey.charAt(0).toUpperCase() + resolverKey.slice(1)
+        ];
+
+      if (typeof resolver !== 'function') continue;
+
+      try {
+        const result = await resolver(args);
+
+        if (result instanceof HTMLElement || result instanceof DocumentFragment) {
+          placeholder.innerHTML = '';
+          placeholder.appendChild(result);
+        } else if (typeof result === 'string') {
+          placeholder.innerHTML = result;
+        }
+
+        placeholder.classList.add('llm-crafter-component-resolved');
+        this.scrollToBottomIfNeeded();
+      } catch (error) {
+        console.warn(`LLM Crafter: component resolver '${resolverKey}' failed:`, error);
+        placeholder.innerHTML =
+          `<span class="llm-crafter-component-error">Failed to load component</span>`;
+      }
+    }
   }
 
   addSystemMessage(text) {
@@ -916,6 +1021,9 @@ class LLMCrafterChatWidget {
             contentDiv.appendChild(newBubble);
             this.scrollToBottom();
 
+            // Resolve any async component tokens (fire-and-forget)
+            this.resolveComponents(newBubble);
+
             // Store message
             this.messages.push({
               text,
@@ -966,6 +1074,9 @@ class LLMCrafterChatWidget {
 
     this.elements.messagesContainer.appendChild(messageDiv);
     this.scrollToBottom();
+
+    // Resolve any async component tokens (fire-and-forget)
+    this.resolveComponents(messageDiv);
 
     // Store message
     this.messages.push({
