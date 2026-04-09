@@ -45,6 +45,15 @@ USER nodejs
 # Expose the port the app runs on
 EXPOSE 3000
 
+# ─── GDPR Retention Cron ───────────────────────────────────────────────────
+# The daily retention job runs inside the Node.js process via node-cron.
+# Override the schedule with the GDPR_RETENTION_CRON environment variable.
+# Default: 0 2 * * *  (every day at 02:00 UTC)
+# Example: -e GDPR_RETENTION_CRON="0 3 * * *"  to run at 03:00 UTC instead.
+# The cron only deletes data for agents that have gdpr.retention_days configured.
+# ───────────────────────────────────────────────────────────────────────────
+ENV GDPR_RETENTION_CRON="0 2 * * *"
+
 # Add health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); \

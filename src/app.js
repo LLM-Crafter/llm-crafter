@@ -102,6 +102,36 @@ initializeDefaultProviders().catch(console.error);
 console.log('🚀 Initializing RAG indexing job processor...');
 require('./services/indexingJobProcessor');
 
+// ─── GDPR Retention Cron ─────────────────────────────────────────────────────
+// Runs daily at 02:00 UTC to delete conversations/executions that have exceeded
+// the per-agent retention_days policy.
+// Schedule is configurable via GDPR_RETENTION_CRON env var (cron syntax).
+const gdprService = require('./services/gdprService');
+// every minute for testing: '*/1 * * * *'
+const GDPR_RETENTION_CRON = process.env.GDPR_RETENTION_CRON || '*/1 * * * *';
+
+(function startGdprRetentionCron() {
+  try {
+    const cron = require('node-cron');
+    if (!cron.validate(GDPR_RETENTION_CRON)) {
+      console.warn(`[GDPR] Invalid cron expression "${GDPR_RETENTION_CRON}" — retention cron not started.`);
+      return;
+    }
+    cron.schedule(GDPR_RETENTION_CRON, async () => {
+      try {
+        await gdprService.runRetention();
+      } catch (err) {
+        console.error('[GDPR] Retention cron error:', err.message);
+      }
+    }, { timezone: 'UTC' });
+    console.log(`[GDPR] Retention cron scheduled: ${GDPR_RETENTION_CRON} (UTC)`);
+  } catch (err) {
+    // node-cron not installed — skip silently (cron can also be run externally)
+    console.warn('[GDPR] node-cron not available; skipping retention cron setup:', err.message);
+  }
+})();
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Basic route for testing
 app.get('/health', publicLimiter, (req, res) => {
   res.json({ status: 'ok', service: 'llm-crafter' });

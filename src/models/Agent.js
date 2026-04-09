@@ -190,6 +190,20 @@ const agentSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    // GDPR configuration
+    gdpr: {
+      // Encrypt message content at rest using AES-256 (see src/utils/encryption.js)
+      encrypt_messages: {
+        type: Boolean,
+        default: false,
+      },
+      // Auto-delete conversations and executions older than N days (null = disabled)
+      retention_days: {
+        type: Number,
+        default: null,
+        min: 1,
+      },
+    },
   },
   {
     timestamps: true,

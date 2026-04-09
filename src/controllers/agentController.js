@@ -126,6 +126,21 @@ const createAgent = async (req, res) => {
       }
     }
 
+    // Build GDPR config
+    let gdprConfig = {};
+    if (req.body.gdpr) {
+      if (req.body.gdpr.encrypt_messages !== undefined) {
+        gdprConfig.encrypt_messages = !!req.body.gdpr.encrypt_messages;
+      }
+      if (req.body.gdpr.retention_days !== undefined) {
+        const days = parseInt(req.body.gdpr.retention_days, 10);
+        if (isNaN(days) || days < 1) {
+          return res.status(400).json({ error: 'gdpr.retention_days must be a positive integer' });
+        }
+        gdprConfig.retention_days = days;
+      }
+    }
+
     const agent = new Agent({
       name: req.body.name,
       description: req.body.description,
@@ -138,6 +153,7 @@ const createAgent = async (req, res) => {
       tools: agentTools,
       config: req.body.config || {},
       question_suggestions: questionSuggestions,
+      gdpr: gdprConfig,
     });
 
     await agent.save();
@@ -346,6 +362,25 @@ const updateAgent = async (req, res) => {
             ? custom_prompt
             : agent.question_suggestions.custom_prompt,
       };
+    }
+
+    // Update GDPR config if provided
+    if (req.body.gdpr !== undefined) {
+      const gdprUpdate = req.body.gdpr || {};
+      if (gdprUpdate.encrypt_messages !== undefined) {
+        agent.gdpr.encrypt_messages = !!gdprUpdate.encrypt_messages;
+      }
+      if (gdprUpdate.retention_days !== undefined) {
+        if (gdprUpdate.retention_days === null) {
+          agent.gdpr.retention_days = null;
+        } else {
+          const days = parseInt(gdprUpdate.retention_days, 10);
+          if (isNaN(days) || days < 1) {
+            return res.status(400).json({ error: 'gdpr.retention_days must be a positive integer or null' });
+          }
+          agent.gdpr.retention_days = days;
+        }
+      }
     }
 
     // Increment version on update
