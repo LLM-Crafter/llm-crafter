@@ -133,11 +133,15 @@ const createAgent = async (req, res) => {
         gdprConfig.encrypt_messages = !!req.body.gdpr.encrypt_messages;
       }
       if (req.body.gdpr.retention_days !== undefined) {
-        const days = parseInt(req.body.gdpr.retention_days, 10);
-        if (isNaN(days) || days < 1) {
-          return res.status(400).json({ error: 'gdpr.retention_days must be a positive integer' });
+        if (req.body.gdpr.retention_days === null) {
+          gdprConfig.retention_days = null;
+        } else {
+          const days = parseInt(req.body.gdpr.retention_days, 10);
+          if (isNaN(days) || days < 1) {
+            return res.status(400).json({ error: 'gdpr.retention_days must be a positive integer' });
+          }
+          gdprConfig.retention_days = days;
         }
-        gdprConfig.retention_days = days;
       }
     }
 
