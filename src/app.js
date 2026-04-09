@@ -107,8 +107,8 @@ require('./services/indexingJobProcessor');
 // the per-agent retention_days policy.
 // Schedule is configurable via GDPR_RETENTION_CRON env var (cron syntax).
 const gdprService = require('./services/gdprService');
-// every minute for testing: '*/1 * * * *'
-const GDPR_RETENTION_CRON = process.env.GDPR_RETENTION_CRON || '*/1 * * * *';
+// Default fallback: daily at 02:00 UTC ('0 2 * * *')
+const GDPR_RETENTION_CRON = process.env.GDPR_RETENTION_CRON || '0 2 * * *';
 
 (function startGdprRetentionCron() {
   try {
