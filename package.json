@@ -53,6 +53,7 @@
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0",
     "mustache": "^4.2.0",
+    "node-cron": "^3.0.3",
     "nodemailer": "^6.10.1",
     "openai": "^4.81.0",
     "passport": "^0.7.0",

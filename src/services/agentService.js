@@ -93,6 +93,7 @@ class AgentService {
         agent: agentId,
         user_identifier: userIdentifier,
         title: this.generateConversationTitle(userMessage),
+        gdpr: { encrypt_messages: !!(agent.gdpr && agent.gdpr.encrypt_messages) },
       });
       await conversation.save();
     }
@@ -182,7 +183,7 @@ class AgentService {
         userMessage,
         decryptedKey,
         agent.api_key.provider.name,
-        conversation.messages || [],
+        conversation.getDecryptedMessages(),
         conversation.current_turn_language || null
       );
       detectedLanguage = detection.language;
@@ -236,7 +237,7 @@ class AgentService {
       const suggestionResult =
         await suggestionService.generateQuestionSuggestions(
           agent,
-          conversation.messages
+          conversation.getDecryptedMessages()
         );
 
       if (suggestionResult) {
@@ -322,6 +323,7 @@ class AgentService {
         agent: agentId,
         user_identifier: userIdentifier,
         title: this.generateConversationTitle(userMessage),
+        gdpr: { encrypt_messages: !!(agent.gdpr && agent.gdpr.encrypt_messages) },
       });
       await conversation.save();
     }
@@ -412,7 +414,7 @@ class AgentService {
         userMessage,
         decryptedKey,
         agent.api_key.provider.name,
-        conversation.messages || [],
+        conversation.getDecryptedMessages(),
         conversation.current_turn_language || null
       );
       detectedLanguage = detection.language;
@@ -470,7 +472,7 @@ class AgentService {
       const suggestionResult =
         await suggestionService.generateQuestionSuggestions(
           agent,
-          conversation.messages
+          conversation.getDecryptedMessages()
         );
 
       if (suggestionResult) {
@@ -2249,8 +2251,8 @@ Your response:`;
    */
   async generateAIConversationTitle(conversation, agent) {
     try {
-      // Get the conversation messages (first 4 messages for context)
-      const messages = conversation.messages.slice(0, 4);
+      // Get the conversation messages (first 4 messages for context), decrypted
+      const messages = conversation.getDecryptedMessages().slice(0, 4);
       
       if (messages.length < 2) {
         return null; // Not enough context yet

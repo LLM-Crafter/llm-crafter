@@ -251,9 +251,35 @@ const conversationSchema = new mongoose.Schema(
         default: 0,
       },
     },
+    // GDPR flags mirrored from agent config at conversation-creation time
+    gdpr: {
+      encrypt_messages: {
+        type: Boolean,
+        default: false,
+      },
+    },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: {
+      transform(doc, ret) {
+        // Auto-decrypt message content when serialising (e.g. res.json)
+        if (ret.gdpr && ret.gdpr.encrypt_messages && Array.isArray(ret.messages)) {
+          const encryptionUtil = require('../utils/encryption');
+          ret.messages = ret.messages.map(msg => {
+            if (msg.content && encryptionUtil.isEncrypted(msg.content)) {
+              try {
+                msg.content = encryptionUtil.decrypt(msg.content);
+              } catch (_e) {
+                // Backwards compat – leave as-is if decryption fails
+              }
+            }
+            return msg;
+          });
+        }
+        return ret;
+      },
+    },
   }
 );
 
@@ -280,8 +306,18 @@ conversationSchema.pre('save', function (next) {
 });
 
 // Method to add message and update metadata
+// Encrypts content transparently when gdpr.encrypt_messages is enabled
 conversationSchema.methods.addMessage = function (messageData) {
-  this.messages.push(messageData);
+  const msgToStore = Object.assign({}, messageData);
+
+  if (this.gdpr && this.gdpr.encrypt_messages && msgToStore.content) {
+    const encryptionUtil = require('../utils/encryption');
+    if (!encryptionUtil.isEncrypted(msgToStore.content)) {
+      msgToStore.content = encryptionUtil.encrypt(msgToStore.content);
+    }
+  }
+
+  this.messages.push(msgToStore);
 
   // Update metadata
   if (messageData.token_usage) {
@@ -304,12 +340,49 @@ conversationSchema.methods.getRecentMessages = function (limit = 10) {
   return this.messages.slice(-limit);
 };
 
+// Decrypt a single content string if encryption is enabled (backwards-compatible)
+conversationSchema.methods.decryptContent = function (content) {
+  if (!content || !this.gdpr || !this.gdpr.encrypt_messages) return content;
+  const encryptionUtil = require('../utils/encryption');
+  if (encryptionUtil.isEncrypted(content)) {
+    try {
+      return encryptionUtil.decrypt(content);
+    } catch (_e) {
+      return content; // Backwards compat – return as-is
+    }
+  }
+  return content;
+};
+
+// Return a plain array of messages with content decrypted (does not mutate the document)
+conversationSchema.methods.getDecryptedMessages = function () {
+  if (!this.gdpr || !this.gdpr.encrypt_messages) {
+    return this.messages.map(m => (m.toObject ? m.toObject() : m));
+  }
+  const encryptionUtil = require('../utils/encryption');
+  return this.messages.map(m => {
+    const obj = m.toObject ? m.toObject() : Object.assign({}, m);
+    if (obj.content && encryptionUtil.isEncrypted(obj.content)) {
+      try {
+        obj.content = encryptionUtil.decrypt(obj.content);
+      } catch (_e) {
+        // Backwards compat
+      }
+    }
+    return obj;
+  });
+};
+
 // Enhanced method to get optimized conversation context for agent
+// Always returns plaintext content (decrypts if encrypt_messages is enabled)
 conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
+  // Use decrypted in-memory view so the LLM always receives plaintext
+  const workingMessages = this.getDecryptedMessages();
+
   const messages = [];
 
   // Always include system messages
-  const systemMessages = this.messages.filter(m => m.role === 'system');
+  const systemMessages = workingMessages.filter(m => m.role === 'system');
   messages.push(...systemMessages);
 
   // If we have a summary, include it as context
@@ -323,26 +396,25 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
     });
 
     // Include a small overlap of messages before the summary cutoff for continuity
-    // This ensures the agent has context about the transition between summarized and recent messages
-    const overlapCount = 4; // Keep 4 messages before the cutoff as overlap
+    const overlapCount = 4;
     const overlapStart = Math.max(0, this.metadata.last_summary_index + 1 - overlapCount);
-    const overlapMessages = this.messages.slice(
+    const overlapMessages = workingMessages.slice(
       overlapStart,
       this.metadata.last_summary_index + 1
-    ).filter(m => m.role !== 'system'); // Exclude system messages from overlap
-    
+    ).filter(m => m.role !== 'system');
+
     if (overlapMessages.length > 0) {
       messages.push(...overlapMessages);
     }
 
     // Include recent messages after the last summary
-    const recentMessages = this.messages.slice(
+    const recentMessages = workingMessages.slice(
       this.metadata.last_summary_index + 1
     );
     messages.push(...recentMessages);
   } else {
     // No summary yet, include recent messages with smart truncation
-    const recentMessages = this.getSmartTruncatedMessages(maxTokens);
+    const recentMessages = this._getSmartTruncatedFromArray(workingMessages, maxTokens);
     messages.push(...recentMessages);
   }
 
@@ -361,11 +433,19 @@ conversationSchema.methods.estimateTokenCount = function (messages) {
   }, 0);
 };
 
-// Method to get smartly truncated messages within token limit
+// Method to get smartly truncated messages within token limit (uses raw this.messages)
 conversationSchema.methods.getSmartTruncatedMessages = function (
   maxTokens = 4000
 ) {
-  const allMessages = this.messages;
+  return this._getSmartTruncatedFromArray(this.getDecryptedMessages(), maxTokens);
+};
+
+// Internal helper – accepts any messages array so both encrypted and decrypted
+// views can be truncated without duplication
+conversationSchema.methods._getSmartTruncatedFromArray = function (
+  allMessages,
+  maxTokens = 4000
+) {
   const systemMessages = allMessages.filter(m => m.role === 'system');
   const conversationMessages = allMessages.filter(m => m.role !== 'system');
 

@@ -61,6 +61,25 @@ const createAgentValidation = [
     .optional()
     .isBoolean()
     .withMessage('Enable streaming must be a boolean'),
+  // GDPR configuration validation
+  body('gdpr')
+    .optional()
+    .isObject()
+    .withMessage('gdpr must be an object'),
+  body('gdpr.encrypt_messages')
+    .optional()
+    .isBoolean()
+    .withMessage('gdpr.encrypt_messages must be a boolean'),
+  body('gdpr.retention_days')
+    .optional({ nullable: true })
+    .custom(value => {
+      if (value === null) return true;
+      const days = parseInt(value, 10);
+      if (isNaN(days) || days < 1) {
+        throw new Error('gdpr.retention_days must be a positive integer or null');
+      }
+      return true;
+    }),
 ];
 
 const updateAgentValidation = [
@@ -115,6 +134,25 @@ const updateAgentValidation = [
     .optional()
     .isBoolean()
     .withMessage('Enable streaming must be a boolean'),
+  // GDPR configuration validation
+  body('gdpr')
+    .optional()
+    .isObject()
+    .withMessage('gdpr must be an object'),
+  body('gdpr.encrypt_messages')
+    .optional()
+    .isBoolean()
+    .withMessage('gdpr.encrypt_messages must be a boolean'),
+  body('gdpr.retention_days')
+    .optional({ nullable: true })
+    .custom(value => {
+      if (value === null) return true;
+      const days = parseInt(value, 10);
+      if (isNaN(days) || days < 1) {
+        throw new Error('gdpr.retention_days must be a positive integer or null');
+      }
+      return true;
+    }),
 ];
 
 const chatbotExecutionValidation = [

@@ -253,18 +253,21 @@ Guidelines:
   getMessagesToSummarize(conversation) {
     const lastSummaryIndex = conversation.metadata.last_summary_index;
 
+    // Use getDecryptedMessages() so content is plaintext when passed to the LLM
+    const decryptedMessages = conversation.getDecryptedMessages();
+
     if (lastSummaryIndex >= 0) {
       // Summarize messages after the last summary
-      return conversation.messages.slice(lastSummaryIndex + 1);
+      return decryptedMessages.slice(lastSummaryIndex + 1);
     } else {
       // No previous summary, summarize all but keep recent messages
-      const totalMessages = conversation.messages.length;
+      const totalMessages = decryptedMessages.length;
       if (totalMessages <= 10) {
         return []; // Too few messages to summarize
       }
 
       // Summarize all but the last 5 messages
-      return conversation.messages.slice(0, -5);
+      return decryptedMessages.slice(0, -5);
     }
   }
 
