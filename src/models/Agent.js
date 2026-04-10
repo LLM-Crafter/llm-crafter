@@ -142,6 +142,39 @@ const agentSchema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      // Small agent graph mode (optional, chatbot-only)
+      // When true, routes chatbot reasoning through a multi-role orchestrator
+      // (planner → responder → optional critic) instead of the single iterative loop.
+      enable_small_agent_graph: {
+        type: Boolean,
+        default: false,
+      },
+      // When enable_small_agent_graph is true, controls whether the critic
+      // validation step runs after the responder. Default: true.
+      graph_enable_critic: {
+        type: Boolean,
+        default: true,
+      },
+      // Per-step model overrides for the small agent graph.
+      // Each field is optional — when omitted the agent's main llm_settings.model is used.
+      // Example for OpenAI:
+      //   planner_model:   "gpt-4.1-mini"   (cheap, fast, good at structured output)
+      //   responder_model: "gpt-4.1"        (full quality for user-facing text)
+      //   critic_model:    "gpt-4.1-mini"   (cheap, only needs to judge quality)
+      graph_models: {
+        planner_model: {
+          type: String,
+          default: null,
+        },
+        responder_model: {
+          type: String,
+          default: null,
+        },
+        critic_model: {
+          type: String,
+          default: null,
+        },
+      },
       // Human handoff configuration
       handoff_config: {
         allow_agent_handoff: {
