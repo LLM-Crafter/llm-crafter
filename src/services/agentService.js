@@ -7,6 +7,7 @@ const APIKey = require('../models/ApiKey');
 const summarizationService = require('./summarizationService');
 const suggestionService = require('./suggestionService');
 const languageDetectionService = require('./languageDetectionService');
+const { systemTools: systemToolDefinitions } = require('../config/systemTools');
 
 class AgentService {
   /**
@@ -191,12 +192,11 @@ class AgentService {
       await conversation.save();
     }
 
-    // Execute agent reasoning
-    const response = await this.executeAgentReasoning(
-      agent,
-      conversation,
-      dynamicContext
-    );
+    // Execute agent reasoning — route through small agent graph if enabled
+    const useGraph = agent.config?.enable_small_agent_graph === true;
+    const response = useGraph
+      ? await this.executeChatbotAgentGraph(agent, conversation, dynamicContext)
+      : await this.executeAgentReasoning(agent, conversation, dynamicContext);
 
     // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
     if (response.content) {
@@ -422,13 +422,11 @@ class AgentService {
       await conversation.save();
     }
 
-    // Execute agent reasoning with streaming
-    const response = await this.executeAgentReasoningStream(
-      agent,
-      conversation,
-      dynamicContext,
-      streamCallback
-    );
+    // Execute agent reasoning with streaming — route through small agent graph if enabled
+    const useGraph = agent.config?.enable_small_agent_graph === true;
+    const response = useGraph
+      ? await this.executeChatbotAgentGraphStream(agent, conversation, dynamicContext, streamCallback)
+      : await this.executeAgentReasoningStream(agent, conversation, dynamicContext, streamCallback);
 
     // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
     let assistantMessageId = null;
@@ -2533,6 +2531,861 @@ Your response:`;
     }
 
     return enhancedPrompt;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Small Agent Graph — multi-role orchestrator for chatbot agents
+  // ---------------------------------------------------------------------------
+  // When agent.config.enable_small_agent_graph === true the reasoning loop is
+  // replaced by a lightweight graph of three internal roles:
+  //   1. Planner  – decides which tools to call this turn (no user-facing text).
+  //   2. Responder – generates the final user-facing reply.
+  //   3. Critic (optional) – validates the reply for KB fidelity / guardrails
+  //      and can request a corrected reply from the Responder.
+  //
+  // The methods below return the **same shape** as executeAgentReasoning so
+  // callers (executeChatbotAgent / executeChatbotAgentStream) need no changes.
+  // ---------------------------------------------------------------------------
+
+  // ---- Graph JSON schemas ---------------------------------------------------
+
+  /**
+   * JSON schema for the Planner role's structured output.
+   * The planner returns a list of tools to call and an optional funnel state.
+   */
+  getGraphPlannerSchema() {
+    return {
+      type: 'json_schema',
+      json_schema: {
+        name: 'planner_output',
+        strict: false,
+        schema: {
+          type: 'object',
+          properties: {
+            funnel_state: {
+              type: 'string',
+              description:
+                'Current conversational funnel state label, e.g. greeting, qualifying, informing, objection-handling, closing, support, or general.',
+            },
+            needs_tools: {
+              type: 'boolean',
+              description: 'Whether any tool calls are required this turn.',
+            },
+            tools_to_call: {
+              type: 'array',
+              description:
+                'Ordered list of tools to invoke. Empty array when needs_tools is false.',
+              items: {
+                type: 'object',
+                properties: {
+                  tool_name: {
+                    type: 'string',
+                    description: 'Name of the tool to call.',
+                  },
+                  tool_parameters: {
+                    type: 'object',
+                    description: 'Parameters to pass to the tool.',
+                  },
+                  reason: {
+                    type: 'string',
+                    description: 'Why this tool call is needed.',
+                  },
+                },
+                required: ['tool_name', 'tool_parameters'],
+              },
+            },
+            reasoning: {
+              type: 'string',
+              description: 'High-level reasoning for the plan.',
+            },
+          },
+          required: ['funnel_state', 'needs_tools', 'tools_to_call', 'reasoning'],
+        },
+      },
+    };
+  }
+
+  /**
+   * JSON schema for the Critic role's structured output.
+   */
+  getGraphCriticSchema() {
+    return {
+      type: 'json_schema',
+      json_schema: {
+        name: 'critic_output',
+        strict: false,
+        schema: {
+          type: 'object',
+          properties: {
+            approved: {
+              type: 'boolean',
+              description:
+                'true if the response is faithful, on-topic, and within guardrails; false otherwise.',
+            },
+            issues: {
+              type: 'array',
+              description: 'List of issues found (empty when approved).',
+              items: { type: 'string' },
+            },
+            corrected_response: {
+              type: 'string',
+              description:
+                'A corrected version of the response. Only present when approved is false.',
+            },
+            reasoning: {
+              type: 'string',
+              description: 'Why the response was approved or rejected.',
+            },
+          },
+          required: ['approved', 'reasoning'],
+        },
+      },
+    };
+  }
+
+  // ---- Graph prompt builders ------------------------------------------------
+
+  /**
+   * Build the system prompt for the Planner role.
+   * Contains agent personality summary + tool definitions + output format.
+   * Kept static per agent to benefit from prompt caching.
+   */
+  buildGraphPlannerSystemPrompt(agent) {
+    let prompt = `You are the PLANNER module inside a multi-step agent pipeline.\n`;
+    prompt += `Your job is to analyze the latest user message in the context of the conversation `;
+    prompt += `and decide which tools (if any) should be called BEFORE a reply is generated.\n\n`;
+    prompt += `IMPORTANT: You do NOT generate user-facing text. You only output a structured plan.\n\n`;
+
+    // Tool catalogue
+    prompt += `## Available Tools\n\n`;
+    agent.tools.forEach(tool => {
+      prompt += `### ${tool.name}\n`;
+      prompt += `Description: ${tool.description}\n`;
+      if (tool.name === 'api_caller' && tool.parameters?.endpoints) {
+        prompt += `Available endpoints: ${Object.keys(tool.parameters.endpoints).join(', ')}\n`;
+      }
+
+      // Include parameter schema so the planner knows the expected shape
+      const systemDef = systemToolDefinitions.find(st => st.name === tool.name);
+      if (systemDef?.parameters_schema?.properties) {
+        const schema = systemDef.parameters_schema;
+        const props = Object.entries(schema.properties)
+          .map(([k, v]) => {
+            let desc = `  - ${k} (${v.type || 'any'})`;
+            if (v.description) desc += `: ${v.description}`;
+            if (v.enum) desc += ` [${v.enum.join('|')}]`;
+            if (v.default !== undefined) desc += ` (default: ${v.default})`;
+            return desc;
+          })
+          .join('\n');
+        prompt += `Parameters:\n${props}\n`;
+        if (schema.required?.length) {
+          prompt += `Required: ${schema.required.join(', ')}\n`;
+        }
+      }
+
+      prompt += `\n`;
+    });
+
+    prompt += `## Rules\n`;
+    prompt += `- Only request tools that are strictly necessary to answer the user's latest message.\n`;
+    prompt += `- Respect the max tool call budget provided in the user prompt.\n`;
+    prompt += `- Only use tools listed above — do NOT invent tool names.\n`;
+    prompt += `- For api_caller, include endpoint_name, method, and any needed query_params / path_params / body_data.\n`;
+    prompt += `- For request_human_handoff, include reason, urgency, and optionally handoff_message.\n`;
+    prompt += `- Set funnel_state to one of: greeting, qualifying, informing, objection-handling, closing, support, general.\n`;
+
+    return prompt;
+  }
+
+  /**
+   * Build the user prompt for the Planner role (dynamic per turn).
+   */
+  buildGraphPlannerUserPrompt(context, maxToolCalls) {
+    let prompt = `## Conversation\n`;
+
+    // Summary context
+    const summaryMessages = context.conversation_history.filter(msg => msg.is_summarized);
+    const conversationMessages = context.conversation_history.filter(msg => !msg.is_summarized);
+
+    if (summaryMessages.length > 0) {
+      prompt += `### Previous Context Summary\n`;
+      prompt += summaryMessages.map(msg => msg.content).join('\n');
+      prompt += `\n\n`;
+    }
+
+    prompt += `### Messages\n`;
+    prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += `\n\n`;
+    prompt += `## Constraints\n`;
+    prompt += `Max tool calls this turn: ${maxToolCalls}\n\n`;
+    prompt += `Produce your plan now.`;
+
+    return prompt;
+  }
+
+  /**
+   * Build the system prompt for the Responder role.
+   * This is the agent's full personality prompt — the responder IS the agent
+   * from the user's perspective.
+   */
+  buildGraphResponderSystemPrompt(baseSystemPrompt, agent, dynamicContext, currentTurnLanguage) {
+    // Reuse the enhanced system prompt but strip the ACTION/TOOL/PARAMETERS format
+    // instructions since the responder outputs plain text only.
+    let prompt = baseSystemPrompt;
+
+    // Dynamic context
+    if (dynamicContext && Object.keys(dynamicContext).length > 0) {
+      const contextString = Object.entries(dynamicContext)
+        .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+        .join('\n');
+      prompt += `\n\n## Additional Context\n${contextString}`;
+    }
+
+    // Summary handling
+    prompt += `\n\n## Summary Handling\n`;
+    prompt += `When a "Previous Context Summary" is provided, treat it as background knowledge. `;
+    prompt += `NEVER reference or repeat the summary structure. Respond naturally.\n`;
+
+    // Language enforcement
+    if (currentTurnLanguage && agent.config.enforce_language_detection !== false) {
+      prompt += `\n## Language Requirement\n`;
+      prompt += `CRITICAL: Respond entirely in language code "${currentTurnLanguage}" (ISO 639-1). `;
+      prompt += `Do NOT switch languages unless the user explicitly asks.\n`;
+    }
+
+    // Responder-specific instruction
+    prompt += `\n## Output Instructions\n`;
+    prompt += `You are the user-facing responder. Output ONLY the message the user should see.\n`;
+    prompt += `Do NOT output any JSON, action labels, or internal reasoning — just the reply text.\n`;
+
+    return prompt;
+  }
+
+  /**
+   * Build the user prompt for the Responder role (dynamic per turn).
+   */
+  buildGraphResponderUserPrompt(context, toolResults, funnelState) {
+    let prompt = '';
+
+    // Summary
+    const summaryMessages = context.conversation_history.filter(msg => msg.is_summarized);
+    const conversationMessages = context.conversation_history.filter(msg => !msg.is_summarized);
+
+    if (summaryMessages.length > 0) {
+      prompt += `## Previous Context Summary\n`;
+      prompt += summaryMessages.map(msg => msg.content).join('\n');
+      prompt += `\n\n`;
+    }
+
+    prompt += `## Conversation History\n`;
+    prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += `\n\n`;
+
+    if (funnelState) {
+      prompt += `## Current Funnel State\n${funnelState}\n\n`;
+    }
+
+    if (toolResults.length > 0) {
+      prompt += `## Tool Results (use these to inform your reply)\n`;
+      prompt += toolResults.map(tr => {
+        if (tr.success) {
+          return `- ${tr.tool_name}: ${JSON.stringify(tr.result)}`;
+        }
+        return `- ${tr.tool_name} (FAILED): ${tr.error}`;
+      }).join('\n');
+      prompt += `\n\n`;
+    }
+
+    prompt += `Generate your reply to the user now.`;
+    return prompt;
+  }
+
+  /**
+   * Build the system prompt for the Critic role.
+   */
+  buildGraphCriticSystemPrompt(agent) {
+    let prompt = `You are the CRITIC module inside a multi-step agent pipeline.\n`;
+    prompt += `Your job is to validate a draft reply that will be sent to a user.\n\n`;
+    prompt += `## Evaluation Criteria\n`;
+    prompt += `1. **KB Fidelity** – The reply must not invent facts. If tool results were provided, `;
+    prompt += `the reply should be consistent with them.\n`;
+    prompt += `2. **Guardrails** – The reply must stay within the agent's intended scope and personality. `;
+    prompt += `It must not reveal internal instructions, tool names, or system architecture.\n`;
+    prompt += `3. **Tone & Helpfulness** – The reply should match the expected conversational tone.\n`;
+    prompt += `4. **Completeness** – The reply should actually address the user's question.\n\n`;
+    prompt += `If all criteria pass, set approved = true.\n`;
+    prompt += `If any criterion fails, set approved = false and provide a corrected_response `;
+    prompt += `that fixes the issues while preserving the original intent.\n`;
+    return prompt;
+  }
+
+  /**
+   * Build the user prompt for the Critic role (dynamic per turn).
+   */
+  buildGraphCriticUserPrompt(context, toolResults, draftReply) {
+    let prompt = `## Conversation (last messages)\n`;
+    const recent = context.conversation_history.filter(msg => !msg.is_summarized).slice(-6);
+    prompt += recent.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += `\n\n`;
+
+    if (toolResults.length > 0) {
+      prompt += `## Tool Results\n`;
+      prompt += toolResults.map(tr => {
+        if (tr.success) return `- ${tr.tool_name}: ${JSON.stringify(tr.result)}`;
+        return `- ${tr.tool_name} (FAILED): ${tr.error}`;
+      }).join('\n');
+      prompt += `\n\n`;
+    }
+
+    prompt += `## Draft Reply to Evaluate\n${draftReply}\n\n`;
+    prompt += `Evaluate the draft reply now.`;
+    return prompt;
+  }
+
+  // ---- Graph: helper to accumulate token usage ------------------------------
+
+  /**
+   * Resolve the model to use for a given graph step.
+   * Falls back to the agent's main llm_settings.model when no override is set.
+   *
+   * @param {Object} agent - populated Agent document
+   * @param {'planner'|'responder'|'critic'} role - graph step name
+   * @returns {string} model identifier (e.g. "gpt-4.1-mini")
+   */
+  _getGraphModel(agent, role) {
+    const overrides = agent.config?.graph_models || {};
+    const key = `${role}_model`; // planner_model | responder_model | critic_model
+    return overrides[key] || agent.llm_settings.model;
+  }
+
+  /** Accumulate usage from an LLM response into a running total object. */
+  _accumulateUsage(total, usage) {
+    total.prompt_tokens += usage.prompt_tokens;
+    total.completion_tokens += usage.completion_tokens;
+    total.total_tokens += usage.total_tokens;
+    total.cached_tokens += usage.cached_tokens || 0;
+    total.cost += usage.cost;
+  }
+
+  // ---- Graph: planner + tool execution (shared by both variants) -----------
+
+  /**
+   * Run the Planner role and execute any planned tool calls.
+   * Shared by both the non-streaming and streaming graph orchestrators.
+   *
+   * @returns {{ plannerOutput: Object, toolsUsed: Array, handoffResult: Object|null }}
+   *   - plannerOutput: parsed planner JSON (funnel_state, tools_to_call, reasoning)
+   *   - toolsUsed: populated tool result entries
+   *   - handoffResult: if a human handoff was triggered, an early-return object; otherwise null
+   */
+  async _graphPlanAndExecuteTools(
+    openai,
+    agent,
+    conversation,
+    context,
+    thinkingProcess,
+    toolsUsed,
+    totalTokenUsage
+  ) {
+    const maxToolCalls = agent.config.max_tool_calls || 5;
+
+    // --- Planner LLM call ----------------------------------------------------
+    const plannerSystemPrompt = this.buildGraphPlannerSystemPrompt(agent);
+    const plannerUserPrompt = this.buildGraphPlannerUserPrompt(context, maxToolCalls);
+
+    const plannerModel = this._getGraphModel(agent, 'planner');
+
+    const plannerResponseFormat = openai.supportsStructuredOutputs(plannerModel)
+      ? this.getGraphPlannerSchema()
+      : null;
+
+    const plannerLLM = await openai.generateCompletion(
+      plannerModel,
+      plannerUserPrompt,
+      { ...agent.llm_settings.parameters, temperature: 0.2, max_tokens: 500 },
+      plannerSystemPrompt,
+      plannerResponseFormat,
+      { prompt_cache_key: `agent_graph_planner_${agent._id}` }
+    );
+
+    this._accumulateUsage(totalTokenUsage, plannerLLM.usage);
+
+    // Parse planner output
+    let plannerOutput;
+    try {
+      plannerOutput = JSON.parse(plannerLLM.content);
+    } catch {
+      // Fallback: no tool calls, treat as general turn
+      console.warn('[Graph Planner] Failed to parse planner JSON, falling back to no-tool plan.');
+      plannerOutput = {
+        funnel_state: 'general',
+        needs_tools: false,
+        tools_to_call: [],
+        reasoning: 'Planner output was not valid JSON; proceeding without tools.',
+      };
+    }
+
+    thinkingProcess.push({
+      step: 'planner',
+      reasoning: plannerOutput.reasoning || 'Planner determined the action plan for this turn.',
+      funnel_state: plannerOutput.funnel_state,
+      tools_planned: (plannerOutput.tools_to_call || []).map(t => t.tool_name),
+    });
+
+    console.log(`[Graph Planner] funnel_state=${plannerOutput.funnel_state}, tools_planned=${(plannerOutput.tools_to_call || []).length}`);
+
+    // --- Execute planned tool calls ------------------------------------------
+    const plannedTools = (plannerOutput.tools_to_call || []).slice(0, maxToolCalls);
+
+    // Build a set of valid tool names from the agent's tool list for validation
+    const validToolNames = new Set(agent.tools.map(t => t.name));
+
+    for (const planned of plannedTools) {
+      // Validate: skip tools the planner hallucinated that don't exist on this agent
+      if (!validToolNames.has(planned.tool_name)) {
+        console.warn(`[Graph Planner] Skipping unknown tool "${planned.tool_name}" — not in agent's tool list.`);
+        thinkingProcess.push({
+          step: 'tool_skipped',
+          tool_name: planned.tool_name,
+          reasoning: `Planner requested tool "${planned.tool_name}" which is not available on this agent. Skipping.`,
+        });
+        continue;
+      }
+
+      thinkingProcess.push({
+        step: 'tool_execution',
+        tool_name: planned.tool_name,
+        reasoning: planned.reason || `Executing planned tool: ${planned.tool_name}`,
+      });
+
+      const toolResult = await toolService.executeToolWithConfig(
+        planned.tool_name,
+        planned.tool_parameters,
+        this.getAgentToolConfig(agent, planned.tool_name, conversation._id)
+      );
+
+      const entry = {
+        tool_name: planned.tool_name,
+        parameters: planned.tool_parameters,
+        execution_time_ms: toolResult.execution_time_ms,
+        success: toolResult.success,
+      };
+
+      if (toolResult.success) {
+        entry.result = toolResult.result;
+      } else {
+        entry.error = toolResult.error;
+        thinkingProcess.push({
+          step: 'tool_failed',
+          reasoning: `Tool ${planned.tool_name} failed: ${toolResult.error}`,
+        });
+      }
+
+      toolsUsed.push(entry);
+
+      // Handle human handoff — return early so the orchestrator can exit
+      if (planned.tool_name === 'request_human_handoff' && toolResult.success) {
+        const handoffMessage =
+          planned.tool_parameters.handoff_message ||
+          'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+
+        thinkingProcess.push({
+          step: 'human_handoff_requested',
+          reasoning: planned.reason || 'Human handoff was requested by planner.',
+        });
+
+        return {
+          plannerOutput,
+          toolsUsed,
+          handoffResult: {
+            content: handoffMessage,
+            thinking_process: thinkingProcess,
+            tools_used: toolsUsed,
+            token_usage: totalTokenUsage,
+          },
+        };
+      }
+    }
+
+    return { plannerOutput, toolsUsed, handoffResult: null };
+  }
+
+  // ---- Graph orchestrators --------------------------------------------------
+
+  /**
+   * Non-streaming small agent graph orchestrator.
+   *
+   * Pipeline: Planner → Tool Execution → Responder → Critic (optional)
+   *
+   * @param {Object} agent       – populated Agent document
+   * @param {Object} conversation – Conversation document
+   * @param {Object} dynamicContext – per-request dynamic context
+   * @returns {Promise<{content: string, thinking_process: Array, tools_used: Array, token_usage: Object}>}
+   */
+  async executeChatbotAgentGraph(agent, conversation, dynamicContext = {}) {
+    const thinkingProcess = [];
+    const toolsUsed = [];
+    const totalTokenUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      cached_tokens: 0,
+      cost: 0,
+    };
+
+    try {
+    const decryptedApiKey = agent.api_key.getDecryptedKey();
+    const openai = new OpenAIService(
+      decryptedApiKey,
+      agent.api_key.provider.name
+    );
+
+    // Reuse the same context-building helpers as the standard reasoning loop
+    const context = this.buildAgentContext(agent, conversation);
+
+    // ========== STEP 1 + 1b: Planner & Tool Execution ========================
+    const { plannerOutput, handoffResult } = await this._graphPlanAndExecuteTools(
+      openai,
+      agent,
+      conversation,
+      context,
+      thinkingProcess,
+      toolsUsed,
+      totalTokenUsage
+    );
+
+    // If handoff was triggered, return immediately
+    if (handoffResult) {
+      return handoffResult;
+    }
+
+    // ========== STEP 2: Responder =============================================
+    const responderSystemPrompt = this.buildGraphResponderSystemPrompt(
+      agent.system_prompt,
+      agent,
+      dynamicContext,
+      conversation.current_turn_language
+    );
+    const responderUserPrompt = this.buildGraphResponderUserPrompt(
+      context,
+      toolsUsed,
+      plannerOutput.funnel_state
+    );
+
+    const responderModel = this._getGraphModel(agent, 'responder');
+
+    const responderLLM = await openai.generateCompletion(
+      responderModel,
+      responderUserPrompt,
+      agent.llm_settings.parameters,
+      responderSystemPrompt,
+      null, // plain text output, no structured schema
+      { prompt_cache_key: `agent_graph_responder_${agent._id}` }
+    );
+
+    this._accumulateUsage(totalTokenUsage, responderLLM.usage);
+
+    let finalResponse = responderLLM.content || '';
+
+    thinkingProcess.push({
+      step: 'responder',
+      reasoning: `Generated user-facing reply (${finalResponse.length} chars, model=${responderModel}) in funnel state "${plannerOutput.funnel_state}".`,
+    });
+
+    console.log(`[Graph Responder] Generated ${finalResponse.length} char reply (model=${responderModel}).`);
+
+    // ========== STEP 3: Critic (optional) ====================================
+    // The critic runs when the graph-specific sub-flag is not explicitly disabled.
+    // Default: enabled (agent.config.graph_enable_critic !== false).
+    const criticEnabled = agent.config?.graph_enable_critic !== false;
+
+    if (criticEnabled && finalResponse) {
+      const criticSystemPrompt = this.buildGraphCriticSystemPrompt(agent);
+      const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, finalResponse);
+
+      const criticModel = this._getGraphModel(agent, 'critic');
+
+      const criticResponseFormat = openai.supportsStructuredOutputs(criticModel)
+        ? this.getGraphCriticSchema()
+        : null;
+
+      const criticLLM = await openai.generateCompletion(
+        criticModel,
+        criticUserPrompt,
+        { ...agent.llm_settings.parameters, temperature: 0.1, max_tokens: 600 },
+        criticSystemPrompt,
+        criticResponseFormat,
+        { prompt_cache_key: `agent_graph_critic_${agent._id}` }
+      );
+
+      this._accumulateUsage(totalTokenUsage, criticLLM.usage);
+
+      let criticOutput;
+      try {
+        criticOutput = JSON.parse(criticLLM.content);
+      } catch {
+        console.warn('[Graph Critic] Failed to parse critic JSON, approving by default.');
+        criticOutput = { approved: true, reasoning: 'Critic output was not valid JSON; approved by default.' };
+      }
+
+      thinkingProcess.push({
+        step: 'critic',
+        reasoning: criticOutput.reasoning || 'Critic evaluated the draft reply.',
+        approved: criticOutput.approved,
+        issues: criticOutput.issues || [],
+      });
+
+      console.log(`[Graph Critic] approved=${criticOutput.approved}${criticOutput.issues?.length ? `, issues=${criticOutput.issues.length}` : ''}`);
+
+      // If the critic rejected the response, use the corrected version
+      if (!criticOutput.approved && criticOutput.corrected_response) {
+        finalResponse = criticOutput.corrected_response;
+        thinkingProcess.push({
+          step: 'critic_correction_applied',
+          reasoning: 'Critic provided a corrected response which replaced the original.',
+        });
+      }
+    } else {
+      thinkingProcess.push({
+        step: 'critic',
+        reasoning: criticEnabled
+          ? 'Critic skipped — no response to evaluate.'
+          : 'Critic disabled via agent.config.graph_enable_critic.',
+      });
+    }
+
+    // ========== Done ==========================================================
+    if (!finalResponse) {
+      finalResponse =
+        "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
+    }
+
+    return {
+      content: finalResponse,
+      thinking_process: thinkingProcess,
+      tools_used: toolsUsed,
+      token_usage: totalTokenUsage,
+    };
+
+    } catch (error) {
+      console.error('[Graph] executeChatbotAgentGraph failed:', error);
+      thinkingProcess.push({
+        step: 'graph_error',
+        reasoning: `Graph pipeline error: ${error.message}`,
+      });
+      return {
+        content: "I'm sorry, something went wrong while processing your request. Please try again.",
+        thinking_process: thinkingProcess,
+        tools_used: toolsUsed,
+        token_usage: totalTokenUsage,
+      };
+    }
+  }
+
+  /**
+   * Streaming small agent graph orchestrator.
+   *
+   * Pipeline: Planner → Tool Execution → Responder (streamed) → Critic (optional)
+   *
+   * The planner, tool execution, and critic steps run without streaming.
+   * Only the responder step streams tokens to the client via `streamCallback`.
+   *
+   * If the critic later rejects the response, a correction event is pushed
+   * so the frontend can replace the text.
+   *
+   * @param {Object}   agent          – populated Agent document
+   * @param {Object}   conversation   – Conversation document
+   * @param {Object}   dynamicContext – per-request dynamic context
+   * @param {Function} streamCallback – called with text chunks for SSE delivery
+   * @returns {Promise<{content: string, thinking_process: Array, tools_used: Array, token_usage: Object}>}
+   */
+  async executeChatbotAgentGraphStream(
+    agent,
+    conversation,
+    dynamicContext = {},
+    streamCallback = null
+  ) {
+    const thinkingProcess = [];
+    const toolsUsed = [];
+    const totalTokenUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      cached_tokens: 0,
+      cost: 0,
+    };
+
+    try {
+    const decryptedApiKey = agent.api_key.getDecryptedKey();
+    const openai = new OpenAIService(
+      decryptedApiKey,
+      agent.api_key.provider.name
+    );
+
+    const context = this.buildAgentContext(agent, conversation);
+
+    // ========== STEP 1 + 1b: Planner & Tool Execution (non-streaming) ========
+    const { plannerOutput, handoffResult } = await this._graphPlanAndExecuteTools(
+      openai,
+      agent,
+      conversation,
+      context,
+      thinkingProcess,
+      toolsUsed,
+      totalTokenUsage
+    );
+
+    // If handoff was triggered, stream the handoff message and return
+    if (handoffResult) {
+      if (streamCallback) {
+        streamCallback(handoffResult.content);
+      }
+      return handoffResult;
+    }
+
+    // ========== STEP 2: Responder (streaming) ================================
+    const responderSystemPrompt = this.buildGraphResponderSystemPrompt(
+      agent.system_prompt,
+      agent,
+      dynamicContext,
+      conversation.current_turn_language
+    );
+    const responderUserPrompt = this.buildGraphResponderUserPrompt(
+      context,
+      toolsUsed,
+      plannerOutput.funnel_state
+    );
+
+    let finalResponse = '';
+
+    const onChunk = (chunk) => {
+      finalResponse += chunk;
+      if (streamCallback) {
+        streamCallback(chunk);
+      }
+    };
+
+    const responderModel = this._getGraphModel(agent, 'responder');
+
+    const responderLLM = await openai.generateStreamingCompletion(
+      responderModel,
+      responderUserPrompt,
+      agent.llm_settings.parameters,
+      responderSystemPrompt,
+      onChunk,
+      null, // plain text output, no structured schema
+      { prompt_cache_key: `agent_graph_responder_${agent._id}` }
+    );
+
+    this._accumulateUsage(totalTokenUsage, responderLLM.usage);
+
+    thinkingProcess.push({
+      step: 'responder',
+      reasoning: `Streamed user-facing reply (${finalResponse.length} chars, model=${responderModel}) in funnel state "${plannerOutput.funnel_state}".`,
+    });
+
+    console.log(`[Graph Responder Stream] Streamed ${finalResponse.length} char reply (model=${responderModel}).`);
+
+    // ========== STEP 3: Critic (optional, non-streaming) =====================
+    const criticEnabled = agent.config?.graph_enable_critic !== false;
+
+    if (criticEnabled && finalResponse) {
+      const criticSystemPrompt = this.buildGraphCriticSystemPrompt(agent);
+      const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, finalResponse);
+
+      const criticModel = this._getGraphModel(agent, 'critic');
+
+      const criticResponseFormat = openai.supportsStructuredOutputs(criticModel)
+        ? this.getGraphCriticSchema()
+        : null;
+
+      const criticLLM = await openai.generateCompletion(
+        criticModel,
+        criticUserPrompt,
+        { ...agent.llm_settings.parameters, temperature: 0.1, max_tokens: 600 },
+        criticSystemPrompt,
+        criticResponseFormat,
+        { prompt_cache_key: `agent_graph_critic_${agent._id}` }
+      );
+
+      this._accumulateUsage(totalTokenUsage, criticLLM.usage);
+
+      let criticOutput;
+      try {
+        criticOutput = JSON.parse(criticLLM.content);
+      } catch {
+        console.warn('[Graph Critic] Failed to parse critic JSON, approving by default.');
+        criticOutput = { approved: true, reasoning: 'Critic output was not valid JSON; approved by default.' };
+      }
+
+      thinkingProcess.push({
+        step: 'critic',
+        reasoning: criticOutput.reasoning || 'Critic evaluated the draft reply.',
+        approved: criticOutput.approved,
+        issues: criticOutput.issues || [],
+      });
+
+      console.log(`[Graph Critic Stream] approved=${criticOutput.approved}${criticOutput.issues?.length ? `, issues=${criticOutput.issues.length}` : ''}`);
+
+      // If the critic rejected the response, replace with corrected version.
+      // We push a special marker so the frontend knows to replace the streamed text.
+      if (!criticOutput.approved && criticOutput.corrected_response) {
+        finalResponse = criticOutput.corrected_response;
+
+        if (streamCallback) {
+          // Signal the frontend to replace the previously streamed content.
+          // The payload is a JSON event the SSE handler can detect and act on.
+          streamCallback(JSON.stringify({
+            __graph_correction: true,
+            corrected_response: criticOutput.corrected_response,
+          }));
+        }
+
+        thinkingProcess.push({
+          step: 'critic_correction_applied',
+          reasoning: 'Critic provided a corrected response which replaced the original streamed text.',
+        });
+      }
+    } else {
+      thinkingProcess.push({
+        step: 'critic',
+        reasoning: criticEnabled
+          ? 'Critic skipped — no response to evaluate.'
+          : 'Critic disabled via agent.config.graph_enable_critic.',
+      });
+    }
+
+    // ========== Done ==========================================================
+    if (!finalResponse) {
+      const fallback =
+        "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
+      if (streamCallback) streamCallback(fallback);
+      finalResponse = fallback;
+    }
+
+    return {
+      content: finalResponse,
+      thinking_process: thinkingProcess,
+      tools_used: toolsUsed,
+      token_usage: totalTokenUsage,
+    };
+
+    } catch (error) {
+      console.error('[Graph] executeChatbotAgentGraphStream failed:', error);
+      thinkingProcess.push({
+        step: 'graph_error',
+        reasoning: `Graph pipeline error: ${error.message}`,
+      });
+      const errorMsg = "I'm sorry, something went wrong while processing your request. Please try again.";
+      if (streamCallback) streamCallback(errorMsg);
+      return {
+        content: errorMsg,
+        thinking_process: thinkingProcess,
+        tools_used: toolsUsed,
+        token_usage: totalTokenUsage,
+      };
+    }
   }
 }
 
