@@ -3244,7 +3244,9 @@ Your response:`;
       return handoffResult;
     }
 
-    // ========== STEP 2: Responder (streaming) ================================
+    // ========== STEP 2: Responder (buffered — critic must approve first) ======
+    // We do NOT forward chunks to streamCallback yet. All responder output is
+    // buffered so the critic can validate it before anything reaches the client.
     const responderSystemPrompt = this.buildGraphResponderSystemPrompt(
       agent.system_prompt,
       agent,
@@ -3257,13 +3259,12 @@ Your response:`;
       plannerOutput.funnel_state
     );
 
-    let finalResponse = '';
+    let responderBuffer = '';
 
     const onChunk = (chunk) => {
-      finalResponse += chunk;
-      if (streamCallback) {
-        streamCallback(chunk);
-      }
+      responderBuffer += chunk;
+      // Intentionally NOT forwarding to streamCallback here.
+      // We stream only after the critic has approved (or been skipped).
     };
 
     const responderModel = this._getGraphModel(agent, 'responder');
@@ -3282,35 +3283,121 @@ Your response:`;
 
     thinkingProcess.push({
       step: 'responder',
-      reasoning: `Streamed user-facing reply (${finalResponse.length} chars, model=${responderModel}) in funnel state "${plannerOutput.funnel_state}".`,
+      reasoning: `Buffered user-facing reply (${responderBuffer.length} chars, model=${responderModel}) in funnel state "${plannerOutput.funnel_state}". Awaiting critic validation before streaming.`,
     });
 
-    console.log(`[Graph Responder Stream] Streamed ${finalResponse.length} char reply (model=${responderModel}).`);
+    console.log(`[Graph Responder Stream] Buffered ${responderBuffer.length} char reply (model=${responderModel}). Running critic before sending.`);
 
-    // ========== STEP 3: Critic (optional, non-streaming) =====================
+    // ========== STEP 3: Critic (streaming) — detect approval early ===========
+    // The critic's JSON output is streamed. We parse it incrementally:
+    //   approved: true  → flush the buffered responder reply to the client
+    //                     immediately (no extra wait for the full critic response).
+    //   approved: false → start forwarding the corrected_response JSON string
+    //                     value character-by-character as it arrives.
+    // After the stream completes we parse the full JSON for thinkingProcess logs.
     const criticEnabled = agent.config?.graph_enable_critic !== false;
+    let finalResponse = responderBuffer;
 
-    if (criticEnabled && finalResponse) {
+    if (criticEnabled && responderBuffer) {
       const criticSystemPrompt = this.buildGraphCriticSystemPrompt(agent);
-      const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, finalResponse);
-
+      const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, responderBuffer);
       const criticModel = this._getGraphModel(agent, 'critic');
-
       const criticResponseFormat = openai.supportsStructuredOutputs(criticModel)
         ? this.getGraphCriticSchema()
         : null;
 
-      const criticLLM = await openai.generateCompletion(
+      let criticBuffer = '';
+      let approvalDetected = false;
+      let approvalStatus = null; // true | false — null until detected
+      let clientFlushed = false;
+
+      // Incremental streaming state for corrected_response string value
+      let correctedValueOffset = -1; // index in criticBuffer after opening `"` of the value
+      let correctedSentRawLength = 0; // raw (pre-unescape) chars already sent to the client
+
+      const onCriticChunk = (chunk) => {
+        criticBuffer += chunk;
+
+        // ── Detect "approved" field as early as possible ──────────────────
+        if (!approvalDetected) {
+          if (/"approved"\s*:\s*true/.test(criticBuffer)) {
+            approvalDetected = true;
+            approvalStatus = true;
+            // Critic approved — immediately flush the buffered responder reply
+            if (streamCallback && !clientFlushed) {
+              streamCallback(responderBuffer);
+              clientFlushed = true;
+            }
+          } else if (/"approved"\s*:\s*false/.test(criticBuffer)) {
+            approvalDetected = true;
+            approvalStatus = false;
+            // Will stream corrected_response incrementally once it appears
+          }
+        }
+
+        // ── Stream corrected_response characters as they arrive ────────────
+        if (approvalStatus === false && !clientFlushed) {
+          // Find the start of the corrected_response JSON string value (once)
+          if (correctedValueOffset === -1) {
+            const startMatch = criticBuffer.match(/"corrected_response"\s*:\s*"/);
+            if (startMatch) {
+              correctedValueOffset = startMatch.index + startMatch[0].length;
+            }
+          }
+
+          if (correctedValueOffset !== -1) {
+            const valueSlice = criticBuffer.substring(correctedValueOffset);
+            let i = correctedSentRawLength;
+            let newRaw = '';
+
+            while (i < valueSlice.length) {
+              const ch = valueSlice[i];
+              if (ch === '\\') {
+                // Escape sequence — need the next char; wait if not yet arrived
+                if (i + 1 >= valueSlice.length) break;
+                newRaw += ch + valueSlice[i + 1];
+                i += 2;
+              } else if (ch === '"') {
+                // Unescaped closing quote — end of JSON string value
+                clientFlushed = true;
+                break;
+              } else {
+                newRaw += ch;
+                i++;
+              }
+            }
+
+            if (newRaw.length > 0) {
+              correctedSentRawLength += newRaw.length;
+              // Decode JSON string escapes before forwarding to the client
+              const unescaped = newRaw
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\r/g, '\r')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\')
+                .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+                  String.fromCharCode(parseInt(hex, 16))
+                );
+              if (streamCallback) streamCallback(unescaped);
+            }
+          }
+        }
+      };
+
+      const criticLLM = await openai.generateStreamingCompletion(
         criticModel,
         criticUserPrompt,
         { ...agent.llm_settings.parameters, temperature: 0.1, max_tokens: 600 },
         criticSystemPrompt,
+        onCriticChunk,
         criticResponseFormat,
         { prompt_cache_key: `agent_graph_critic_${agent._id}` }
       );
 
       this._accumulateUsage(totalTokenUsage, criticLLM.usage);
 
+      // Parse the full critic response for accurate logging and return value
       let criticOutput;
       try {
         criticOutput = JSON.parse(criticLLM.content);
@@ -3326,27 +3413,27 @@ Your response:`;
         issues: criticOutput.issues || [],
       });
 
-      console.log(`[Graph Critic Stream] approved=${criticOutput.approved}${criticOutput.issues?.length ? `, issues=${criticOutput.issues.length}` : ''}`);
+      console.log(
+        `[Graph Critic Stream] approved=${criticOutput.approved}` +
+        `${criticOutput.issues?.length ? `, issues=${criticOutput.issues.length}` : ''}, ` +
+        `flushed_to_client=${clientFlushed}`
+      );
 
-      // If the critic rejected the response, replace with corrected version.
-      // We push a special marker so the frontend knows to replace the streamed text.
       if (!criticOutput.approved && criticOutput.corrected_response) {
+        // Use the canonical parsed value as the authoritative finalResponse
         finalResponse = criticOutput.corrected_response;
-
-        if (streamCallback) {
-          // Signal the frontend to replace the previously streamed content.
-          // The payload is a JSON event the SSE handler can detect and act on.
-          streamCallback(JSON.stringify({
-            __graph_correction: true,
-            corrected_response: criticOutput.corrected_response,
-          }));
-        }
-
         thinkingProcess.push({
           step: 'critic_correction_applied',
-          reasoning: 'Critic provided a corrected response which replaced the original streamed text.',
+          reasoning: 'Critic rejected the draft; corrected response was streamed incrementally to the client.',
         });
       }
+
+      // Safety net: if we never flushed (e.g. malformed critic JSON, missing
+      // corrected_response, or non-structured-output model), flush now.
+      if (!clientFlushed && streamCallback) {
+        streamCallback(finalResponse);
+      }
+
     } else {
       thinkingProcess.push({
         step: 'critic',
@@ -3354,14 +3441,17 @@ Your response:`;
           ? 'Critic skipped — no response to evaluate.'
           : 'Critic disabled via agent.config.graph_enable_critic.',
       });
+      // Critic disabled/skipped — stream the responder buffer directly
+      if (streamCallback) {
+        streamCallback(finalResponse);
+      }
     }
 
     // ========== Done ==========================================================
     if (!finalResponse) {
-      const fallback =
+      finalResponse =
         "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
-      if (streamCallback) streamCallback(fallback);
-      finalResponse = fallback;
+      if (streamCallback) streamCallback(finalResponse);
     }
 
     return {
