@@ -201,7 +201,15 @@ Guidelines:
             ? summaryData.context_data
             : {},
         tool_results: Array.isArray(summaryData.tool_results)
-          ? summaryData.tool_results
+          ? summaryData.tool_results.map(tr => ({
+              ...tr,
+              key_data:
+                tr.key_data !== null && tr.key_data !== undefined
+                  ? typeof tr.key_data === 'string'
+                    ? tr.key_data
+                    : JSON.stringify(tr.key_data)
+                  : '',
+            }))
           : [],
       };
     } catch (error) {
