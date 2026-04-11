@@ -380,7 +380,7 @@ const getMyConversations = async (req, res) => {
 const getOrganizationConversations = async (req, res) => {
   try {
     const { orgId } = req.params;
-    const { page = 1, limit = 20, status, channel } = req.query;
+    const { page = 1, limit = 20, status, channel, archived } = req.query;
     const skip = (page - 1) * limit;
 
     // Get Agent model to query agents by organization
@@ -399,6 +399,12 @@ const getOrganizationConversations = async (req, res) => {
     }
     if (channel) {
       filter.channel = channel;
+    }
+    // archived filter: 'true' = only archived, 'false' = only not archived, omitted = all
+    if (archived === 'true') {
+      filter.archived = true;
+    } else if (archived === 'false') {
+      filter.archived = false;
     }
 
     const conversations = await Conversation.find(filter)
@@ -423,6 +429,54 @@ const getOrganizationConversations = async (req, res) => {
     res
       .status(500)
       .json({ error: 'Failed to fetch organization conversations' });
+  }
+};
+
+/**
+ * Archive (or unarchive) a conversation
+ */
+const archiveConversation = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { archived = true } = req.body;
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // Verify the requesting user is a member of the organization that owns this conversation
+    const Agent = require('../models/Agent');
+    const Organization = require('../models/Organization');
+
+    const agent = await Agent.findById(conversation.agent).select('organization');
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found for this conversation' });
+    }
+
+    const org = await Organization.findOne({
+      _id: agent.organization,
+      'members.user': req.user._id,
+    }).select('_id');
+
+    if (!org) {
+      return res.status(403).json({ error: 'Access denied to this organization' });
+    }
+
+    conversation.archived = Boolean(archived);
+    await conversation.save();
+
+    res.json({
+      success: true,
+      archived: conversation.archived,
+      message: conversation.archived
+        ? 'Conversation archived'
+        : 'Conversation unarchived',
+      conversation,
+    });
+  } catch (error) {
+    console.error('Error archiving conversation:', error);
+    res.status(500).json({ error: 'Failed to archive conversation' });
   }
 };
 
@@ -608,6 +662,7 @@ module.exports = {
   handBackToAgent,
   getMyConversations,
   getOrganizationConversations,
+  archiveConversation,
   streamConversation,
   getConversationDetails,
   getLatestMessages,

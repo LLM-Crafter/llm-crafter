@@ -57,6 +57,12 @@ router.post(
   handoffController.handBackToAgent
 );
 
+// Archive or unarchive a conversation
+router.patch(
+  '/conversations/:conversationId/archive',
+  handoffController.archiveConversation
+);
+
 // Stream conversation updates (Server-Sent Events)
 router.get(
   '/conversations/:conversationId/stream',

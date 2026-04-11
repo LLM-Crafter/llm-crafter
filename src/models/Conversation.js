@@ -258,6 +258,12 @@ const conversationSchema = new mongoose.Schema(
         default: false,
       },
     },
+    // Whether this conversation has been archived by a human operator
+    archived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -289,11 +295,19 @@ conversationSchema.index({ agent: 1, status: 1 });
 conversationSchema.index({ 'metadata.last_activity': 1 });
 conversationSchema.index({ agent: 1, channel: 1, status: 1 }); // New index for channel queries
 conversationSchema.index({ channel: 1, 'metadata.last_activity': 1 }); // New index for channel analytics
+conversationSchema.index({ archived: 1 });
+conversationSchema.index({ agent: 1, archived: 1 });
 
 // Update last activity on message addition and check for summarization needs
+// Also auto-unarchive the conversation when a new message arrives
 conversationSchema.pre('save', function (next) {
   if (this.isModified('messages')) {
     this.metadata.last_activity = new Date();
+
+    // Auto-unarchive when a new message is added so operators see the conversation again
+    if (this.archived) {
+      this.archived = false;
+    }
 
     // Check if summarization is needed (every 15 messages after the last summary)
     const messagesSinceLastSummary =
