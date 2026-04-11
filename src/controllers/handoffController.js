@@ -400,11 +400,11 @@ const getOrganizationConversations = async (req, res) => {
     if (channel) {
       filter.channel = channel;
     }
-    // archived filter: 'true' = only archived, 'false' = only not archived, omitted = all
+    // archived filter: 'true' = only archived, 'false' = only not archived (incl. null/missing), omitted = all
     if (archived === 'true') {
       filter.archived = true;
     } else if (archived === 'false') {
-      filter.archived = false;
+      filter.archived = { $ne: true };
     }
 
     const conversations = await Conversation.find(filter)
