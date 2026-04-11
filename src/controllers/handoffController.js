@@ -403,7 +403,7 @@ const getOrganizationConversations = async (req, res) => {
 
     const conversations = await Conversation.find(filter)
       .populate('agent', 'name type')
-      .sort({ updatedAt: -1 })
+      .sort({ 'metadata.last_activity': -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
