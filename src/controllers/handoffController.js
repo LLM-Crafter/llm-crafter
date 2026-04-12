@@ -612,8 +612,8 @@ const getLatestMessages = async (req, res) => {
       sinceDate = new Date(Date.now() - 30000);
     }
 
-    // Filter messages
-    const allMessages = conversation.messages || [];
+    // Filter messages (use decrypted view for GDPR-encrypted conversations)
+    const allMessages = conversation.getDecryptedMessages();
     let newMessages = allMessages.filter(msg => {
       const msgDate = new Date(msg.timestamp);
       const matchesTime = msgDate > sinceDate;
