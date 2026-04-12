@@ -2569,12 +2569,12 @@ Your response:`;
             },
             needs_tools: {
               type: 'boolean',
-              description: 'Whether any tool calls are required this turn.',
+              description: 'Whether any tool calls are required this turn. False when no tools are needed or all necessary tools have already been executed.',
             },
             tools_to_call: {
               type: 'array',
               description:
-                'Ordered list of tools to invoke. Empty array when needs_tools is false.',
+                'List of READY tools to invoke in this round. All entries run in parallel. Empty when needs_tools is false.',
               items: {
                 type: 'object',
                 properties: {
@@ -2594,12 +2594,22 @@ Your response:`;
                 required: ['tool_name', 'tool_parameters'],
               },
             },
+            needs_another_round: {
+              type: 'boolean',
+              description:
+                'True if there are BLOCKED tools whose parameters depend on results from tools in this round. False when every necessary tool has been planned or executed.',
+            },
+            dependency_reasoning: {
+              type: 'string',
+              description:
+                'Explain which tools are READY (all parameters known) vs BLOCKED (parameters depend on unresolved tool results). Describe the dependency chain generically.',
+            },
             reasoning: {
               type: 'string',
               description: 'High-level reasoning for the plan.',
             },
           },
-          required: ['funnel_state', 'needs_tools', 'tools_to_call', 'reasoning'],
+          required: ['funnel_state', 'needs_tools', 'tools_to_call', 'needs_another_round', 'dependency_reasoning', 'reasoning'],
         },
       },
     };
@@ -2656,6 +2666,30 @@ Your response:`;
     prompt += `and decide which tools (if any) should be called BEFORE a reply is generated.\n\n`;
     prompt += `IMPORTANT: You do NOT generate user-facing text. You only output a structured plan.\n\n`;
 
+    // Execution model
+    prompt += `## Execution Model\n\n`;
+    prompt += `The orchestrator calls you in **rounds**. Each round works as follows:\n`;
+    prompt += `1. You receive the conversation, the tool catalogue, and any tool results collected so far this turn.\n`;
+    prompt += `2. You output the **next batch** of tool calls (tools_to_call). All tools in a single batch run **in parallel**.\n`;
+    prompt += `3. After the batch executes, you are called again with the updated results.\n`;
+    prompt += `4. This repeats until you set needs_another_round = false or the tool-call budget is exhausted.\n\n`;
+    prompt += `CRITICAL: Plan only the CURRENT round. Do NOT try to plan the entire multi-step chain up-front.\n\n`;
+
+    // Dependency reasoning
+    prompt += `## Dependency & Parallelism Rules\n\n`;
+    prompt += `Before selecting tools for this round, classify every potentially useful tool as READY or BLOCKED:\n`;
+    prompt += `- **READY**: All of its required parameters can be fully determined from the conversation history and/or previously collected tool results.\n`;
+    prompt += `- **BLOCKED**: One or more parameters require the output of a tool that has not run yet this turn.\n\n`;
+    prompt += `Only include READY tools in tools_to_call. They will all execute in parallel.\n`;
+    prompt += `If any BLOCKED tools remain after the READY set, set needs_another_round = true so you will be called again once the current batch completes.\n`;
+    prompt += `If no tools are needed or every necessary tool has already been executed, set needs_tools = false and needs_another_round = false.\n\n`;
+    prompt += `Explain your READY/BLOCKED classification in the dependency_reasoning field.\n\n`;
+
+    // Deduplication / failure
+    prompt += `## Re-call & Failure Rules\n\n`;
+    prompt += `- Do NOT re-call a tool with the same parameters if it already succeeded this turn (check the previous results).\n`;
+    prompt += `- If a tool FAILED, do NOT retry with identical parameters. Either adapt the parameters or omit the tool and let the responder explain the failure.\n\n`;
+
     // Tool catalogue
     prompt += `## Available Tools\n\n`;
     agent.tools.forEach(tool => {
@@ -2687,12 +2721,10 @@ Your response:`;
       prompt += `\n`;
     });
 
-    prompt += `## Rules\n`;
+    prompt += `## General Rules\n`;
     prompt += `- Only request tools that are strictly necessary to answer the user's latest message.\n`;
-    prompt += `- Respect the max tool call budget provided in the user prompt.\n`;
+    prompt += `- Respect the remaining tool-call budget provided in the user prompt.\n`;
     prompt += `- Only use tools listed above — do NOT invent tool names.\n`;
-    prompt += `- For api_caller, include endpoint_name, method, and any needed query_params / path_params / body_data.\n`;
-    prompt += `- For request_human_handoff, include reason, urgency, and optionally handoff_message.\n`;
     prompt += `- Set funnel_state to one of: greeting, qualifying, informing, objection-handling, closing, support, general.\n`;
 
     return prompt;
@@ -2701,7 +2733,15 @@ Your response:`;
   /**
    * Build the user prompt for the Planner role (dynamic per turn).
    */
-  buildGraphPlannerUserPrompt(context, maxToolCalls) {
+  /**
+   * Build the user prompt for the Planner role (dynamic per round).
+   *
+   * @param {Object}  context         – agent context from buildAgentContext
+   * @param {number}  remainingBudget – how many more tool calls are allowed this turn
+   * @param {Array}   previousResults – tool results already collected in earlier rounds
+   * @param {number}  roundNumber     – 1-based round counter
+   */
+  buildGraphPlannerUserPrompt(context, remainingBudget, previousResults = [], roundNumber = 1) {
     let prompt = `## Conversation\n`;
 
     // Summary context
@@ -2717,9 +2757,22 @@ Your response:`;
     prompt += `### Messages\n`;
     prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
     prompt += `\n\n`;
+
+    // Include tool results from earlier rounds so the planner can unblock dependent tools
+    if (previousResults.length > 0) {
+      prompt += `## Tool Results Already Collected This Turn\n`;
+      prompt += previousResults.map(tr => {
+        const status = tr.success ? 'SUCCESS' : 'FAILED';
+        const detail = tr.success ? JSON.stringify(tr.result) : tr.error;
+        return `- ${tr.tool_name} [${status}]: ${detail}`;
+      }).join('\n');
+      prompt += `\n\n`;
+    }
+
     prompt += `## Constraints\n`;
-    prompt += `Max tool calls this turn: ${maxToolCalls}\n\n`;
-    prompt += `Produce your plan now.`;
+    prompt += `Planning round: ${roundNumber}\n`;
+    prompt += `Remaining tool-call budget: ${remainingBudget}\n\n`;
+    prompt += `Produce your plan for this round now.`;
 
     return prompt;
   }
@@ -2871,13 +2924,15 @@ Your response:`;
   // ---- Graph: planner + tool execution (shared by both variants) -----------
 
   /**
-   * Run the Planner role and execute any planned tool calls.
-   * Shared by both the non-streaming and streaming graph orchestrators.
+   * Run the Planner role in rounds, executing tool batches in parallel
+   * until all dependencies are resolved or the budget is exhausted.
+   *
+   * Each round:
+   *   1. Calls the Planner with conversation context + accumulated results.
+   *   2. Validates and executes the returned READY tools in parallel.
+   *   3. Appends results and loops if the Planner signals needs_another_round.
    *
    * @returns {{ plannerOutput: Object, toolsUsed: Array, handoffResult: Object|null }}
-   *   - plannerOutput: parsed planner JSON (funnel_state, tools_to_call, reasoning)
-   *   - toolsUsed: populated tool result entries
-   *   - handoffResult: if a human handoff was triggered, an early-return object; otherwise null
    */
   async _graphPlanAndExecuteTools(
     openai,
@@ -2889,126 +2944,204 @@ Your response:`;
     totalTokenUsage
   ) {
     const maxToolCalls = agent.config.max_tool_calls || 5;
+    const maxPlannerRounds = 5; // Hard cap to prevent runaway loops
+    let remainingBudget = maxToolCalls;
+    let roundNumber = 0;
+    let latestPlannerOutput = {
+      funnel_state: 'general',
+      needs_tools: false,
+      tools_to_call: [],
+      needs_another_round: false,
+      dependency_reasoning: '',
+      reasoning: 'No planner rounds executed.',
+    };
 
-    // --- Planner LLM call ----------------------------------------------------
+    // Accumulated results across rounds — fed back to the Planner each iteration
+    const accumulatedResults = [];
+
+    // Build static parts once (cached per agent)
     const plannerSystemPrompt = this.buildGraphPlannerSystemPrompt(agent);
-    const plannerUserPrompt = this.buildGraphPlannerUserPrompt(context, maxToolCalls);
-
     const plannerModel = this._getGraphModel(agent, 'planner');
-
     const plannerResponseFormat = openai.supportsStructuredOutputs(plannerModel)
       ? this.getGraphPlannerSchema()
       : null;
 
-    const plannerLLM = await openai.generateCompletion(
-      plannerModel,
-      plannerUserPrompt,
-      { ...agent.llm_settings.parameters, temperature: 0.2, max_tokens: 500 },
-      plannerSystemPrompt,
-      plannerResponseFormat,
-      { prompt_cache_key: `agent_graph_planner_${agent._id}` }
-    );
-
-    this._accumulateUsage(totalTokenUsage, plannerLLM.usage);
-
-    // Parse planner output
-    let plannerOutput;
-    try {
-      plannerOutput = JSON.parse(plannerLLM.content);
-    } catch {
-      // Fallback: no tool calls, treat as general turn
-      console.warn('[Graph Planner] Failed to parse planner JSON, falling back to no-tool plan.');
-      plannerOutput = {
-        funnel_state: 'general',
-        needs_tools: false,
-        tools_to_call: [],
-        reasoning: 'Planner output was not valid JSON; proceeding without tools.',
-      };
-    }
-
-    thinkingProcess.push({
-      step: 'planner',
-      reasoning: plannerOutput.reasoning || 'Planner determined the action plan for this turn.',
-      funnel_state: plannerOutput.funnel_state,
-      tools_planned: (plannerOutput.tools_to_call || []).map(t => t.tool_name),
-    });
-
-    console.log(`[Graph Planner] funnel_state=${plannerOutput.funnel_state}, tools_planned=${(plannerOutput.tools_to_call || []).length}`);
-
-    // --- Execute planned tool calls ------------------------------------------
-    const plannedTools = (plannerOutput.tools_to_call || []).slice(0, maxToolCalls);
-
-    // Build a set of valid tool names from the agent's tool list for validation
+    // Valid tool name set for hallucination detection
     const validToolNames = new Set(agent.tools.map(t => t.name));
 
-    for (const planned of plannedTools) {
-      // Validate: skip tools the planner hallucinated that don't exist on this agent
-      if (!validToolNames.has(planned.tool_name)) {
-        console.warn(`[Graph Planner] Skipping unknown tool "${planned.tool_name}" — not in agent's tool list.`);
-        thinkingProcess.push({
-          step: 'tool_skipped',
-          tool_name: planned.tool_name,
-          reasoning: `Planner requested tool "${planned.tool_name}" which is not available on this agent. Skipping.`,
-        });
-        continue;
-      }
+    while (roundNumber < maxPlannerRounds && remainingBudget > 0) {
+      roundNumber++;
 
-      thinkingProcess.push({
-        step: 'tool_execution',
-        tool_name: planned.tool_name,
-        reasoning: planned.reason || `Executing planned tool: ${planned.tool_name}`,
-      });
-
-      const toolResult = await toolService.executeToolWithConfig(
-        planned.tool_name,
-        planned.tool_parameters,
-        this.getAgentToolConfig(agent, planned.tool_name, conversation._id)
+      // --- Planner LLM call --------------------------------------------------
+      const plannerUserPrompt = this.buildGraphPlannerUserPrompt(
+        context,
+        remainingBudget,
+        accumulatedResults,
+        roundNumber
       );
 
-      const entry = {
-        tool_name: planned.tool_name,
-        parameters: planned.tool_parameters,
-        execution_time_ms: toolResult.execution_time_ms,
-        success: toolResult.success,
-      };
+      const plannerLLM = await openai.generateCompletion(
+        plannerModel,
+        plannerUserPrompt,
+        { ...agent.llm_settings.parameters, temperature: 0.2, max_tokens: 600 },
+        plannerSystemPrompt,
+        plannerResponseFormat,
+        { prompt_cache_key: `agent_graph_planner_${agent._id}` }
+      );
 
-      if (toolResult.success) {
-        entry.result = toolResult.result;
-      } else {
-        entry.error = toolResult.error;
+      this._accumulateUsage(totalTokenUsage, plannerLLM.usage);
+
+      // Parse planner output
+      let plannerOutput;
+      try {
+        plannerOutput = JSON.parse(plannerLLM.content);
+      } catch {
+        console.warn(`[Graph Planner] Round ${roundNumber}: failed to parse JSON, stopping.`);
+        plannerOutput = {
+          funnel_state: 'general',
+          needs_tools: false,
+          tools_to_call: [],
+          needs_another_round: false,
+          dependency_reasoning: 'Planner output was not valid JSON; proceeding without tools.',
+          reasoning: 'Planner output was not valid JSON; proceeding without tools.',
+        };
+      }
+
+      latestPlannerOutput = plannerOutput;
+
+      thinkingProcess.push({
+        step: 'planner',
+        round: roundNumber,
+        reasoning: plannerOutput.reasoning || `Planner round ${roundNumber}.`,
+        dependency_reasoning: plannerOutput.dependency_reasoning || '',
+        funnel_state: plannerOutput.funnel_state,
+        tools_planned: (plannerOutput.tools_to_call || []).map(t => t.tool_name),
+        needs_another_round: !!plannerOutput.needs_another_round,
+      });
+
+      console.log(
+        `[Graph Planner] Round ${roundNumber}: funnel_state=${plannerOutput.funnel_state}, ` +
+        `tools=${(plannerOutput.tools_to_call || []).length}, ` +
+        `needs_another_round=${!!plannerOutput.needs_another_round}, ` +
+        `remaining_budget=${remainingBudget}`
+      );
+
+      // If the planner says no tools are needed, we're done
+      if (!plannerOutput.needs_tools || !(plannerOutput.tools_to_call?.length > 0)) {
+        break;
+      }
+
+      // --- Validate & execute tools in parallel --------------------------------
+      const plannedTools = (plannerOutput.tools_to_call || []).slice(0, remainingBudget);
+      const validPlanned = [];
+
+      for (const planned of plannedTools) {
+        if (!validToolNames.has(planned.tool_name)) {
+          console.warn(`[Graph Planner] Skipping unknown tool "${planned.tool_name}".`);
+          thinkingProcess.push({
+            step: 'tool_skipped',
+            round: roundNumber,
+            tool_name: planned.tool_name,
+            reasoning: `Planner requested tool "${planned.tool_name}" which is not available. Skipping.`,
+          });
+          continue;
+        }
+        validPlanned.push(planned);
+      }
+
+      // Record intent for each tool before parallel execution
+      for (const planned of validPlanned) {
         thinkingProcess.push({
-          step: 'tool_failed',
-          reasoning: `Tool ${planned.tool_name} failed: ${toolResult.error}`,
+          step: 'tool_execution',
+          round: roundNumber,
+          tool_name: planned.tool_name,
+          reasoning: planned.reason || `Executing planned tool: ${planned.tool_name}`,
         });
       }
 
-      toolsUsed.push(entry);
+      // Execute all READY tools in parallel
+      const toolPromises = validPlanned.map(async (planned) => {
+        const toolResult = await toolService.executeToolWithConfig(
+          planned.tool_name,
+          planned.tool_parameters,
+          this.getAgentToolConfig(agent, planned.tool_name, conversation._id)
+        );
 
-      // Handle human handoff — return early so the orchestrator can exit
-      if (planned.tool_name === 'request_human_handoff' && toolResult.success) {
-        const handoffMessage =
-          planned.tool_parameters.handoff_message ||
-          'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
-
-        thinkingProcess.push({
-          step: 'human_handoff_requested',
-          reasoning: planned.reason || 'Human handoff was requested by planner.',
-        });
-
-        return {
-          plannerOutput,
-          toolsUsed,
-          handoffResult: {
-            content: handoffMessage,
-            thinking_process: thinkingProcess,
-            tools_used: toolsUsed,
-            token_usage: totalTokenUsage,
-          },
+        const entry = {
+          tool_name: planned.tool_name,
+          parameters: planned.tool_parameters,
+          execution_time_ms: toolResult.execution_time_ms,
+          success: toolResult.success,
         };
+
+        if (toolResult.success) {
+          entry.result = toolResult.result;
+        } else {
+          entry.error = toolResult.error;
+        }
+
+        return { planned, entry, toolResult };
+      });
+
+      const results = await Promise.all(toolPromises);
+
+      // Process results
+      for (const { planned, entry, toolResult } of results) {
+        if (!entry.success) {
+          thinkingProcess.push({
+            step: 'tool_failed',
+            round: roundNumber,
+            reasoning: `Tool ${planned.tool_name} failed: ${entry.error}`,
+          });
+        }
+
+        toolsUsed.push(entry);
+        accumulatedResults.push(entry);
+        remainingBudget--;
+
+        // Handle human handoff — return early
+        if (planned.tool_name === 'request_human_handoff' && toolResult.success) {
+          const handoffMessage =
+            planned.tool_parameters.handoff_message ||
+            'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
+
+          thinkingProcess.push({
+            step: 'human_handoff_requested',
+            round: roundNumber,
+            reasoning: planned.reason || 'Human handoff was requested by planner.',
+          });
+
+          return {
+            plannerOutput: latestPlannerOutput,
+            toolsUsed,
+            handoffResult: {
+              content: handoffMessage,
+              thinking_process: thinkingProcess,
+              tools_used: toolsUsed,
+              token_usage: totalTokenUsage,
+            },
+          };
+        }
+      }
+
+      // If the planner doesn't want another round, stop
+      if (!plannerOutput.needs_another_round) {
+        break;
+      }
+
+      // Safety: stop if budget is exhausted
+      if (remainingBudget <= 0) {
+        console.log(`[Graph Planner] Tool-call budget exhausted after round ${roundNumber}.`);
+        thinkingProcess.push({
+          step: 'budget_exhausted',
+          round: roundNumber,
+          reasoning: `Tool-call budget (${maxToolCalls}) exhausted. Proceeding to responder with results collected so far.`,
+        });
+        break;
       }
     }
 
-    return { plannerOutput, toolsUsed, handoffResult: null };
+    return { plannerOutput: latestPlannerOutput, toolsUsed, handoffResult: null };
   }
 
   // ---- Graph orchestrators --------------------------------------------------
@@ -3110,10 +3243,14 @@ Your response:`;
         ? this.getGraphCriticSchema()
         : null;
 
+      // The critic may return a corrected_response as long as the original reply,
+      // plus JSON overhead (approved, issues, reasoning). Derive from agent config.
+      const criticMaxTokens = (agent.llm_settings.parameters?.max_tokens || 1000) + 200;
+
       const criticLLM = await openai.generateCompletion(
         criticModel,
         criticUserPrompt,
-        { ...agent.llm_settings.parameters, temperature: 0.1, max_tokens: 600 },
+        { ...agent.llm_settings.parameters, temperature: 0.1, max_tokens: criticMaxTokens },
         criticSystemPrompt,
         criticResponseFormat,
         { prompt_cache_key: `agent_graph_critic_${agent._id}` }
@@ -3385,10 +3522,14 @@ Your response:`;
         }
       };
 
+      // The critic may return a corrected_response as long as the original reply,
+      // plus JSON overhead (approved, issues, reasoning). Derive from agent config.
+      const criticMaxTokens = (agent.llm_settings.parameters?.max_tokens || 1000) + 200;
+
       const criticLLM = await openai.generateStreamingCompletion(
         criticModel,
         criticUserPrompt,
-        { ...agent.llm_settings.parameters, temperature: 0.1, max_tokens: 600 },
+        { ...agent.llm_settings.parameters, temperature: 0.1, max_tokens: criticMaxTokens },
         criticSystemPrompt,
         onCriticChunk,
         criticResponseFormat,
