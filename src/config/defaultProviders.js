@@ -92,13 +92,17 @@ const defaultProviders = [
   {
     name: 'anthropic',
     models: [
-      // Claude 4.x mainline (latest)
-      'claude-opus-4-1-20250805', // Claude Opus 4.1 (current top-tier model)
-      'claude-sonnet-4-5-20250929', // Claude Sonnet 4.5 (mainstream, best balance)
+      // Claude 4.6 (latest)
+      'claude-opus-4-6', // Claude Opus 4.6 (most intelligent, agents & coding, 1M context, 128k output)
+      'claude-sonnet-4-6', // Claude Sonnet 4.6 (best speed/intelligence balance, 1M context, 64k output)
+
+      // Claude 4.5
+      'claude-haiku-4-5-20251001', // Claude Haiku 4.5 (fastest, most affordable, 200k context)
+      'claude-sonnet-4-5-20250929', // Claude Sonnet 4.5 (previous mainstream)
       'claude-sonnet-4-5-long', // Claude Sonnet 4.5 (long context, >200K tokens)
-      'claude-haiku-4-5-20251001', // Claude Haiku 4.5 (fastest, most affordable)
 
       // Claude 4.x legacy
+      'claude-opus-4-1-20250805', // Claude Opus 4.1 (previous top-tier)
       'claude-opus-4-20250514', // Claude Opus 4 (original Claude 4 release)
       'claude-sonnet-4-20250514', // Claude Sonnet 4 (legacy)
 
@@ -107,10 +111,10 @@ const defaultProviders = [
       'claude-3-5-sonnet-20241022', // Claude 3.5 Sonnet (rapid reasoning/coding)
       'claude-3-5-haiku-20241022', // Claude 3.5 Haiku (fastest, most affordable)
 
-      // Claude 3 baseline (still available in some API/cloud endpoints)
-      'claude-3-opus-20240229', // Claude 3 Opus (now deprecated)
-      'claude-3-sonnet-20240229', // Claude 3 Sonnet (now deprecated)
-      'claude-3-haiku-20240307', // Claude 3 Haiku (fast/low-cost; vision + text)
+      // Claude 3 baseline (deprecated)
+      'claude-3-opus-20240229', // Claude 3 Opus (deprecated)
+      'claude-3-sonnet-20240229', // Claude 3 Sonnet (deprecated)
+      'claude-3-haiku-20240307', // Claude 3 Haiku (deprecated)
     ],
   },
   {

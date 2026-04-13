@@ -149,54 +149,75 @@ const PRICING = {
     },
   },
   anthropic: {
-    // Claude Opus 4.1
-    'claude-opus-4-1': {
-      input: 0.015, // $15 per million input tokens
-      output: 0.075, // $75 per million output tokens
+    // Claude Opus 4.6 — $5 / MTok input, $25 / MTok output
+    'claude-opus-4-6': {
+      input: 0.005,
+      output: 0.025,
     },
-    // Claude Sonnet 4.5 (≤ 200K context)
-    'claude-sonnet-4-5': {
-      input: 0.003, // $3 per million input tokens
-      output: 0.015, // $15 per million output tokens
+    // Claude Sonnet 4.6 — $3 / MTok input, $15 / MTok output
+    'claude-sonnet-4-6': {
+      input: 0.003,
+      output: 0.015,
     },
-    // Claude Sonnet 4.5 (> 200K context)
-    'claude-sonnet-4-5-long': {
-      input: 0.006, // $6 per million input tokens
-      output: 0.0225, // $22.50 per million output tokens
-    },
-    // Claude Haiku 4.5
+    // Claude Haiku 4.5 — $1 / MTok input, $5 / MTok output
     'claude-haiku-4-5': {
-      input: 0.001, // $1 per million input tokens
-      output: 0.005, // $5 per million output tokens
+      input: 0.001,
+      output: 0.005,
     },
-    // Legacy/compatibility (fallback to Haiku/Sonnet pricing)
+    // Claude Sonnet 4.5 — $3 / MTok input, $15 / MTok output
+    'claude-sonnet-4-5': {
+      input: 0.003,
+      output: 0.015,
+    },
+    // Claude Sonnet 4.5 long (> 200K context)
+    'claude-sonnet-4-5-long': {
+      input: 0.006,
+      output: 0.0225,
+    },
+    // Claude Opus 4.1 — $15 / MTok input, $75 / MTok output
+    'claude-opus-4-1': {
+      input: 0.015,
+      output: 0.075,
+    },
+    // Claude Opus 4 — $15 / MTok input, $75 / MTok output
     'claude-opus-4': {
       input: 0.015,
       output: 0.075,
     },
+    // Claude Sonnet 4 — $3 / MTok input, $15 / MTok output
     'claude-sonnet-4': {
       input: 0.003,
       output: 0.015,
     },
+    // Claude 3.7 Sonnet (deprecated) — $3 / MTok input, $15 / MTok output
+    'claude-3-7-sonnet': {
+      input: 0.003,
+      output: 0.015,
+    },
+    // Claude 3.5 Sonnet — $3 / MTok input, $15 / MTok output
     'claude-3-5-sonnet': {
       input: 0.003,
       output: 0.015,
     },
+    // Claude 3.5 Haiku — $0.80 / MTok input, $4 / MTok output
     'claude-3-5-haiku': {
-      input: 0.001,
-      output: 0.005,
+      input: 0.0008,
+      output: 0.004,
     },
+    // Claude 3 Opus (deprecated) — $15 / MTok input, $75 / MTok output
     'claude-3-opus': {
       input: 0.015,
       output: 0.075,
     },
+    // Claude 3 Sonnet — $3 / MTok input, $15 / MTok output
     'claude-3-sonnet': {
       input: 0.003,
       output: 0.015,
     },
+    // Claude 3 Haiku — $0.25 / MTok input, $1.25 / MTok output
     'claude-3-haiku': {
-      input: 0.001,
-      output: 0.005,
+      input: 0.00025,
+      output: 0.00125,
     },
   },
   deepseek: {
