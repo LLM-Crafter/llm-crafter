@@ -419,6 +419,10 @@ class OpenAIService {
       delete mappedParams.presence_penalty;
     }
 
+    if (this.provider === 'anthropic') {
+      delete mappedParams.top_p;
+    }
+
     return mappedParams;
   }
 
