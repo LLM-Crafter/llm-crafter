@@ -34,7 +34,19 @@ const agentSchema = new mongoose.Schema(
     },
     system_prompt: {
       type: String,
-      required: true,
+      required: [
+        function () {
+          // system_prompt is optional when graph mode is enabled and prompt_sections are provided
+          if (this.config?.enable_small_agent_graph) {
+            const ps = this.config?.prompt_sections || {};
+            const hasStructured = Object.values(ps).some(v => v && v.length > 0);
+            if (hasStructured) return false;
+          }
+          return true;
+        },
+        'system_prompt is required (unless graph mode is enabled with prompt_sections)',
+      ],
+      default: '',
     },
     api_key: {
       type: String,
@@ -174,6 +186,18 @@ const agentSchema = new mongoose.Schema(
           type: String,
           default: null,
         },
+      },
+      // Optional structured prompt sections for graph agents.
+      // When any field is non-empty the graph pipeline derives role-specific
+      // prompts from these sections instead of the raw system_prompt.
+      // ReAct mode continues to use system_prompt as-is.
+      prompt_sections: {
+        identity_and_tone: { type: String, default: '' },
+        tools_and_apis: { type: String, default: '' },
+        conversation_flow: { type: String, default: '' },
+        output_format: { type: String, default: '' },
+        guardrails: { type: String, default: '' },
+        domain_workflows: { type: String, default: '' },
       },
       // Human handoff configuration
       handoff_config: {

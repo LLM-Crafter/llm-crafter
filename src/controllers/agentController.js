@@ -409,6 +409,7 @@ const updateAgent = async (req, res) => {
         .status(400)
         .json({ error: 'Agent name already exists in this project' });
     }
+    console.log('Update agent error:', error);
     res.status(500).json({ error: 'Failed to update agent' });
   }
 };
