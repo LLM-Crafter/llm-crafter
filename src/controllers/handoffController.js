@@ -380,7 +380,7 @@ const getMyConversations = async (req, res) => {
 const getOrganizationConversations = async (req, res) => {
   try {
     const { orgId } = req.params;
-    const { page = 1, limit = 20, status, channel, archived } = req.query;
+    const { page = 1, limit = 20, status, channel, archived, conversationIds } = req.query;
     const skip = (page - 1) * limit;
 
     // Get Agent model to query agents by organization
@@ -392,6 +392,12 @@ const getOrganizationConversations = async (req, res) => {
 
     // Build filter for conversations
     const filter = { agent: { $in: agentIds } };
+
+    // Filter by specific conversation IDs if provided
+    if (conversationIds) {
+      const ids = Array.isArray(conversationIds) ? conversationIds : conversationIds.split(',');
+      filter._id = { $in: ids };
+    }
 
     // Add optional filters
     if (status) {
