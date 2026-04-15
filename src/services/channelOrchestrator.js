@@ -382,9 +382,12 @@ class ChannelOrchestrator {
     channelMetadata
   ) {
     try {
-      // Try to find existing active conversation
-      // Include all active statuses except 'closed' to avoid creating duplicates
-      let conversation = await Conversation.findOne({
+      // Channels with session windows that require new conversations after inactivity
+      const channelSessionWindows = {
+        whatsapp: 24 * 60 * 60 * 1000, // 24 hours (Meta's messaging window)
+      };
+
+      const queryFilter = {
         agent: agentId,
         user_identifier: userIdentifier,
         channel: channel,
@@ -396,7 +399,44 @@ class ChannelOrchestrator {
             'handoff_requested',
           ],
         },
-      }).sort({ 'metadata.last_activity': -1 });
+      };
+
+      // For channels with session windows, only match conversations with recent activity
+      const sessionWindow = channelSessionWindows[channel];
+      if (sessionWindow) {
+        queryFilter['metadata.last_activity'] = {
+          $gte: new Date(Date.now() - sessionWindow),
+        };
+      }
+
+      // Try to find existing active conversation
+      // Include all active statuses except 'closed' to avoid creating duplicates
+      let conversation = await Conversation.findOne(queryFilter).sort({
+        'metadata.last_activity': -1,
+      });
+
+      // Close stale conversations for channels with session windows
+      if (!conversation && sessionWindow) {
+        await Conversation.updateMany(
+          {
+            agent: agentId,
+            user_identifier: userIdentifier,
+            channel: channel,
+            status: {
+              $in: [
+                'active',
+                'agent_controlled',
+                'human_controlled',
+                'handoff_requested',
+              ],
+            },
+            'metadata.last_activity': {
+              $lt: new Date(Date.now() - sessionWindow),
+            },
+          },
+          { $set: { status: 'ended' } }
+        );
+      }
 
       if (!conversation) {
         // Create new conversation
