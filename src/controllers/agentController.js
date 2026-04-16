@@ -2436,6 +2436,27 @@ const getAgentTools = async (req, res) => {
   }
 };
 
+const deleteAllConversations = async (req, res) => {
+  try {
+    const { agentId } = req.params;
+
+    const agent = await Agent.findById(agentId);
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const result = await Conversation.deleteMany({ agent: agentId });
+
+    res.json({
+      message: 'All conversations deleted successfully',
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error('Delete all conversations error:', error);
+    res.status(500).json({ error: 'Failed to delete conversations' });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -2481,4 +2502,5 @@ module.exports = {
   addToolToAgent,
   removeToolFromAgent,
   getAgentTools,
+  deleteAllConversations,
 };

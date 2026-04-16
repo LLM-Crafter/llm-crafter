@@ -272,6 +272,13 @@ router.get(
   agentController.getConversation
 );
 
+router.delete(
+  '/:agentId/conversations',
+  auth,
+  orgAuth.hasRole('admin'),
+  agentController.deleteAllConversations
+);
+
 // ===== EXECUTION HISTORY ROUTES =====
 
 router.get(
