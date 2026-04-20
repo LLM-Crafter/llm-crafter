@@ -122,6 +122,13 @@ class LanguageDetectionService {
     if (/^(https?:\/\/|www\.)[^\s]+$/i.test(stripped)) {
       return { language: previousLanguage || 'en', confidence: 'low' };
     }
+    // Single-word check: a lone word (e.g. a name like "Donald", a city
+    // like "Amsterdam") is inherently ambiguous.  When a previous language
+    // is already established, carry it forward instead of risking a false
+    // language switch.
+    if (previousLanguage && !/\s/.test(stripped)) {
+      return { language: previousLanguage, confidence: 'low' };
+    }
 
     try {
       const openai = new OpenAIService(decryptedApiKey, providerName);
