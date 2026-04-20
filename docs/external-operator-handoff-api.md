@@ -83,10 +83,10 @@ GET /api/v1/external/organizations/:orgId/projects/:projectId/operators
 
 **Query Parameters (all optional):**
 
-| Param    | Type   | Description                        |
-| -------- | ------ | ---------------------------------- |
+| Param    | Type   | Description                                   |
+| -------- | ------ | --------------------------------------------- |
 | `status` | string | Filter by status: `online`, `offline`, `busy` |
-| `skill`  | string | Filter by skill tag                |
+| `skill`  | string | Filter by skill tag                           |
 
 **Response (200):**
 
@@ -220,11 +220,11 @@ GET /api/v1/external/organizations/:orgId/projects/:projectId/handoffs/pending
 
 **Query Parameters (all optional):**
 
-| Param     | Type   | Description                       |
-| --------- | ------ | --------------------------------- |
+| Param     | Type   | Description                                |
+| --------- | ------ | ------------------------------------------ |
 | `urgency` | string | Filter by urgency: `low`, `medium`, `high` |
-| `page`    | number | Page number (default: 1)          |
-| `limit`   | number | Results per page (default: 20)    |
+| `page`    | number | Page number (default: 1)                   |
+| `limit`   | number | Results per page (default: 20)             |
 
 **Response (200):**
 
@@ -337,6 +337,7 @@ POST /api/v1/external/organizations/:orgId/projects/:projectId/conversations/:co
 - `external_operator_id` (string, optional) — If provided, the message is attributed to this operator. **If omitted, the message is attributed to the operator who took over** (either the external operator from takeover or the internal user).
 
 **Message attribution priority:**
+
 1. `external_operator_id` in request body (explicit override)
 2. The external operator who took over the conversation (from `handoff_info.assigned_external_operator`)
 3. The authenticated internal user (`req.user`) — backwards compatible
@@ -389,11 +390,11 @@ GET /api/v1/external/organizations/:orgId/projects/:projectId/handoffs/my-conver
 
 **Query Parameters:**
 
-| Param                  | Type   | Description                          |
-| ---------------------- | ------ | ------------------------------------ |
-| `external_operator_id` | string | Filter by external operator ID       |
-| `page`                 | number | Page number (default: 1)             |
-| `limit`                | number | Results per page (default: 20)       |
+| Param                  | Type   | Description                    |
+| ---------------------- | ------ | ------------------------------ |
+| `external_operator_id` | string | Filter by external operator ID |
+| `page`                 | number | Page number (default: 1)       |
+| `limit`                | number | Results per page (default: 20) |
 
 **Response (200):**
 
