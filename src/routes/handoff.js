@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const handoffController = require('../controllers/handoffController');
+const externalOperatorController = require('../controllers/externalOperatorController');
 const auth = require('../middleware/auth');
 const orgAuth = require('../middleware/organizationAuth');
 
@@ -67,6 +68,50 @@ router.patch(
 router.get(
   '/conversations/:conversationId/stream',
   handoffController.streamConversation
+);
+
+// ===== EXTERNAL OPERATOR MANAGEMENT (JWT auth) =====
+
+// Register or update an external operator
+router.put(
+  '/organizations/:orgId/projects/:projectId/operators',
+  orgAuth.isMember,
+  externalOperatorController.upsertOperator
+);
+
+// List external operators for a project
+router.get(
+  '/organizations/:orgId/projects/:projectId/operators',
+  orgAuth.isMember,
+  externalOperatorController.listOperators
+);
+
+// Get a single external operator
+router.get(
+  '/organizations/:orgId/projects/:projectId/operators/:externalId',
+  orgAuth.isMember,
+  externalOperatorController.getOperator
+);
+
+// Update operator status
+router.patch(
+  '/organizations/:orgId/projects/:projectId/operators/:externalId/status',
+  orgAuth.isMember,
+  externalOperatorController.updateOperatorStatus
+);
+
+// Delete an external operator
+router.delete(
+  '/organizations/:orgId/projects/:projectId/operators/:externalId',
+  orgAuth.isMember,
+  externalOperatorController.deleteOperator
+);
+
+// Bulk update operator statuses
+router.patch(
+  '/organizations/:orgId/projects/:projectId/operators/bulk/status',
+  orgAuth.isMember,
+  externalOperatorController.bulkUpdateStatus
 );
 
 module.exports = router;

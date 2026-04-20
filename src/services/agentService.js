@@ -2326,6 +2326,9 @@ Your response:`;
         agent._id
       );
       config.agent_id = agent._id;
+      // Pass gating flag so the tool can check for online operators
+      config.require_online_operator =
+        agent.config?.handoff_config?.require_online_operator || false;
     }
 
     // Add agent's API key information for tools that need it

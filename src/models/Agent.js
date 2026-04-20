@@ -215,6 +215,12 @@ const agentSchema = new mongoose.Schema(
           type: Number,
           default: 3, // Auto-handoff after failures
         },
+        // When true, the agent can only trigger handoff if at least one
+        // external operator with status 'online' exists for this project.
+        require_online_operator: {
+          type: Boolean,
+          default: false,
+        },
       },
     },
     question_suggestions: {
