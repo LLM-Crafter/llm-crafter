@@ -101,7 +101,7 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate },
+            created_at: { $gte: startDate },
           },
         },
         {
@@ -109,7 +109,7 @@ const getCombinedDailyUsage = async (projectIds, agentIds, startDate) => {
             _id: {
               $dateToString: {
                 format: '%Y-%m-%d',
-                date: '$createdAt',
+                date: '$created_at',
                 timezone: 'UTC',
               },
             },
@@ -298,7 +298,7 @@ const getDashboardStats = async (req, res) => {
         {
           $match: {
             agent: { $in: agentIds },
-            createdAt: { $gte: startDate },
+            created_at: { $gte: startDate },
           },
         },
         {
@@ -591,7 +591,7 @@ const getAgentStats = async (req, res) => {
           {
             $match: {
               agent: agentId,
-              createdAt: { $gte: startDate },
+              created_at: { $gte: startDate },
             },
           },
           {
