@@ -571,12 +571,14 @@ const getOrganizationConversations = async (req, res) => {
 const archiveConversation = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { archived = true } = req.body;
 
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
+
+    // Toggle: if archived body param is provided use it, otherwise flip the current state
+    const archived = req.body.archived !== undefined ? req.body.archived : !conversation.archived;
 
     // Verify the requesting user is a member of the organization that owns this conversation
     const Agent = require('../models/Agent');
@@ -598,6 +600,8 @@ const archiveConversation = async (req, res) => {
 
     conversation.archived = Boolean(archived);
     await conversation.save();
+
+    console.log(`Conversation ${conversationId} ${conversation.archived ? 'archived' : 'unarchived'} by user ${req.user._id}`);
 
     res.json({
       success: true,
