@@ -19,10 +19,18 @@ const messageSchema = new mongoose.Schema({
   handler_info: {
     agent_id: String, // If message was from agent
     human_operator: {
-      // If message was from human
+      // If message was from human (internal llm-crafter user)
       user_id: String,
       name: String,
       email: String,
+      timestamp: Date,
+    },
+    external_operator: {
+      // If message was from an external operator (3rd party integration)
+      external_id: String,
+      name: String,
+      email: String,
+      avatar_url: String,
       timestamp: Date,
     },
   },
@@ -170,7 +178,14 @@ const conversationSchema = new mongoose.Schema(
       requested_by: String, // 'agent' or human operator user ID
       requested_at: Date,
       reason: String,
-      assigned_human: String, // User ID of assigned human operator
+      assigned_human: String, // User ID of assigned human operator (internal)
+      assigned_external_operator: {
+        // External operator who claimed the conversation (3rd party)
+        external_id: String,
+        name: String,
+        email: String,
+        avatar_url: String,
+      },
       handed_off_at: Date,
       handoff_message: String,
       urgency: {
@@ -637,7 +652,7 @@ conversationSchema.methods.requestHandoff = function (
   return this.save();
 };
 
-// Assign human operator
+// Assign human operator (internal llm-crafter user)
 conversationSchema.methods.assignHuman = function (
   humanUserId,
   humanName,
@@ -658,6 +673,42 @@ conversationSchema.methods.assignHuman = function (
         user_id: humanUserId,
         name: humanName,
         email: humanEmail,
+        timestamp: new Date(),
+      },
+    },
+  });
+
+  return this.save();
+};
+
+// Assign external operator (3rd party integration)
+conversationSchema.methods.assignExternalOperator = function (
+  externalId,
+  name,
+  email,
+  avatarUrl
+) {
+  this.status = 'human_controlled';
+  this.current_handler = 'human';
+  this.handoff_info.assigned_external_operator = {
+    external_id: externalId,
+    name: name,
+    email: email || null,
+    avatar_url: avatarUrl || null,
+  };
+  this.handoff_info.handed_off_at = new Date();
+
+  // Add system message about handoff
+  this.messages.push({
+    role: 'system',
+    content: `You are now connected with ${name} from our support team.`,
+    timestamp: new Date(),
+    handler_info: {
+      external_operator: {
+        external_id: externalId,
+        name: name,
+        email: email || null,
+        avatar_url: avatarUrl || null,
         timestamp: new Date(),
       },
     },

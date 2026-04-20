@@ -2102,6 +2102,35 @@ class ToolService {
     console.log('Tool config keys:', Object.keys(config));
 
     try {
+      // Gating: if require_online_operator is enabled, check availability
+      if (config.require_online_operator && config.project_id) {
+        const ExternalOperator = require('../models/ExternalOperator');
+        const onlineCount = await ExternalOperator.countDocuments({
+          project: config.project_id,
+          status: 'online',
+        });
+
+        if (onlineCount === 0) {
+          console.log(
+            '[Handoff] Gating blocked: no online external operators for project',
+            config.project_id
+          );
+          return {
+            success: false,
+            result:
+              'No human operators are currently available. Please try again later or continue the conversation with the AI assistant.',
+            handoff_requested: false,
+            conversation_status: 'agent_controlled',
+            gated: true,
+          };
+        }
+
+        console.log(
+          `[Handoff] Gating passed: ${onlineCount} online operator(s) for project`,
+          config.project_id
+        );
+      }
+
       // Import Conversation model
       const Conversation = require('../models/Conversation');
 

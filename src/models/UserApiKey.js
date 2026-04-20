@@ -40,6 +40,7 @@ const userApiKeySchema = new mongoose.Schema(
           'agents:chat', // Direct agent chat (restricted)
           'projects:read', // Read project info
           'statistics:read', // Read usage statistics
+          'handoffs:manage', // Manage external operators and handoff actions
         ],
       },
     ],

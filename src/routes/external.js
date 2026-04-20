@@ -240,4 +240,68 @@ router.get(
   }
 );
 
+// ===== HANDOFF ROUTES (API key auth for 3rd party integrations) =====
+
+// Get pending handoffs for a project
+router.get(
+  '/organizations/:orgId/projects/:projectId/handoffs/pending',
+  generalLimiter,
+  apiKeyAuth(['handoffs:manage']),
+  validateProjectAccess,
+  handoffController.getOrganizationPendingHandoffs
+);
+
+// Take over a conversation (supports external_operator in body)
+router.post(
+  '/organizations/:orgId/projects/:projectId/conversations/:conversationId/takeover',
+  generalLimiter,
+  apiKeyAuth(['handoffs:manage']),
+  validateProjectAccess,
+  handoffController.takeoverConversation
+);
+
+// Send message as operator (supports external_operator_id in body)
+router.post(
+  '/organizations/:orgId/projects/:projectId/conversations/:conversationId/message',
+  generalLimiter,
+  apiKeyAuth(['handoffs:manage']),
+  validateProjectAccess,
+  handoffController.sendHumanMessage
+);
+
+// Hand conversation back to agent (supports external_operator_id in body)
+router.post(
+  '/organizations/:orgId/projects/:projectId/conversations/:conversationId/handback',
+  generalLimiter,
+  apiKeyAuth(['handoffs:manage']),
+  validateProjectAccess,
+  handoffController.handBackToAgent
+);
+
+// Get conversations for a specific external operator
+router.get(
+  '/organizations/:orgId/projects/:projectId/handoffs/my-conversations',
+  generalLimiter,
+  apiKeyAuth(['handoffs:manage']),
+  validateProjectAccess,
+  handoffController.getMyConversations
+);
+
+// Get conversation details
+router.get(
+  '/organizations/:orgId/projects/:projectId/conversations/:conversationId',
+  generalLimiter,
+  apiKeyAuth(['handoffs:manage']),
+  validateProjectAccess,
+  handoffController.getConversationDetails
+);
+
+// Stream conversation updates
+router.get(
+  '/organizations/:orgId/projects/:projectId/conversations/:conversationId/stream',
+  apiKeyAuth(['handoffs:manage']),
+  validateProjectAccess,
+  handoffController.streamConversation
+);
+
 module.exports = router;

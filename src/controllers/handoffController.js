@@ -1,5 +1,6 @@
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
+const ExternalOperator = require('../models/ExternalOperator');
 const channelOrchestrator = require('../services/channelOrchestrator');
 
 /**
@@ -135,14 +136,15 @@ const getOrganizationPendingHandoffs = async (req, res) => {
 
 /**
  * Take over a conversation
+ * Supports both internal users (via req.user) and external operators.
+ * When `external_operator` is provided in the body, the conversation
+ * is assigned to that external operator instead of the authenticated user.
+ * The external_operator does not need to be pre-registered.
  */
 const takeoverConversation = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { message } = req.body;
-
-    // Get human operator info from auth middleware (req.user)
-    const humanOperator = req.user;
+    const { message, external_operator } = req.body;
 
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {
@@ -155,27 +157,80 @@ const takeoverConversation = async (req, res) => {
         .json({ error: 'Conversation already under human control' });
     }
 
-    // Assign human operator
-    await conversation.assignHuman(
-      humanOperator._id,
-      humanOperator.name || humanOperator.email,
-      humanOperator.email
-    );
+    // Determine operator identity
+    let operatorInfo; // { type, id, name, email, avatar_url }
+    if (external_operator) {
+      // External operator path — pre-registration is optional
+      if (!external_operator.external_id || !external_operator.name) {
+        return res.status(400).json({
+          error: 'external_operator requires at least external_id and name',
+        });
+      }
 
-    // Send initial human message if provided
+      // Enrich with registered operator data if available
+      const registeredOp = await ExternalOperator.findOne({
+        external_id: external_operator.external_id,
+      });
+
+      const email = external_operator.email || registeredOp?.email || null;
+      const avatarUrl =
+        external_operator.avatar_url || registeredOp?.avatar_url || null;
+
+      await conversation.assignExternalOperator(
+        external_operator.external_id,
+        external_operator.name,
+        email,
+        avatarUrl
+      );
+      operatorInfo = {
+        type: 'external',
+        id: external_operator.external_id,
+        name: external_operator.name,
+        email,
+        avatar_url: avatarUrl,
+      };
+    } else {
+      // Internal user path (backwards compatible)
+      const humanOperator = req.user;
+      await conversation.assignHuman(
+        humanOperator._id,
+        humanOperator.name || humanOperator.email,
+        humanOperator.email
+      );
+      operatorInfo = {
+        type: 'internal',
+        id: humanOperator._id,
+        name: humanOperator.name || humanOperator.email,
+        email: humanOperator.email,
+      };
+    }
+
+    // Send initial message if provided
     if (message) {
+      const handlerInfo = operatorInfo.type === 'external'
+        ? {
+            external_operator: {
+              external_id: operatorInfo.id,
+              name: operatorInfo.name,
+              email: operatorInfo.email,
+              avatar_url: operatorInfo.avatar_url,
+              timestamp: new Date(),
+            },
+          }
+        : {
+            human_operator: {
+              user_id: operatorInfo.id,
+              name: operatorInfo.name,
+              email: operatorInfo.email,
+              timestamp: new Date(),
+            },
+          };
+
       conversation.messages.push({
         role: 'human_operator',
         content: message,
         timestamp: new Date(),
-        handler_info: {
-          human_operator: {
-            user_id: humanOperator._id,
-            name: humanOperator.name || humanOperator.email,
-            email: humanOperator.email,
-            timestamp: new Date(),
-          },
-        },
+        handler_info: handlerInfo,
       });
       await conversation.save();
 
@@ -197,7 +252,6 @@ const takeoverConversation = async (req, res) => {
             '[Handoff] Error sending message through channel:',
             error
           );
-          // Don't fail the handoff if channel send fails
         }
       }
     }
@@ -205,6 +259,7 @@ const takeoverConversation = async (req, res) => {
     res.json({
       success: true,
       conversation,
+      operator: operatorInfo,
       message: 'Conversation taken over successfully',
     });
   } catch (error) {
@@ -214,13 +269,16 @@ const takeoverConversation = async (req, res) => {
 };
 
 /**
- * Send message as human operator
+ * Send message as human operator.
+ * Supports both internal users and external operators.
+ * If `external_operator_id` is provided, the message is attributed to that
+ * operator. Otherwise it defaults to the operator who took over the
+ * conversation (internal or external).
  */
 const sendHumanMessage = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { message } = req.body;
-    const humanOperator = req.user;
+    const { message, external_operator_id } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
@@ -231,38 +289,75 @@ const sendHumanMessage = async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Check if conversation is under human control
     if (conversation.current_handler !== 'human') {
       return res.status(403).json({
         error: 'Conversation is not under human control',
       });
     }
 
-    // Only verify assigned human if there is one (from a formal handoff)
-    // This allows any human operator to respond when agent is disabled
-    if (
-      conversation.handoff_info &&
-      conversation.handoff_info.assigned_human &&
-      conversation.handoff_info.assigned_human !== humanOperator._id.toString()
-    ) {
-      return res.status(403).json({
-        error: 'Not authorized to send messages in this conversation',
-      });
-    }
+    // Determine who is sending: explicit override → takeover operator → auth user
+    let handlerInfo;
 
-    // Add human message
-    conversation.messages.push({
-      role: 'human_operator',
-      content: message,
-      timestamp: new Date(),
-      handler_info: {
+    if (external_operator_id) {
+      // Explicit external operator override
+      // Try to look up registered operator for name/email enrichment
+      const registeredOp = await ExternalOperator.findOne({
+        external_id: external_operator_id,
+      });
+      handlerInfo = {
+        external_operator: {
+          external_id: external_operator_id,
+          name: registeredOp?.name || external_operator_id,
+          email: registeredOp?.email || null,
+          avatar_url: registeredOp?.avatar_url || null,
+          timestamp: new Date(),
+        },
+      };
+    } else if (
+      conversation.handoff_info?.assigned_external_operator?.external_id
+    ) {
+      // Default to the external operator who took over
+      const extOp = conversation.handoff_info.assigned_external_operator;
+      handlerInfo = {
+        external_operator: {
+          external_id: extOp.external_id,
+          name: extOp.name,
+          email: extOp.email || null,
+          avatar_url: extOp.avatar_url || null,
+          timestamp: new Date(),
+        },
+      };
+    } else {
+      // Default to internal user (backwards compatible)
+      const humanOperator = req.user;
+
+      // Authorization check for internal operators
+      if (
+        conversation.handoff_info?.assigned_human &&
+        conversation.handoff_info.assigned_human !==
+          humanOperator._id.toString()
+      ) {
+        return res.status(403).json({
+          error: 'Not authorized to send messages in this conversation',
+        });
+      }
+
+      handlerInfo = {
         human_operator: {
           user_id: humanOperator._id,
           name: humanOperator.name || humanOperator.email,
           email: humanOperator.email,
           timestamp: new Date(),
         },
-      },
+      };
+    }
+
+    // Add message
+    conversation.messages.push({
+      role: 'human_operator',
+      content: message,
+      timestamp: new Date(),
+      handler_info: handlerInfo,
     });
 
     await conversation.save();
@@ -304,24 +399,45 @@ const sendHumanMessage = async (req, res) => {
 };
 
 /**
- * Hand conversation back to agent
+ * Hand conversation back to agent.
+ * Supports both internal users and external operators.
+ * When `external_operator_id` is provided, authorization is checked
+ * against the assigned external operator instead of the internal user.
  */
 const handBackToAgent = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const humanOperator = req.user;
+    const { external_operator_id } = req.body || {};
 
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    if (
-      conversation.handoff_info.assigned_human !== humanOperator._id.toString()
-    ) {
-      return res
-        .status(403)
-        .json({ error: 'Not authorized to hand back this conversation' });
+    // Authorization: check either external operator or internal user
+    if (external_operator_id) {
+      const assignedExt =
+        conversation.handoff_info?.assigned_external_operator?.external_id;
+      if (assignedExt && assignedExt !== external_operator_id) {
+        return res
+          .status(403)
+          .json({ error: 'Not authorized to hand back this conversation' });
+      }
+    } else {
+      const humanOperator = req.user;
+      if (
+        conversation.handoff_info?.assigned_human &&
+        conversation.handoff_info.assigned_human !==
+          humanOperator._id.toString()
+      ) {
+        // Also allow if the conversation was taken by an external operator
+        // (the internal API user acts on behalf of the external operator)
+        if (!conversation.handoff_info?.assigned_external_operator?.external_id) {
+          return res
+            .status(403)
+            .json({ error: 'Not authorized to hand back this conversation' });
+        }
+      }
     }
 
     await conversation.handBackToAgent();
@@ -338,26 +454,37 @@ const handBackToAgent = async (req, res) => {
 };
 
 /**
- * Get conversations handled by current human operator
+ * Get conversations handled by current human operator.
+ * Supports filtering by external_operator_id query param.
  */
 const getMyConversations = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, external_operator_id } = req.query;
     const skip = (page - 1) * limit;
 
-    const conversations = await Conversation.find({
-      'handoff_info.assigned_human': req.user._id.toString(),
-      status: 'human_controlled',
-    })
+    let filter;
+    if (external_operator_id) {
+      // External operator path
+      filter = {
+        'handoff_info.assigned_external_operator.external_id':
+          external_operator_id,
+        status: 'human_controlled',
+      };
+    } else {
+      // Internal user path (backwards compatible)
+      filter = {
+        'handoff_info.assigned_human': req.user._id.toString(),
+        status: 'human_controlled',
+      };
+    }
+
+    const conversations = await Conversation.find(filter)
       .populate('agent', 'name type')
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const total = await Conversation.countDocuments({
-      'handoff_info.assigned_human': req.user._id.toString(),
-      status: 'human_controlled',
-    });
+    const total = await Conversation.countDocuments(filter);
 
     res.json({
       conversations,
@@ -648,6 +775,14 @@ const getLatestMessages = async (req, res) => {
       handoff_active:
         conversationStatus === 'human_controlled' ||
         conversationStatus === 'handoff_requested',
+      handler_info: {
+        assigned_human: handoffInfo.assigned_human || null,
+        assigned_external_operator:
+          handoffInfo.assigned_external_operator || null,
+        handed_off_at: handoffInfo.handed_off_at || null,
+        reason: handoffInfo.reason || null,
+        urgency: handoffInfo.urgency || null,
+      },
       last_poll: new Date().toISOString(),
       message_count: newMessages.length,
     });

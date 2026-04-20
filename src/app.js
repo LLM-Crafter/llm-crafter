@@ -30,6 +30,7 @@ const vectorDatabaseRoutes = require('./routes/vectorDatabases');
 const handoffRoutes = require('./routes/handoff');
 const channelRoutes = require('./routes/channels');
 const widgetRoutes = require('./routes/widget');
+const externalOperatorRoutes = require('./routes/externalOperators');
 
 // Middleware
 app.use(
@@ -72,6 +73,7 @@ app.use('/api/v1/sessions', sessionRoutes);
 app.use('/api/v1/external', externalRoutes);
 app.use('/api/v1', vectorDatabaseRoutes);
 app.use('/api/v1/handoffs', handoffRoutes);
+app.use('/api/v1/external', externalOperatorRoutes);
 app.use('/api/v1/channels', channelRoutes);
 
 // Serve chat widget files
