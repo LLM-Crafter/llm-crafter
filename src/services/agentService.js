@@ -185,7 +185,8 @@ class AgentService {
         decryptedKey,
         agent.api_key.provider.name,
         conversation.getDecryptedMessages(),
-        conversation.current_turn_language || null
+        conversation.current_turn_language || null,
+        dynamicContext
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;
@@ -415,7 +416,8 @@ class AgentService {
         decryptedKey,
         agent.api_key.provider.name,
         conversation.getDecryptedMessages(),
-        conversation.current_turn_language || null
+        conversation.current_turn_language || null,
+        dynamicContext
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;

@@ -40,6 +40,7 @@ class LanguageDetectionService {
       '- URL/LINK RULE: If the message consists solely of a URL or hyperlink (e.g. https://..., www...), treat it as non-linguistic content and use conversation history to determine the language.',
       '- CONVERSATION HISTORY IS AUTHORITATIVE: When the current message is ambiguous, a single word, a proper noun, a number, or a URL, the conversation history ALWAYS takes precedence. If the last few messages were in French, the answer is "fr" unless there is clear multi-word evidence of a language switch.',
       '- Use conversation history as strong context: if the user has been writing in Dutch and sends a number, the language is still Dutch.',
+      '- PAGE CONTEXT RULE: If "Page context" is provided (URL, locale, page_language, or similar), treat it as a STRONG hint when the current message is ambiguous. A URL containing ".nl" or "/nl/" strongly suggests Dutch; ".de" or "/de/" strongly suggests German; ".fr" or "/fr/" strongly suggests French; etc. An explicit locale or language field (e.g. "nl", "nl-NL", "de", "fr") is authoritative for ambiguous inputs.',
       '- Output ONLY the two-letter code. No punctuation, no explanation.',
     ].join('\n');
   }
@@ -60,13 +61,36 @@ class LanguageDetectionService {
    * Build the user prompt for language detection.
    * Includes recent conversation history so the model can disambiguate
    * non-linguistic messages (numbers, emails) and mixed-language inputs.
+   * Also includes URL / locale hints from dynamicContext when available.
    *
    * @param {string} text - Current user message
    * @param {Array} conversationMessages - Recent messages [{role, content}]
+   * @param {Object} dynamicContext - Per-request context (may contain url, locale, language, etc.)
    * @returns {string}
    */
-  buildDetectionPrompt(text, conversationMessages = []) {
+  buildDetectionPrompt(text, conversationMessages = [], dynamicContext = {}) {
     let prompt = '';
+
+    // Include URL / locale hints from the page context so the model can
+    // resolve ambiguous short messages like "hallo" (Dutch vs German) when
+    // the page URL or locale makes the intended language obvious.
+    const contextHints = [];
+    for (const [key, value] of Object.entries(dynamicContext)) {
+      const lk = key.toLowerCase();
+      if (
+        lk.includes('url') ||
+        lk.includes('lang') ||
+        lk.includes('locale') ||
+        lk.includes('region') ||
+        lk.includes('country')
+      ) {
+        contextHints.push(`${key}: ${JSON.stringify(value)}`);
+      }
+    }
+    if (contextHints.length > 0) {
+      prompt += 'Page context (strong hint for language detection):\n';
+      prompt += contextHints.join('\n') + '\n\n';
+    }
 
     // Add recent conversation context (last 4 messages, excluding the current one)
     if (conversationMessages.length > 0) {
@@ -102,7 +126,7 @@ class LanguageDetectionService {
    *   language  — ISO 639-1 code (lowercase), e.g. "en"
    *   confidence — "high" when the detector produced a clean code, "low" otherwise
    */
-  async detectLanguage(text, decryptedApiKey, providerName, conversationMessages = [], previousLanguage = null) {
+  async detectLanguage(text, decryptedApiKey, providerName, conversationMessages = [], previousLanguage = null, dynamicContext = {}) {
     // Guard: empty input → use previous language or default to "en"
     if (!text || text.trim().length === 0) {
       return { language: previousLanguage || 'en', confidence: 'low' };
@@ -134,7 +158,7 @@ class LanguageDetectionService {
       const openai = new OpenAIService(decryptedApiKey, providerName);
       const model = this.getModelForProvider(providerName);
 
-      const prompt = this.buildDetectionPrompt(text, conversationMessages);
+      const prompt = this.buildDetectionPrompt(text, conversationMessages, dynamicContext);
 
       const response = await openai.generateCompletion(
         model,
