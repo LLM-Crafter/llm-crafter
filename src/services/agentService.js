@@ -2303,14 +2303,11 @@ Your response:`;
    */
   getAgentToolConfig(agent, toolName, conversationId = null) {
     const tool = agent.tools.find(t => t.name === toolName);
-    if (!tool || !tool.parameters) {
-      return {};
-    }
 
-    // Start with the tool's parameters as config
-    const config = { ...tool.parameters };
+    // Start with the tool's stored parameters (may be empty or tool may not exist)
+    const config = { ...(tool?.parameters || {}) };
 
-    // Add organization and project context for all tools
+    // Always add organization and project context for all tools
     config.organization_id = agent.organization;
     config.project_id = agent.project;
 
@@ -2319,12 +2316,6 @@ Your response:`;
 
     // Add extra context for human handoff tool
     if (toolName === 'request_human_handoff') {
-      console.log(
-        'Setting handoff config - conversationId:',
-        conversationId,
-        'agent._id:',
-        agent._id
-      );
       config.agent_id = agent._id;
       // Pass gating flag so the tool can check for online operators
       config.require_online_operator =
