@@ -42,6 +42,14 @@ const getPasswordPolicy = async (req, res) => {
 
 const register = async (req, res) => {
   try {
+    // Check if signups are globally disabled
+    if (process.env.DISABLE_SIGNUP === 'true') {
+      return res.status(403).json({
+        error: 'New user registrations are currently disabled.',
+        code: 'SIGNUP_DISABLED',
+      });
+    }
+
     // Check if email/password registration is enabled
     if (!isEmailPasswordEnabled()) {
       return res.status(400).json({

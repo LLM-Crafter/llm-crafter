@@ -67,6 +67,14 @@ const findOrCreateOAuthUser = async (provider, profile, done) => {
       return done(null, user);
     }
 
+    // If user doesn't exist and signups are disabled, block creation
+    if (!user && process.env.DISABLE_SIGNUP === 'true') {
+      return done(null, false, {
+        message: 'signup_disabled',
+        details: 'New user registrations are currently disabled.',
+      });
+    }
+
     // Create new user
     const oauthData = {};
     if (provider === 'google') {
