@@ -878,6 +878,9 @@ class RAGService {
     const results = Array.from(this.vectorStore.values())
       .filter(doc => {
         // Basic filters
+        if (!doc.metadata) {
+          return false;
+        }
         if (
           doc.metadata.organization_id !== organizationId ||
           doc.metadata.project_id !== projectId
