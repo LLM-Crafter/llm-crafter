@@ -2322,6 +2322,11 @@ Your response:`;
       // Pass gating flag so the tool can check for online operators
       config.require_online_operator =
         agent.config?.handoff_config?.require_online_operator || false;
+      // Pass webhook config so the tool can fire the webhook on handoff
+      config.handoff_webhook_url =
+        agent.config?.handoff_config?.webhook_url || null;
+      config.handoff_webhook_secret =
+        agent.config?.handoff_config?.webhook_secret || null;
     }
 
     // Add agent's API key information for tools that need it

@@ -2165,6 +2165,22 @@ class ToolService {
         context_summary
       );
 
+      // Fire handoff webhook if configured (non-blocking)
+      const webhookUrl = config.handoff_webhook_url;
+      if (webhookUrl) {
+        const webhookSecret = config.handoff_webhook_secret || null;
+        const webhookPayload = {
+          event: 'handoff_requested',
+          conversation_id,
+          agent_id,
+          reason,
+          urgency,
+          context_summary: context_summary || null,
+          timestamp: new Date().toISOString(),
+        };
+        this._fireHandoffWebhook(webhookUrl, webhookPayload, webhookSecret);
+      }
+
       // Use custom handoff message if provided, otherwise use default
       const defaultMessage =
         'I understand this requires specialized assistance. Let me connect you with one of our team members who can better help you with this. Please wait a moment.';
@@ -2184,6 +2200,42 @@ class ToolService {
       console.error('Human handoff request failed:', error.message);
       throw new Error(`Failed to request human handoff: ${error.message}`);
     }
+  }
+
+  /**
+   * Fire a webhook for human handoff events.
+   * Runs fire-and-forget; errors are logged but never propagate to the caller.
+   *
+   * @param {string} url     - Webhook endpoint URL
+   * @param {Object} payload - JSON payload to POST
+   * @param {string|null} secret - Optional HMAC-SHA256 signing secret
+   */
+  _fireHandoffWebhook(url, payload, secret) {
+    const axios = require('axios');
+    const crypto = require('crypto');
+
+    const body = JSON.stringify(payload);
+    const headers = { 'Content-Type': 'application/json' };
+
+    if (secret) {
+      const signature = crypto
+        .createHmac('sha256', secret)
+        .update(body)
+        .digest('hex');
+      headers['X-Webhook-Signature'] = `sha256=${signature}`;
+    }
+
+    axios
+      .post(url, payload, { headers, timeout: 10000 })
+      .then(() => {
+        console.log(`[Handoff Webhook] Successfully delivered to ${url}`);
+      })
+      .catch(err => {
+        console.error(
+          `[Handoff Webhook] Failed to deliver to ${url}:`,
+          err.message
+        );
+      });
   }
 
   /**

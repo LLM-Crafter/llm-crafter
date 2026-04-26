@@ -221,6 +221,19 @@ const agentSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
+        // Webhook called when a human handoff is requested.
+        // The POST body includes: conversation_id, agent_id, reason, urgency,
+        // context_summary, timestamp.
+        // If webhook_secret is set, the request will include an
+        // X-Webhook-Signature header (HMAC-SHA256 of the raw body, hex-encoded).
+        webhook_url: {
+          type: String,
+          default: null,
+        },
+        webhook_secret: {
+          type: String,
+          default: null,
+        },
       },
     },
     question_suggestions: {
