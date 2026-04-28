@@ -216,6 +216,19 @@ const conversationSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+      // Handoff refusal — set when an operator declines the handoff request
+      refused_at: {
+        type: Date,
+        default: null,
+      },
+      refused_by: {
+        type: String, // operator user ID, external_id, or 'system'
+        default: null,
+      },
+      refusal_reason: {
+        type: String,
+        default: null,
+      },
     },
     metadata: {
       total_tokens_used: {
@@ -757,6 +770,40 @@ conversationSchema.methods.handBackToAgent = function () {
   this.messages.push({
     role: 'system',
     content: 'You are now back with our AI assistant.',
+    timestamp: new Date(),
+  });
+
+  return this.save();
+};
+
+// Refuse a pending handoff — revert to agent control and record the refusal
+conversationSchema.methods.refuseHandoff = function (
+  refusedBy,
+  refusalReason = ''
+) {
+  this.status = 'agent_controlled';
+  this.current_handler = 'agent';
+
+  this.handoff_info = {
+    ...((this.handoff_info || {}).toObject
+      ? this.handoff_info.toObject()
+      : this.handoff_info || {}),
+    refused_at: new Date(),
+    refused_by: refusedBy,
+    refusal_reason: refusalReason || null,
+    // Reset fallback state so the fallback poller ignores this conversation
+    fallback_locked_until: null,
+  };
+
+  const reasonText = refusalReason
+    ? ` Reason given: "${refusalReason}".`
+    : '';
+
+  this.messages.push({
+    role: 'system',
+    content:
+      `A human operator has declined the handoff request.${reasonText} ` +
+      'Inform the user politely that no human operator is available right now and offer to continue assisting them yourself.',
     timestamp: new Date(),
   });
 

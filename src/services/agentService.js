@@ -2567,6 +2567,55 @@ Your response:`;
   }
 
   /**
+   * Resume agent processing after a handoff was refused by an operator.
+   *
+   * The conversation must already have been reverted to agent_controlled and
+   * have a system message explaining the refusal (added by Conversation#refuseHandoff).
+   * This method runs the normal reasoning loop so the AI can reply to the user.
+   *
+   * @param {string} conversationId
+   * @returns {Promise<{response: string, tools_used: Array, token_usage: Object}>}
+   */
+  async resumeAfterHandoffRefusal(conversationId) {
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      throw new Error('Conversation not found');
+    }
+
+    const agent = await Agent.findById(conversation.agent).populate({
+      path: 'api_key',
+      populate: { path: 'provider' },
+    });
+    if (!agent) {
+      throw new Error('Agent not found');
+    }
+
+    const useGraph = agent.config?.enable_small_agent_graph === true;
+    const dynamicContext = conversation.dynamic_context || {};
+
+    const response = useGraph
+      ? await this.executeChatbotAgentGraph(agent, conversation, dynamicContext)
+      : await this.executeAgentReasoning(agent, conversation, dynamicContext);
+
+    if (response.content) {
+      await conversation.addMessage({
+        role: 'assistant',
+        content: response.content,
+        thinking_process: response.thinking_process,
+        tools_used: response.tools_used,
+        token_usage: response.token_usage,
+        timestamp: new Date(),
+      });
+    }
+
+    return {
+      response: response.content,
+      tools_used: response.tools_used,
+      token_usage: response.token_usage,
+    };
+  }
+
+  /**
    * Handle conversation summarization when needed
    */
   async handleConversationSummarization(conversation, agent) {

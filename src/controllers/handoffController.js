@@ -799,12 +799,74 @@ const getLatestMessages = async (req, res) => {
   }
 };
 
+/**
+ * Refuse a pending handoff request and immediately resume AI control.
+ *
+ * The conversation is reverted to agent_controlled and a system message is
+ * injected so the AI understands why the handoff was refused.  The AI then
+ * generates a reply to the user in the same request.
+ *
+ * Body (all optional):
+ *   reason            {string}  – Human-readable reason for the refusal
+ *   external_operator_id {string} – External operator ID (auth check)
+ */
+const refuseHandoff = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { reason = '', external_operator_id } = req.body || {};
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (conversation.status !== 'handoff_requested') {
+      return res.status(400).json({
+        error: 'Conversation is not in a pending handoff state',
+        current_status: conversation.status,
+      });
+    }
+
+    // Determine the refusing operator's identity
+    let refusedBy;
+    if (external_operator_id) {
+      refusedBy = external_operator_id;
+    } else {
+      refusedBy = req.user._id.toString();
+    }
+
+    // Revert to agent control and inject system message
+    await conversation.refuseHandoff(refusedBy, reason);
+
+    // Ask the agent to respond immediately so the user isn't left in silence
+    const agentService = require('../services/agentService');
+    let aiResponse = null;
+    try {
+      aiResponse = await agentService.resumeAfterHandoffRefusal(conversationId);
+    } catch (aiErr) {
+      // Non-fatal: the refusal was already saved; log and continue
+      console.error('[HandoffRefuse] AI resume failed:', aiErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Handoff refused and conversation returned to AI',
+      ai_response: aiResponse?.response || null,
+      token_usage: aiResponse?.token_usage || null,
+    });
+  } catch (error) {
+    console.error('Error refusing handoff:', error);
+    res.status(500).json({ error: 'Failed to refuse handoff' });
+  }
+};
+
 module.exports = {
   getPendingHandoffs,
   getOrganizationPendingHandoffs,
   takeoverConversation,
   sendHumanMessage,
   handBackToAgent,
+  refuseHandoff,
   getMyConversations,
   getOrganizationConversations,
   archiveConversation,

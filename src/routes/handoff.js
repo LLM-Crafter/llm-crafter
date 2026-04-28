@@ -46,6 +46,12 @@ router.post(
   handoffController.takeoverConversation
 );
 
+// Refuse a pending handoff request (reverts to AI + generates immediate reply)
+router.post(
+  '/conversations/:conversationId/refuse',
+  handoffController.refuseHandoff
+);
+
 // Send message as human operator
 router.post(
   '/conversations/:conversationId/message',
