@@ -154,6 +154,14 @@ const agentSchema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      // ISO 639-1 language codes to generate translations for.
+      // When set, conversation titles and summaries are translated into each
+      // listed language and stored alongside the primary (English) value.
+      // Example: ["nl", "fr", "de"]
+      required_languages: {
+        type: [String],
+        default: [],
+      },
       // Small agent graph mode (optional, chatbot-only)
       // When true, routes chatbot reasoning through a multi-role orchestrator
       // (planner → responder → optional critic) instead of the single iterative loop.

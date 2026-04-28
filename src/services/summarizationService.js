@@ -280,6 +280,50 @@ Guidelines:
   }
 
   /**
+   * Translate a text into multiple languages in a single LLM call.
+   * Returns an array of { lang, text } objects for each requested language.
+   *
+   * @param {string} text            - The source text (in English) to translate
+   * @param {string[]} languages     - ISO 639-1 language codes, e.g. ["nl", "fr", "de"]
+   * @param {Object} agent           - Populated Agent document (needs api_key populated)
+   * @returns {Promise<Array<{lang: string, text: string}>>}
+   */
+  async generateTranslations(text, languages, agent) {
+    if (!languages || languages.length === 0) return { translations: [], usage: null };
+
+    try {
+      const apiKey = await APIKey.findById(agent.api_key._id).populate('provider');
+      const decryptedKey = apiKey.getDecryptedKey();
+      const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
+
+      const model = this.selectSummaryModel(agent.llm_settings.model);
+
+      const langList = languages.join(', ');
+      const prompt = `Translate the following text into these languages: ${langList}.\nReturn a JSON object where each key is an ISO 639-1 language code and the value is the translated text.\nOnly return the JSON object, no other text.\n\nText to translate:\n${text}`;
+
+      const response = await openai.generateCompletion(
+        model,
+        prompt,
+        { temperature: 0.3, max_tokens: 1000 },
+        'You are a professional translator. Translate accurately and naturally. Return only valid JSON.'
+      );
+
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { translations: [], usage: response.usage };
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const translations = Object.entries(parsed)
+        .filter(([lang]) => languages.includes(lang))
+        .map(([lang, text]) => ({ lang, text: String(text) }));
+
+      return { translations, usage: response.usage };
+    } catch (error) {
+      console.error('Translation failed:', error);
+      return { translations: [], usage: null };
+    }
+  }
+
+  /**
    * Estimate token savings from summarization
    */
   estimateTokenSavings(originalMessages, summaryLength = 200) {

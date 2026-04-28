@@ -220,12 +220,22 @@ class AgentService {
       userMessageCount === 2 &&
       conversation.title === 'New Conversation'
     ) {
-      const aiTitle = await this.generateAIConversationTitle(
+      const titleResult = await this.generateAIConversationTitle(
         conversation,
         agent
       );
-      if (aiTitle) {
-        conversation.title = aiTitle;
+      if (titleResult) {
+        conversation.title = titleResult.title;
+        if (titleResult.titleTranslations.length > 0) {
+          conversation.title_translations = titleResult.titleTranslations;
+        }
+        // Accumulate background title + translation costs into conversation metadata
+        const titleCost = (titleResult.titleUsage?.cost || 0) + (titleResult.titleTranslationUsage?.cost || 0);
+        const titleTokens = (titleResult.titleUsage?.total_tokens || 0) + (titleResult.titleTranslationUsage?.total_tokens || 0);
+        if (titleCost > 0) {
+          conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + titleCost;
+          conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + titleTokens;
+        }
         await conversation.save();
       }
     }
@@ -454,12 +464,22 @@ class AgentService {
       userMessageCount === 2 &&
       conversation.title === 'New Conversation'
     ) {
-      const aiTitle = await this.generateAIConversationTitle(
+      const titleResult = await this.generateAIConversationTitle(
         conversation,
         agent
       );
-      if (aiTitle) {
-        conversation.title = aiTitle;
+      if (titleResult) {
+        conversation.title = titleResult.title;
+        if (titleResult.titleTranslations.length > 0) {
+          conversation.title_translations = titleResult.titleTranslations;
+        }
+        // Accumulate background title + translation costs into conversation metadata
+        const titleCost = (titleResult.titleUsage?.cost || 0) + (titleResult.titleTranslationUsage?.cost || 0);
+        const titleTokens = (titleResult.titleUsage?.total_tokens || 0) + (titleResult.titleTranslationUsage?.total_tokens || 0);
+        if (titleCost > 0) {
+          conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + titleCost;
+          conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + titleTokens;
+        }
         await conversation.save();
       }
     }
@@ -2454,7 +2474,17 @@ Your response:`;
         title = words.slice(0, 10).join(' ') + '...';
       }
 
-      return title;
+      // Generate translations if required languages are configured
+      const requiredLanguages = agent.config?.required_languages || [];
+      let titleTranslations = [];
+      let titleTranslationUsage = null;
+      if (requiredLanguages.length > 0) {
+        const translationResult = await summarizationService.generateTranslations(title, requiredLanguages, agent);
+        titleTranslations = translationResult.translations;
+        titleTranslationUsage = translationResult.usage;
+      }
+
+      return { title, titleTranslations, titleTranslationUsage, titleUsage: response.usage };
     } catch (error) {
       console.error('Failed to generate AI conversation title:', error);
       return null; // Fallback to existing title on error
@@ -2569,8 +2599,33 @@ Your response:`;
         existingSummary
       );
 
-      // Update conversation with new summary
-      await conversation.updateSummary(result.summary);
+      // Generate translations for the simple summary text if required languages are configured
+      const requiredLanguages = agent.config?.required_languages || [];
+      let summaryTranslations = [];
+      let translationUsage = null;
+      if (requiredLanguages.length > 0) {
+        const translationResult = await summarizationService.generateTranslations(
+          this.generateSimpleSummaryText(result.summary),
+          requiredLanguages,
+          agent
+        );
+        summaryTranslations = translationResult.translations;
+        translationUsage = translationResult.usage;
+      }
+
+      // Update conversation with new summary and translations
+      await conversation.updateSummary(result.summary, summaryTranslations);
+
+      // Accumulate background LLM costs (summarization + translations) into conversation metadata
+      const summaryCost = result.token_usage?.cost || 0;
+      const summaryTokens = result.token_usage?.total_tokens || 0;
+      const translationCost = translationUsage?.cost || 0;
+      const translationTokens = translationUsage?.total_tokens || 0;
+      if (summaryCost + translationCost > 0) {
+        conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + summaryCost + translationCost;
+        conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + summaryTokens + translationTokens;
+        await conversation.save();
+      }
 
       console.log(
         `Conversation summarized successfully. Token savings estimated: ${summarizationService.estimateTokenSavings(
@@ -2588,6 +2643,24 @@ Your response:`;
       console.error('Summarization failed:', error);
       // Don't throw error - conversation should continue even if summarization fails
     }
+  }
+
+  /**
+   * Build a plain-text representation of a summary object for use as
+   * translation source. Mirrors the Conversation model's generateSimpleSummary.
+   */
+  generateSimpleSummaryText(summaryData) {
+    const parts = [];
+    if (summaryData.key_topics?.length > 0) {
+      parts.push(`Topics: ${summaryData.key_topics.join(', ')}`);
+    }
+    if (summaryData.important_decisions?.length > 0) {
+      parts.push(`Decisions: ${summaryData.important_decisions.join('; ')}`);
+    }
+    if (summaryData.unresolved_issues?.length > 0) {
+      parts.push(`Open issues: ${summaryData.unresolved_issues.join('; ')}`);
+    }
+    return parts.join(' | ') || 'No summary available';
   }
 
   /**

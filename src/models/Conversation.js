@@ -107,6 +107,13 @@ const conversationSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // Per-language translations of the conversation title (ISO 639-1 codes)
+    title_translations: [
+      {
+        lang: { type: String, required: true },
+        text: { type: String, required: true },
+      },
+    ],
     messages: [messageSchema],
     // Channel where this conversation is taking place
     channel: {
@@ -257,6 +264,13 @@ const conversationSchema = new mongoose.Schema(
         tool: String,
         key_data: String,
       }],
+      // Per-language translations of the human-readable summary text
+      summary_translations: [
+        {
+          lang: { type: String },
+          text: { type: String },
+        },
+      ],
       created_at: {
         type: Date,
         default: Date.now,
@@ -555,7 +569,7 @@ conversationSchema.methods.buildSummaryContext = function () {
 };
 
 // Method to update conversation summary
-conversationSchema.methods.updateSummary = function (summaryData) {
+conversationSchema.methods.updateSummary = function (summaryData, summaryTranslations = []) {
   this.conversation_summary = {
     key_topics: summaryData.key_topics || [],
     user_preferences: summaryData.user_preferences || {},
@@ -563,6 +577,7 @@ conversationSchema.methods.updateSummary = function (summaryData) {
     unresolved_issues: summaryData.unresolved_issues || [],
     context_data: summaryData.context_data || {},
     tool_results: summaryData.tool_results || [],
+    summary_translations: summaryTranslations,
     created_at: new Date(),
     message_count_when_summarized: this.messages.length,
   };
