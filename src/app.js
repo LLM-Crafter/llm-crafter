@@ -134,6 +134,35 @@ const GDPR_RETENTION_CRON = process.env.GDPR_RETENTION_CRON || '0 2 * * *';
 })();
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Handoff Fallback Poller ──────────────────────────────────────────────────
+// Checks every HANDOFF_FALLBACK_INTERVAL_SECONDS (default: 30) for conversations
+// that are in handoff_requested state and have exceeded their configured
+// fallback_timeout_seconds without a human joining.  Safe to run across
+// multiple instances — uses a per-conversation MongoDB lock to prevent
+// duplicate messages.
+(function startHandoffFallbackPoller() {
+  const handoffFallbackService = require('./services/handoffFallbackService');
+  const intervalSeconds = parseInt(process.env.HANDOFF_FALLBACK_INTERVAL_SECONDS, 10) || 30;
+  const intervalMs = intervalSeconds * 1000;
+
+  const run = async () => {
+    try {
+      await handoffFallbackService.processHandoffFallbacks();
+    } catch (err) {
+      console.error('[HandoffFallback] Poller error:', err.message);
+    }
+  };
+
+  // Delay first run by one interval so the DB connection is established
+  setTimeout(() => {
+    run();
+    setInterval(run, intervalMs);
+  }, intervalMs);
+
+  console.log(`[HandoffFallback] Poller started (interval: ${intervalSeconds}s)`);
+})();
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Basic route for testing
 app.get('/health', publicLimiter, (req, res) => {
   res.json({ status: 'ok', service: 'llm-crafter' });

@@ -200,6 +200,22 @@ const conversationSchema = new mongoose.Schema(
         enum: ['low', 'medium', 'high'],
         default: 'medium',
       },
+      // Fallback AI messages sent while waiting for a human to join
+      fallback_attempts: {
+        type: Number,
+        default: 0,
+      },
+      last_fallback_at: {
+        type: Date,
+        default: null,
+      },
+      // Optimistic lock for multi-instance coordination.
+      // An instance that is generating a fallback sets this to now + 60 s.
+      // Other instances skip this conversation while the lock is held.
+      fallback_locked_until: {
+        type: Date,
+        default: null,
+      },
     },
     metadata: {
       total_tokens_used: {

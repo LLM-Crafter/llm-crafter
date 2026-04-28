@@ -242,6 +242,28 @@ const agentSchema = new mongoose.Schema(
           type: String,
           default: null,
         },
+        // Handoff fallback: if no human joins within fallback_timeout_seconds,
+        // the AI sends a holding message generated from fallback_prompt.
+        // Set fallback_timeout_seconds to null (default) to disable.
+        fallback_timeout_seconds: {
+          type: Number,
+          default: null, // null = disabled
+          min: 10,
+        },
+        // System instruction used to generate the fallback message.
+        // The agent will see the latest conversation context plus this instruction.
+        fallback_prompt: {
+          type: String,
+          default:
+            'The human operator has not joined yet. Politely let the user know you are still waiting for an operator to connect, apologise for the delay, and offer to help with anything you can in the meantime.',
+        },
+        // Maximum number of AI fallback messages to send while waiting.
+        // After this limit is reached the AI stops sending fallbacks.
+        max_fallback_attempts: {
+          type: Number,
+          default: 1,
+          min: 1,
+        },
       },
     },
     question_suggestions: {
