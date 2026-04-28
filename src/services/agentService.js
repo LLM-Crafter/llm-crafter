@@ -834,8 +834,56 @@ class AgentService {
     );
 
     if (!finalResponse && !handoffOccurred) {
-      finalResponse =
-        "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
+      // Force a final LLM response instead of a generic error message.
+      // The agent must answer with what it knows even if tool calls were exhausted.
+      const forceRespondPrompt =
+        this.buildReasoningPrompt(agent, context, thinkingProcess, toolsUsed, maxIterations) +
+        '\n\n**IMPORTANT: You have reached the maximum number of tool calls. You MUST now respond to the user directly. Do NOT call any more tools. Use ACTION: respond and provide the best answer you can based on the conversation and any information gathered so far.**';
+
+      const forcedSystemPrompt = this.buildEnhancedSystemPrompt(
+        agent.system_prompt,
+        agent,
+        dynamicContext,
+        conversation.current_turn_language
+      );
+
+      const forcedResponseFormat = openai.supportsStructuredOutputs(agent.llm_settings.model)
+        ? this.getAgentResponseSchema()
+        : null;
+
+      try {
+        const forcedLlmResponse = await openai.generateCompletion(
+          agent.llm_settings.model,
+          forceRespondPrompt,
+          agent.llm_settings.parameters,
+          forcedSystemPrompt,
+          forcedResponseFormat,
+          { prompt_cache_key: `agent_${agent._id}` }
+        );
+
+        totalTokenUsage.prompt_tokens += forcedLlmResponse.usage.prompt_tokens;
+        totalTokenUsage.completion_tokens += forcedLlmResponse.usage.completion_tokens;
+        totalTokenUsage.total_tokens += forcedLlmResponse.usage.total_tokens;
+        totalTokenUsage.cached_tokens += forcedLlmResponse.usage.cached_tokens || 0;
+        totalTokenUsage.cost += forcedLlmResponse.usage.cost;
+
+        const forcedParsed = this.parseAgentResponse(forcedLlmResponse.content);
+        if (forcedParsed.response) {
+          finalResponse = forcedParsed.response;
+          thinkingProcess.push({
+            step: 'forced_final_response',
+            reasoning: forcedParsed.reasoning || 'Max iterations reached, forced final response',
+          });
+        }
+      } catch (e) {
+        console.error('Failed forced final response call:', e);
+      }
+
+      // Ultimate fallback only if the forced call also fails
+      if (!finalResponse) {
+        finalResponse =
+          "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
+      }
     }
 
     return {
@@ -1168,8 +1216,121 @@ class AgentService {
     );
 
     if (!finalResponse && !handoffOccurred) {
-      finalResponse =
-        "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
+      // Force a final LLM response instead of a generic error message.
+      // The agent must answer with what it knows even if tool calls were exhausted.
+      const forceRespondPrompt =
+        this.buildReasoningPrompt(agent, context, thinkingProcess, toolsUsed, maxIterations) +
+        '\n\n**IMPORTANT: You have reached the maximum number of tool calls. You MUST now respond to the user directly. Do NOT call any more tools. Use ACTION: respond and provide the best answer you can based on the conversation and any information gathered so far.**';
+
+      const forcedSystemPrompt = this.buildEnhancedSystemPrompt(
+        agent.system_prompt,
+        agent,
+        dynamicContext,
+        conversation.current_turn_language
+      );
+
+      const forcedResponseFormat = openai.supportsStructuredOutputs(agent.llm_settings.model)
+        ? this.getAgentResponseSchema()
+        : null;
+
+      let forcedStreamBuffer = '';
+      let forcedContentSent = '';
+      let forcedInResponseField = false;
+      let forcedActionChecked = false;
+      let forcedIsRespondAction = false;
+
+      const onForcedChunk = chunk => {
+        forcedStreamBuffer += chunk;
+
+        if (forcedResponseFormat) {
+          if (!forcedActionChecked) {
+            const actionMatch = /"action"\s*:\s*"([^"]+)"/.exec(forcedStreamBuffer);
+            if (actionMatch) {
+              forcedActionChecked = true;
+              forcedIsRespondAction = actionMatch[1] === 'respond';
+            }
+          }
+          if (!forcedIsRespondAction) return;
+
+          if (!forcedInResponseField) {
+            if (/"response"\s*:\s*"/.exec(forcedStreamBuffer)) {
+              forcedInResponseField = true;
+            }
+          }
+
+          if (forcedInResponseField) {
+            const rfMatch = /"response"\s*:\s*"/.exec(forcedStreamBuffer);
+            if (rfMatch) {
+              const startPos = rfMatch.index + rfMatch[0].length;
+              let rawContent = forcedStreamBuffer.substring(startPos);
+              let endPos = rawContent.length;
+              let i = 0;
+              while (i < rawContent.length) {
+                if (rawContent[i] === '\\' && i + 1 < rawContent.length) { i += 2; continue; }
+                if (rawContent[i] === '"') { endPos = i; break; }
+                i++;
+              }
+              let safeContent = rawContent.substring(0, endPos);
+              if (safeContent.endsWith('\\')) safeContent = safeContent.slice(0, -1);
+              let unescaped = safeContent;
+              try { unescaped = JSON.parse('"' + safeContent + '"'); } catch (e) {}
+              if (unescaped.length > forcedContentSent.length) {
+                const newContent = unescaped.substring(forcedContentSent.length);
+                if (newContent && streamCallback) {
+                  streamCallback(newContent);
+                  forcedContentSent = unescaped;
+                }
+              }
+            }
+          }
+          return;
+        }
+
+        if (!this.shouldStartStreaming(forcedStreamBuffer)) return;
+        const safeContent = this.extractSafeStreamingContent(forcedStreamBuffer, forcedContentSent);
+        if (safeContent && safeContent !== forcedContentSent) {
+          const newContent = safeContent.substring(forcedContentSent.length);
+          if (newContent && streamCallback) {
+            streamCallback(newContent);
+            forcedContentSent = safeContent;
+          }
+        }
+      };
+
+      try {
+        const forcedLlmResponse = await openai.generateStreamingCompletion(
+          agent.llm_settings.model,
+          forceRespondPrompt,
+          agent.llm_settings.parameters,
+          forcedSystemPrompt,
+          onForcedChunk,
+          forcedResponseFormat,
+          { prompt_cache_key: `agent_${agent._id}` }
+        );
+
+        totalTokenUsage.prompt_tokens += forcedLlmResponse.usage.prompt_tokens;
+        totalTokenUsage.completion_tokens += forcedLlmResponse.usage.completion_tokens;
+        totalTokenUsage.total_tokens += forcedLlmResponse.usage.total_tokens;
+        totalTokenUsage.cached_tokens += forcedLlmResponse.usage.cached_tokens || 0;
+        totalTokenUsage.cost += forcedLlmResponse.usage.cost;
+
+        const forcedParsed = this.parseAgentResponse(forcedLlmResponse.content);
+        if (forcedParsed.response) {
+          finalResponse = forcedParsed.response;
+          thinkingProcess.push({
+            step: 'forced_final_response',
+            reasoning: forcedParsed.reasoning || 'Max iterations reached, forced final response',
+          });
+        }
+      } catch (e) {
+        console.error('Failed forced final response call:', e);
+      }
+
+      // Ultimate fallback only if the forced call also fails
+      if (!finalResponse) {
+        finalResponse =
+          "I apologize, but I wasn't able to complete your request within the allowed processing time. Please try rephrasing your request.";
+      }
     }
 
     return {
