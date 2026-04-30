@@ -763,6 +763,25 @@ class AgentService {
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
 
       if (parsedResponse.action === 'use_tool') {
+        // Guard: reject tool calls for tools not configured on this agent
+        const agentHasTool = agent.tools.some(t => t.name === parsedResponse.tool_name);
+        if (!agentHasTool) {
+          thinkingProcess.push({
+            step: 'tool_not_available',
+            tool_name: parsedResponse.tool_name,
+            reasoning: `Tool '${parsedResponse.tool_name}' is not available for this agent.`,
+          });
+          // Inject a synthetic failed result so the LLM can adjust its response
+          context.conversation_history = [
+            ...context.conversation_history,
+            {
+              role: 'system',
+              content: `Tool '${parsedResponse.tool_name}' is not available. Do not attempt to use it again. Respond directly to the user.`,
+            },
+          ];
+          continue;
+        }
+
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
@@ -1137,6 +1156,25 @@ class AgentService {
       const parsedResponse = this.parseAgentResponse(llmResponse.content);
 
       if (parsedResponse.action === 'use_tool') {
+        // Guard: reject tool calls for tools not configured on this agent
+        const agentHasTool = agent.tools.some(t => t.name === parsedResponse.tool_name);
+        if (!agentHasTool) {
+          thinkingProcess.push({
+            step: 'tool_not_available',
+            tool_name: parsedResponse.tool_name,
+            reasoning: `Tool '${parsedResponse.tool_name}' is not available for this agent.`,
+          });
+          // Inject a synthetic failed result so the LLM can adjust its response
+          context.conversation_history = [
+            ...context.conversation_history,
+            {
+              role: 'system',
+              content: `Tool '${parsedResponse.tool_name}' is not available. Do not attempt to use it again. Respond directly to the user.`,
+            },
+          ];
+          continue;
+        }
+
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
@@ -2763,13 +2801,15 @@ Your response:`;
     
     enhancedPrompt += `IMPORTANT: ALL tools must be called with ACTION: use_tool. Never use the tool name as the action.\n\n`;
     
-    enhancedPrompt += `Example for human handoff:\n`;
-    enhancedPrompt += `ACTION: use_tool\n`;
-    enhancedPrompt += `TOOL: request_human_handoff\n`;
-    enhancedPrompt += `PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low", "handoff_message": "I understand you'd like to speak with a human agent. Let me connect you with one of our team members."}\n`;
-    enhancedPrompt += `REASONING: User explicitly asked to speak with a human representative\n\n`;
-    
-    enhancedPrompt += `Note: The handoff_message parameter is optional but recommended. It allows you to provide a contextual message in the user's language.\n\n`;
+    // Only include the handoff example if this agent actually has the tool
+    if (agent.tools.some(t => t.name === 'request_human_handoff')) {
+      enhancedPrompt += `Example for human handoff:\n`;
+      enhancedPrompt += `ACTION: use_tool\n`;
+      enhancedPrompt += `TOOL: request_human_handoff\n`;
+      enhancedPrompt += `PARAMETERS: {"reason": "Customer requested human assistance", "urgency": "low", "handoff_message": "I understand you'd like to speak with a human agent. Let me connect you with one of our team members."}\n`;
+      enhancedPrompt += `REASONING: User explicitly asked to speak with a human representative\n\n`;
+      enhancedPrompt += `Note: The handoff_message parameter is optional but recommended. It allows you to provide a contextual message in the user's language.\n\n`;
+    }
     
     enhancedPrompt += `For api_caller tool, use this format:\n`;
     enhancedPrompt += `PARAMETERS: {\n`;
