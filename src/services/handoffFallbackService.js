@@ -25,6 +25,10 @@ const OpenAIService = require('./openaiService');
 
 const LOCK_TTL_MS = 90_000; // 90 s
 const BATCH_SIZE = 10; // max conversations to process per invocation
+// Only consider handoffs requested within this window. Prevents the poller
+// from disturbing old stuck conversations. Configurable via
+// HANDOFF_FALLBACK_MAX_AGE_HOURS env var (default: 24 hours).
+const MAX_AGE_HOURS = parseInt(process.env.HANDOFF_FALLBACK_MAX_AGE_HOURS, 10) || 24;
 
 class HandoffFallbackService {
   /**
@@ -33,15 +37,15 @@ class HandoffFallbackService {
    */
   async processHandoffFallbacks() {
     const now = new Date();
+    const maxAgeThreshold = new Date(now.getTime() - MAX_AGE_HOURS * 60 * 60 * 1000);
 
-    // Fetch all handoff_requested conversations whose locks have expired
-    // (or were never set).  We do NOT filter by timeout here because each
-    // conversation's timeout is stored on the agent, not the conversation.
-    // The volume of handoff_requested conversations is typically very small,
-    // so loading them all and filtering in JS is safe and avoids a $lookup.
+    // Fetch handoff_requested conversations whose locks have expired
+    // (or were never set), scoped to the max-age window so old stuck
+    // conversations are never touched.
     const candidates = await Conversation.find({
       status: 'handoff_requested',
       current_handler: 'agent',
+      'handoff_info.requested_at': { $gte: maxAgeThreshold },
       $or: [
         { 'handoff_info.fallback_locked_until': { $exists: false } },
         { 'handoff_info.fallback_locked_until': null },
@@ -161,8 +165,7 @@ class HandoffFallbackService {
       `## Instruction\n${fallbackPrompt}`;
 
     const systemPrompt =
-      (agent.system_prompt || '') +
-      '\n\nIMPORTANT: You are sending a holding message because no human operator has joined yet. ' +
+      '\n\nIMPORTANT: You are sending a holding message because no human operator has joined yet in a chatbot. ' +
       'Do NOT pretend a human will join immediately if you are not sure. ' +
       'Be honest, warm, and concise.';
 
@@ -205,6 +208,7 @@ class HandoffFallbackService {
         $set: {
           'handoff_info.last_fallback_at': now,
           'handoff_info.fallback_locked_until': null, // release lock
+          'metadata.last_activity': now,
         },
         $inc: { 'handoff_info.fallback_attempts': 1 },
       }
