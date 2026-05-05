@@ -46,18 +46,21 @@ class HookService {
 
     // Log failures (but never throw — hooks must not break the main flow)
     for (let i = 0; i < results.length; i++) {
+      const hook = matchingHooks[i];
       if (results[i].status === 'rejected') {
         console.error(
-          `[Hook] "${matchingHooks[i].name}" failed:`,
+          `[Hook] "${hook.name}" failed:`,
           results[i].reason?.message || results[i].reason
         );
+        this._persistExecution(conversation._id, hook, null, results[i].reason);
       } else {
         console.log(
-          `[Hook] "${matchingHooks[i].name}" completed`,
+          `[Hook] "${hook.name}" completed`,
           results[i].value?.tools_used?.length
             ? `(${results[i].value.tools_used.length} tool calls)`
             : ''
         );
+        this._persistExecution(conversation._id, hook, results[i].value, null);
       }
     }
 
@@ -480,6 +483,43 @@ class HookService {
   }
 
   // ---------------------------------------------------------------------------
+  // Persistence — store execution records on the conversation
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Push a hook execution record to the conversation's hook_executions array.
+   */
+  async _persistExecution(conversationId, hook, result, error) {
+    const record = {
+      hook_name: hook.name,
+      triggered_at: new Date(),
+      trigger: hook.trigger,
+      type: hook.type,
+      success: !error,
+      tools_used: (result?.tools_used || []).map(t => ({
+        tool_name: t.tool_name,
+        parameters: t.parameters,
+        success: t.success,
+      })),
+      token_usage: result?.token_usage || {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+        cost: 0,
+      },
+      error: error ? String(error.message || error) : null,
+    };
+
+    try {
+      await Conversation.findByIdAndUpdate(conversationId, {
+        $push: { hook_executions: record },
+      });
+    } catch (err) {
+      console.error(`[Hook] Failed to persist execution for "${hook.name}":`, err.message);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Inactivity timer management
   // ---------------------------------------------------------------------------
 
@@ -610,20 +650,29 @@ class HookService {
 
     console.log(`[Hook] Firing inactivity hook "${hook.name}" for conversation ${conversationId} (condition: ${condition})`);
 
-    const result = await this._executeHook(
-      hook,
-      agent,
-      conversation,
-      messageContent,
-      messageRole
-    );
+    let result;
+    try {
+      result = await this._executeHook(
+        hook,
+        agent,
+        conversation,
+        messageContent,
+        messageRole
+      );
 
-    console.log(
-      `[Hook] Inactivity hook "${hook.name}" completed`,
-      result?.tools_used?.length
-        ? `(${result.tools_used.length} tool calls)`
-        : ''
-    );
+      console.log(
+        `[Hook] Inactivity hook "${hook.name}" completed`,
+        result?.tools_used?.length
+          ? `(${result.tools_used.length} tool calls)`
+          : ''
+      );
+
+      await this._persistExecution(conversationId, hook, result, null);
+    } catch (err) {
+      console.error(`[Hook] Inactivity hook "${hook.name}" failed:`, err.message);
+      await this._persistExecution(conversationId, hook, null, err);
+      throw err;
+    }
 
     return result;
   }

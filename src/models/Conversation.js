@@ -322,6 +322,30 @@ const conversationSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    // Hook execution log — records each background hook that ran on this conversation
+    hook_executions: [
+      {
+        hook_name: { type: String, required: true },
+        triggered_at: { type: Date, default: Date.now },
+        trigger: { type: String },
+        type: { type: String, enum: ['llm', 'webhook'] },
+        success: { type: Boolean, default: true },
+        tools_used: [
+          {
+            tool_name: { type: String },
+            parameters: { type: mongoose.Schema.Types.Mixed },
+            success: { type: Boolean },
+          },
+        ],
+        token_usage: {
+          prompt_tokens: { type: Number, default: 0 },
+          completion_tokens: { type: Number, default: 0 },
+          total_tokens: { type: Number, default: 0 },
+          cost: { type: Number, default: 0 },
+        },
+        error: { type: String, default: null },
+      },
+    ],
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
