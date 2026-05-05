@@ -211,6 +211,7 @@ class HookService {
 
     let iteration = 0;
     let thinkingSteps = [];
+    let lastRawResponse = null;
 
     while (iteration < maxIterations) {
       iteration++;
@@ -233,6 +234,7 @@ class HookService {
       totalUsage.completion_tokens += llmResponse.usage.completion_tokens;
       totalUsage.total_tokens += llmResponse.usage.total_tokens;
       totalUsage.cost += llmResponse.usage.cost;
+      lastRawResponse = llmResponse.content;
 
       const parsed = this._parseHookResponse(llmResponse.content);
 
@@ -276,7 +278,12 @@ class HookService {
         `${toolsUsed.length} tool call(s), cost: $${totalUsage.cost.toFixed(4)}`
     );
 
-    return { tools_used: toolsUsed, token_usage: totalUsage };
+    return {
+      tools_used: toolsUsed,
+      token_usage: totalUsage,
+      llm_response: lastRawResponse,
+      rejected_tools: thinkingSteps.filter(s => s.step === 'tool_rejected'),
+    };
   }
 
   /**
@@ -392,41 +399,70 @@ class HookService {
   }
 
   /**
-   * Parse the hook LLM response (same pattern as agentService).
+   * Parse the hook LLM response.
+   * Handles: pure JSON, JSON embedded in text/markdown, and text-based ACTION: format.
    */
   _parseHookResponse(content) {
-    // Try JSON first
+    // Normalise action value — models sometimes use synonyms
+    const normaliseAction = (val) => {
+      if (!val) return 'done';
+      const v = val.trim().toLowerCase().replace(/[^a-z_]/g, '');
+      if (['use_tool', 'usetool', 'call_tool', 'calltool', 'tool_call', 'toolcall', 'invoke_tool', 'invoke'].includes(v)) {
+        return 'use_tool';
+      }
+      return 'done';
+    };
+
+    // 1) Try direct JSON parse
     try {
       const parsed = JSON.parse(content);
       return {
-        action: parsed.action || 'done',
-        tool_name: parsed.tool_name,
-        tool_parameters: parsed.tool_parameters || {},
-        reasoning: parsed.reasoning,
+        action: normaliseAction(parsed.action),
+        tool_name: parsed.tool_name || parsed.toolName || parsed.tool,
+        tool_parameters: parsed.tool_parameters || parsed.toolParameters || parsed.parameters || parsed.params || {},
+        reasoning: parsed.reasoning || parsed.reason,
       };
     } catch {
-      // Fall back to text parsing
+      // Not pure JSON — continue
     }
 
+    // 2) Try to extract a JSON object from within the text (markdown code blocks, etc.)
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
+      content.match(/(\{[\s\S]*"action"[\s\S]*\})/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+        return {
+          action: normaliseAction(parsed.action),
+          tool_name: parsed.tool_name || parsed.toolName || parsed.tool,
+          tool_parameters: parsed.tool_parameters || parsed.toolParameters || parsed.parameters || parsed.params || {},
+          reasoning: parsed.reasoning || parsed.reason,
+        };
+      } catch {
+        // Fall through
+      }
+    }
+
+    // 3) Text-based ACTION:/TOOL: format
     const result = { action: 'done' };
     const lines = content.split('\n');
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (trimmed.match(/^ACTION:\s*/i)) {
-        const val = trimmed.replace(/^ACTION:\s*/i, '').trim().toLowerCase();
-        result.action = val === 'use_tool' ? 'use_tool' : 'done';
-      } else if (trimmed.match(/^TOOL:\s*/i)) {
-        result.tool_name = trimmed.replace(/^TOOL:\s*/i, '').trim();
+        const val = trimmed.replace(/^ACTION:\s*/i, '').trim();
+        result.action = normaliseAction(val);
+      } else if (trimmed.match(/^TOOL[_\s]?(?:NAME)?:\s*/i)) {
+        result.tool_name = trimmed.replace(/^TOOL[_\s]?(?:NAME)?:\s*/i, '').trim();
       } else if (trimmed.match(/^REASONING:\s*/i)) {
         result.reasoning = trimmed.replace(/^REASONING:\s*/i, '').trim();
       }
     }
 
     // Parse PARAMETERS block
-    const paramsIdx = content.indexOf('PARAMETERS:');
+    const paramsIdx = content.search(/PARAMETERS?:/i);
     if (paramsIdx !== -1) {
-      const after = content.substring(paramsIdx + 'PARAMETERS:'.length);
+      const after = content.substring(paramsIdx).replace(/^PARAMETERS?:\s*/i, '');
       const braceStart = after.indexOf('{');
       if (braceStart !== -1) {
         let depth = 0;
@@ -447,6 +483,11 @@ class HookService {
           result.tool_parameters = {};
         }
       }
+    }
+
+    // 4) Last resort — if we found a tool_name but no explicit action, assume use_tool
+    if (result.tool_name && result.action === 'done') {
+      result.action = 'use_tool';
     }
 
     return result;
@@ -507,6 +548,13 @@ class HookService {
         total_tokens: 0,
         cost: 0,
       },
+      llm_response: result?.llm_response
+        ? String(result.llm_response).slice(0, 2000)
+        : null,
+      rejected_tools: (result?.rejected_tools || []).map(r => ({
+        tool_name: r.tool_name,
+        reason: r.reason,
+      })),
       error: error ? String(error.message || error) : null,
     };
 

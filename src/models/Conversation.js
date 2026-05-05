@@ -343,6 +343,8 @@ const conversationSchema = new mongoose.Schema(
           total_tokens: { type: Number, default: 0 },
           cost: { type: Number, default: 0 },
         },
+        llm_response: { type: String, default: null },
+        rejected_tools: [{ tool_name: { type: String }, reason: { type: String } }],
         error: { type: String, default: null },
       },
     ],
