@@ -2457,6 +2457,91 @@ const deleteAllConversations = async (req, res) => {
   }
 };
 
+// ===== HOOKS CONFIGURATION =====
+
+const configureHooks = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const hooks = req.body.hooks;
+
+    if (!Array.isArray(hooks)) {
+      return res.status(400).json({ error: 'hooks must be an array' });
+    }
+
+    const validTriggers = [
+      'every_message',
+      'user_message_only',
+      'human_controlled_only',
+      'new_conversation',
+    ];
+    const validTypes = ['llm', 'webhook'];
+
+    for (const hook of hooks) {
+      if (!hook.name || typeof hook.name !== 'string') {
+        return res.status(400).json({ error: 'Each hook must have a name' });
+      }
+      if (!validTypes.includes(hook.type)) {
+        return res
+          .status(400)
+          .json({ error: `Invalid hook type "${hook.type}". Must be one of: ${validTypes.join(', ')}` });
+      }
+      if (!validTriggers.includes(hook.trigger)) {
+        return res
+          .status(400)
+          .json({ error: `Invalid trigger "${hook.trigger}". Must be one of: ${validTriggers.join(', ')}` });
+      }
+      if (hook.type === 'llm' && !hook.prompt) {
+        return res
+          .status(400)
+          .json({ error: `LLM hook "${hook.name}" requires a prompt` });
+      }
+      if (hook.type === 'webhook' && !hook.webhook_url) {
+        return res
+          .status(400)
+          .json({ error: `Webhook hook "${hook.name}" requires a webhook_url` });
+      }
+    }
+
+    agent.hooks = hooks;
+    agent.version += 1;
+    await agent.save();
+
+    const updatedAgent = await Agent.findById(agent._id);
+    res.json({ hooks: updatedAgent.hooks });
+  } catch (error) {
+    console.error('Configure hooks error:', error);
+    res.status(500).json({ error: 'Failed to configure hooks' });
+  }
+};
+
+const getHooks = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    res.json({ hooks: agent.hooks || [] });
+  } catch (error) {
+    console.error('Get hooks error:', error);
+    res.status(500).json({ error: 'Failed to get hooks' });
+  }
+};
+
 module.exports = {
   createAgent,
   getAgents,
@@ -2503,4 +2588,6 @@ module.exports = {
   removeToolFromAgent,
   getAgentTools,
   deleteAllConversations,
+  configureHooks,
+  getHooks,
 };

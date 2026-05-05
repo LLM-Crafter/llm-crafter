@@ -110,6 +110,63 @@ const agentSchema = new mongoose.Schema(
         },
       },
     ],
+    // Message hooks — lightweight processors that run on every message
+    // regardless of conversation state (human-controlled, agent-controlled, etc.)
+    hooks: [
+      {
+        name: {
+          type: String,
+          required: true,
+        },
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+        // 'llm' — runs a cheap LLM call with prompt + agent tools
+        // 'webhook' — POSTs message content + operator info to a URL
+        type: {
+          type: String,
+          enum: ['llm', 'webhook'],
+          required: true,
+        },
+        // When the hook fires
+        trigger: {
+          type: String,
+          enum: [
+            'every_message',           // fires on all messages (user + operator)
+            'user_message_only',       // fires only on user messages
+            'human_controlled_only',   // fires only when conversation is human-controlled
+            'new_conversation',        // fires when a new conversation is created
+          ],
+          required: true,
+        },
+        // LLM hook config
+        prompt: {
+          type: String,
+          default: null,
+        },
+        model: {
+          type: String,
+          default: null, // Falls back to agent's llm_settings.model
+        },
+        // Webhook hook config
+        webhook_url: {
+          type: String,
+          default: null,
+        },
+        webhook_secret: {
+          type: String,
+          default: null,
+        },
+        // Maximum number of messages to include as context (for LLM hooks)
+        context_messages: {
+          type: Number,
+          default: 5,
+          min: 1,
+          max: 50,
+        },
+      },
+    ],
     config: {
       // Chatbot specific config
       max_conversation_length: {

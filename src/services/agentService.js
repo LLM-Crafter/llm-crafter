@@ -8,6 +8,7 @@ const summarizationService = require('./summarizationService');
 const suggestionService = require('./suggestionService');
 const languageDetectionService = require('./languageDetectionService');
 const { systemTools: systemToolDefinitions } = require('../config/systemTools');
+const hookService = require('./hookService');
 
 class AgentService {
   /**
@@ -97,6 +98,11 @@ class AgentService {
         gdpr: { encrypt_messages: !!(agent.gdpr && agent.gdpr.encrypt_messages) },
       });
       await conversation.save();
+
+      // Fire new_conversation hooks (non-blocking)
+      hookService.executeHooks(agent, conversation, userMessage, 'user', 'new_conversation').catch(err => {
+        console.error('[Hook] new_conversation hook error:', err.message);
+      });
     }
 
     // If agent is disabled, switch to human handler
@@ -112,6 +118,11 @@ class AgentService {
       conversation.current_handler = 'human';
       conversation.status = 'human_controlled';
       await conversation.save();
+
+      // Fire message hooks even when agent is disabled (non-blocking)
+      hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
+        console.error('[Hook] message hook error:', err.message);
+      });
 
       return {
         conversation_id: conversation._id,
@@ -139,6 +150,11 @@ class AgentService {
         role: 'user',
         content: userMessage,
         timestamp: new Date(),
+      });
+
+      // Fire message hooks during human-controlled conversations (non-blocking)
+      hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
+        console.error('[Hook] message hook error:', err.message);
       });
 
       // Return handoff notification instead of agent response
@@ -174,6 +190,11 @@ class AgentService {
       role: 'user',
       content: userMessage,
       timestamp: new Date(),
+    });
+
+    // Fire message hooks in agent-controlled mode (non-blocking)
+    hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
+      console.error('[Hook] message hook error:', err.message);
     });
 
     // Detect language of the user message (runs unless explicitly disabled)
@@ -337,6 +358,11 @@ class AgentService {
         gdpr: { encrypt_messages: !!(agent.gdpr && agent.gdpr.encrypt_messages) },
       });
       await conversation.save();
+
+      // Fire new_conversation hooks (non-blocking)
+      hookService.executeHooks(agent, conversation, userMessage, 'user', 'new_conversation').catch(err => {
+        console.error('[Hook] new_conversation hook error:', err.message);
+      });
     }
 
     // If agent is disabled, switch to human handler
@@ -352,6 +378,11 @@ class AgentService {
       conversation.current_handler = 'human';
       conversation.status = 'human_controlled';
       await conversation.save();
+
+      // Fire message hooks even when agent is disabled (non-blocking)
+      hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
+        console.error('[Hook] message hook error:', err.message);
+      });
 
       return {
         conversation_id: conversation._id,
@@ -379,6 +410,11 @@ class AgentService {
         role: 'user',
         content: userMessage,
         timestamp: new Date(),
+      });
+
+      // Fire message hooks during human-controlled conversations (non-blocking)
+      hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
+        console.error('[Hook] message hook error:', err.message);
       });
 
       // Return handoff notification instead of agent response
@@ -415,6 +451,11 @@ class AgentService {
       role: 'user',
       content: userMessage,
       timestamp: new Date(),
+    });
+
+    // Fire message hooks in agent-controlled mode (non-blocking)
+    hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
+      console.error('[Hook] message hook error:', err.message);
     });
 
     // Detect language of the user message (runs unless explicitly disabled)

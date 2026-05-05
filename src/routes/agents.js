@@ -650,4 +650,62 @@ router.get(
   agentController.getAgentTools
 );
 
+// ===== HOOKS CONFIGURATION ROUTES =====
+
+const hooksValidation = [
+  body('hooks')
+    .isArray()
+    .withMessage('hooks must be an array'),
+  body('hooks.*.name')
+    .notEmpty()
+    .isString()
+    .withMessage('Each hook must have a name'),
+  body('hooks.*.type')
+    .isIn(['llm', 'webhook'])
+    .withMessage('Hook type must be llm or webhook'),
+  body('hooks.*.trigger')
+    .isIn(['every_message', 'user_message_only', 'human_controlled_only', 'new_conversation'])
+    .withMessage('Invalid trigger'),
+  body('hooks.*.enabled')
+    .optional()
+    .isBoolean()
+    .withMessage('enabled must be a boolean'),
+  body('hooks.*.prompt')
+    .optional()
+    .isString()
+    .withMessage('prompt must be a string'),
+  body('hooks.*.model')
+    .optional()
+    .isString()
+    .withMessage('model must be a string'),
+  body('hooks.*.webhook_url')
+    .optional()
+    .isString()
+    .withMessage('webhook_url must be a string'),
+  body('hooks.*.webhook_secret')
+    .optional()
+    .isString()
+    .withMessage('webhook_secret must be a string'),
+  body('hooks.*.context_messages')
+    .optional()
+    .isInt({ min: 1, max: 50 })
+    .withMessage('context_messages must be between 1 and 50'),
+];
+
+router.post(
+  '/:agentId/hooks',
+  auth,
+  orgAuth.hasRole('member'),
+  hooksValidation,
+  validate,
+  agentController.configureHooks
+);
+
+router.get(
+  '/:agentId/hooks',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getHooks
+);
+
 module.exports = router;
