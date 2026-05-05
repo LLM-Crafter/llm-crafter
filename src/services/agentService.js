@@ -123,6 +123,7 @@ class AgentService {
       hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
         console.error('[Hook] message hook error:', err.message);
       });
+      hookService.scheduleInactivityHooks(agent, conversation);
 
       return {
         conversation_id: conversation._id,
@@ -156,6 +157,7 @@ class AgentService {
       hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
         console.error('[Hook] message hook error:', err.message);
       });
+      hookService.scheduleInactivityHooks(agent, conversation);
 
       // Return handoff notification instead of agent response
       const handoffMessage =
@@ -196,6 +198,7 @@ class AgentService {
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
       console.error('[Hook] message hook error:', err.message);
     });
+    hookService.scheduleInactivityHooks(agent, conversation);
 
     // Detect language of the user message (runs unless explicitly disabled)
     let detectedLanguage = null;
@@ -383,6 +386,7 @@ class AgentService {
       hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
         console.error('[Hook] message hook error:', err.message);
       });
+      hookService.scheduleInactivityHooks(agent, conversation);
 
       return {
         conversation_id: conversation._id,
@@ -416,6 +420,7 @@ class AgentService {
       hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
         console.error('[Hook] message hook error:', err.message);
       });
+      hookService.scheduleInactivityHooks(agent, conversation);
 
       // Return handoff notification instead of agent response
       const handoffMessage =
@@ -457,6 +462,7 @@ class AgentService {
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
       console.error('[Hook] message hook error:', err.message);
     });
+    hookService.scheduleInactivityHooks(agent, conversation);
 
     // Detect language of the user message (runs unless explicitly disabled)
     let detectedLanguage = null;

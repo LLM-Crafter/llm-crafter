@@ -2,7 +2,14 @@ const OpenAIService = require('./openaiService');
 const toolService = require('./toolService');
 const crypto = require('crypto');
 
+const Agent = require('../models/Agent');
+const Conversation = require('../models/Conversation');
+
 class HookService {
+  constructor() {
+    // In-memory inactivity timers: Map<conversationId, Map<hookName, timeoutId>>
+    this._inactivityTimers = new Map();
+  }
   /**
    * Execute all matching hooks for an agent on a given event.
    *
@@ -63,6 +70,12 @@ class HookService {
   _shouldTrigger(hook, messageRole, isHumanControlled, event) {
     if (event === 'new_conversation') {
       return hook.trigger === 'new_conversation';
+    }
+
+    // Inactivity hooks are never triggered directly by a message —
+    // they are scheduled via scheduleInactivityHooks() and fire from a timer.
+    if (hook.trigger === 'inactivity') {
+      return false;
     }
 
     // For message events
@@ -464,6 +477,155 @@ class HookService {
     }
 
     return config;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inactivity timer management
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Schedule (or reset) inactivity timers for all enabled inactivity hooks
+   * on an agent/conversation pair.
+   *
+   * Called on every message. Each call clears any existing timer for that
+   * conversation+hook and starts a fresh countdown.
+   *
+   * @param {Object} agent        – populated Agent document (with api_key.provider)
+   * @param {Object} conversation – Conversation document
+   */
+  scheduleInactivityHooks(agent, conversation) {
+    const hooks = (agent.hooks || []).filter(
+      h => h.enabled && h.trigger === 'inactivity'
+    );
+    if (hooks.length === 0) return;
+
+    const convId = String(conversation._id);
+
+    if (!this._inactivityTimers.has(convId)) {
+      this._inactivityTimers.set(convId, new Map());
+    }
+    const convTimers = this._inactivityTimers.get(convId);
+
+    for (const hook of hooks) {
+      // Clear existing timer for this hook (resets the clock)
+      if (convTimers.has(hook.name)) {
+        clearTimeout(convTimers.get(hook.name));
+      }
+
+      const delayMs = (hook.inactivity_seconds || 60) * 1000;
+
+      const timerId = setTimeout(() => {
+        // Clean up the timer reference
+        convTimers.delete(hook.name);
+        if (convTimers.size === 0) {
+          this._inactivityTimers.delete(convId);
+        }
+
+        // Fire the hook (re-fetch fresh data from DB)
+        this._fireInactivityHook(hook, agent._id, convId).catch(err => {
+          console.error(
+            `[Hook] Inactivity hook "${hook.name}" failed:`,
+            err.message
+          );
+        });
+      }, delayMs);
+
+      convTimers.set(hook.name, timerId);
+      console.log(
+        `[Hook] Scheduled inactivity hook "${hook.name}" for conversation ${convId} in ${hook.inactivity_seconds || 60}s`
+      );
+    }
+  }
+
+  /**
+   * Clear all inactivity timers for a conversation.
+   * Call when a conversation ends or is deleted.
+   *
+   * @param {string} conversationId
+   */
+  clearInactivityTimers(conversationId) {
+    const convId = String(conversationId);
+    const convTimers = this._inactivityTimers.get(convId);
+    if (!convTimers) return;
+
+    for (const [hookName, timerId] of convTimers) {
+      clearTimeout(timerId);
+      console.log(`[Hook] Cleared inactivity timer "${hookName}" for conversation ${convId}`);
+    }
+    this._inactivityTimers.delete(convId);
+  }
+
+  /**
+   * Fire an inactivity hook after the timer expires.
+   * Re-fetches the conversation and agent from DB to get fresh state,
+   * then checks inactivity_condition before executing.
+   */
+  async _fireInactivityHook(hook, agentId, conversationId) {
+    // Re-fetch fresh conversation state
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      console.log(`[Hook] Inactivity hook "${hook.name}": conversation ${conversationId} no longer exists, skipping`);
+      return;
+    }
+
+    // Check inactivity_condition
+    const condition = hook.inactivity_condition || 'any';
+    const isHumanControlled =
+      conversation.current_handler === 'human' ||
+      conversation.status === 'human_controlled' ||
+      conversation.status === 'handoff_requested';
+
+    if (condition === 'human_controlled_only' && !isHumanControlled) {
+      console.log(`[Hook] Inactivity hook "${hook.name}": conversation is not human-controlled, skipping`);
+      return;
+    }
+    if (condition === 'agent_controlled_only' && isHumanControlled) {
+      console.log(`[Hook] Inactivity hook "${hook.name}": conversation is human-controlled, skipping`);
+      return;
+    }
+
+    // Check conversation hasn't ended
+    if (['ended', 'timeout', 'error'].includes(conversation.status)) {
+      console.log(`[Hook] Inactivity hook "${hook.name}": conversation status is "${conversation.status}", skipping`);
+      return;
+    }
+
+    // Re-fetch agent with populated API key
+    const agent = await Agent.findById(agentId).populate({
+      path: 'api_key',
+      populate: { path: 'provider' },
+    });
+    if (!agent) {
+      console.log(`[Hook] Inactivity hook "${hook.name}": agent ${agentId} no longer exists, skipping`);
+      return;
+    }
+
+    // Get the last message content for context
+    const messages = conversation.getDecryptedMessages
+      ? conversation.getDecryptedMessages()
+      : conversation.messages || [];
+    const lastMessage = messages[messages.length - 1];
+    const messageContent = lastMessage?.content || '';
+    const messageRole = lastMessage?.role || 'user';
+
+    console.log(`[Hook] Firing inactivity hook "${hook.name}" for conversation ${conversationId} (condition: ${condition})`);
+
+    const result = await this._executeHook(
+      hook,
+      agent,
+      conversation,
+      messageContent,
+      messageRole
+    );
+
+    console.log(
+      `[Hook] Inactivity hook "${hook.name}" completed`,
+      result?.tools_used?.length
+        ? `(${result.tools_used.length} tool calls)`
+        : ''
+    );
+
+    return result;
   }
 }
 

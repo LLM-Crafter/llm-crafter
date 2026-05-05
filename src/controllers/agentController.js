@@ -2482,6 +2482,7 @@ const configureHooks = async (req, res) => {
       'user_message_only',
       'human_controlled_only',
       'new_conversation',
+      'inactivity',
     ];
     const validTypes = ['llm', 'webhook'];
 
@@ -2508,6 +2509,24 @@ const configureHooks = async (req, res) => {
         return res
           .status(400)
           .json({ error: `Webhook hook "${hook.name}" requires a webhook_url` });
+      }
+      if (hook.trigger === 'inactivity') {
+        if (hook.inactivity_seconds !== undefined) {
+          const secs = Number(hook.inactivity_seconds);
+          if (isNaN(secs) || secs < 10) {
+            return res
+              .status(400)
+              .json({ error: `Hook "${hook.name}": inactivity_seconds must be >= 10` });
+          }
+        }
+        if (hook.inactivity_condition !== undefined) {
+          const validConditions = ['any', 'human_controlled_only', 'agent_controlled_only'];
+          if (!validConditions.includes(hook.inactivity_condition)) {
+            return res
+              .status(400)
+              .json({ error: `Hook "${hook.name}": inactivity_condition must be one of: ${validConditions.join(', ')}` });
+          }
+        }
       }
     }
 

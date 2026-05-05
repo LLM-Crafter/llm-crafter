@@ -664,7 +664,7 @@ const hooksValidation = [
     .isIn(['llm', 'webhook'])
     .withMessage('Hook type must be llm or webhook'),
   body('hooks.*.trigger')
-    .isIn(['every_message', 'user_message_only', 'human_controlled_only', 'new_conversation'])
+    .isIn(['every_message', 'user_message_only', 'human_controlled_only', 'new_conversation', 'inactivity'])
     .withMessage('Invalid trigger'),
   body('hooks.*.enabled')
     .optional()
@@ -690,6 +690,14 @@ const hooksValidation = [
     .optional()
     .isInt({ min: 1, max: 50 })
     .withMessage('context_messages must be between 1 and 50'),
+  body('hooks.*.inactivity_seconds')
+    .optional()
+    .isInt({ min: 10 })
+    .withMessage('inactivity_seconds must be >= 10'),
+  body('hooks.*.inactivity_condition')
+    .optional()
+    .isIn(['any', 'human_controlled_only', 'agent_controlled_only'])
+    .withMessage('inactivity_condition must be any, human_controlled_only, or agent_controlled_only'),
 ];
 
 router.post(

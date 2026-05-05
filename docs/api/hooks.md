@@ -54,26 +54,29 @@ GET /api/organizations/:orgId/projects/:projectId/agents/:agentId/hooks
 
 ## Hook Fields
 
-| Field              | Type    | Required     | Description                                                         |
-| ------------------ | ------- | ------------ | ------------------------------------------------------------------- |
-| `name`             | string  | Yes          | Unique identifier for the hook                                      |
-| `type`             | string  | Yes          | `"llm"` or `"webhook"`                                              |
-| `trigger`          | string  | Yes          | When the hook fires (see Triggers below)                            |
-| `enabled`          | boolean | No           | Default `true`. Set `false` to disable without removing             |
-| `prompt`           | string  | LLM only     | System prompt for the background LLM call                           |
-| `model`            | string  | No           | Model override (e.g. `"gpt-4.1-nano"`). Falls back to agent's model |
-| `context_messages` | number  | No           | Number of recent messages to include as context (1–50, default 5)   |
-| `webhook_url`      | string  | Webhook only | URL to POST the payload to                                          |
-| `webhook_secret`   | string  | No           | HMAC-SHA256 secret for signing webhook payloads                     |
+| Field                  | Type    | Required     | Description                                                                                                            |
+| ---------------------- | ------- | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `name`                 | string  | Yes          | Unique identifier for the hook                                                                                         |
+| `type`                 | string  | Yes          | `"llm"` or `"webhook"`                                                                                                 |
+| `trigger`              | string  | Yes          | When the hook fires (see Triggers below)                                                                               |
+| `enabled`              | boolean | No           | Default `true`. Set `false` to disable without removing                                                                |
+| `prompt`               | string  | LLM only     | System prompt for the background LLM call                                                                              |
+| `model`                | string  | No           | Model override (e.g. `"gpt-4.1-nano"`). Falls back to agent's model                                                    |
+| `context_messages`     | number  | No           | Number of recent messages to include as context (1–50, default 5)                                                      |
+| `webhook_url`          | string  | Webhook only | URL to POST the payload to                                                                                             |
+| `webhook_secret`       | string  | No           | HMAC-SHA256 secret for signing webhook payloads                                                                        |
+| `inactivity_seconds`   | number  | No           | Seconds of inactivity before the hook fires (min 10, default 60). Only used with `inactivity` trigger                  |
+| `inactivity_condition` | string  | No           | Only fire if conversation is in this state: `"any"` (default), `"human_controlled_only"`, or `"agent_controlled_only"` |
 
 ## Triggers
 
-| Trigger                 | Fires when                                                 |
-| ----------------------- | ---------------------------------------------------------- |
-| `every_message`         | Any message is received (user or operator)                 |
-| `user_message_only`     | Only when the end-user sends a message                     |
-| `human_controlled_only` | Only when the conversation is under human/operator control |
-| `new_conversation`      | A brand new conversation is created (fires once)           |
+| Trigger                 | Fires when                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `every_message`         | Any message is received (user or operator)                                                     |
+| `user_message_only`     | Only when the end-user sends a message                                                         |
+| `human_controlled_only` | Only when the conversation is under human/operator control                                     |
+| `new_conversation`      | A brand new conversation is created (fires once)                                               |
+| `inactivity`            | After `inactivity_seconds` of no messages in the conversation. Respects `inactivity_condition` |
 
 ---
 
@@ -88,6 +91,46 @@ The LLM hook runs in the background and does **not** produce any user-facing res
 ### Webhook Hook (`type: "webhook"`)
 
 Sends an HTTP POST to the configured `webhook_url` with the message content and conversation context. No LLM call is involved.
+
+---
+
+## Inactivity Trigger
+
+The `inactivity` trigger fires after a configurable period of silence in a conversation. Every new message resets the timer. When the timer expires, the hook checks the fresh conversation state against `inactivity_condition` before executing.
+
+**Example: Notify CRM when a human operator hasn't responded in 2 minutes:**
+
+```json
+{
+  "name": "operator_timeout_alert",
+  "type": "webhook",
+  "trigger": "inactivity",
+  "inactivity_seconds": 120,
+  "inactivity_condition": "human_controlled_only",
+  "webhook_url": "https://your-crm.com/api/alerts/operator-timeout"
+}
+```
+
+**Example: Auto-extract lead data after 60s of silence:**
+
+```json
+{
+  "name": "post_silence_lead_extract",
+  "type": "llm",
+  "trigger": "inactivity",
+  "inactivity_seconds": 60,
+  "inactivity_condition": "human_controlled_only",
+  "model": "gpt-4.1-nano",
+  "prompt": "Review the full conversation and extract any customer details (name, email, phone). Call api_caller with endpoint collect_lead if details are found."
+}
+```
+
+**Important notes:**
+
+- Timers are in-memory only — they do not survive server restarts.
+- Each new message resets (not stacks) the timer.
+- The conversation state is re-checked from the database when the timer fires, so if the conversation ended or changed handler in the meantime, the condition is evaluated against the current state.
+- Inactivity hooks work with both `llm` and `webhook` hook types.
 
 ---
 

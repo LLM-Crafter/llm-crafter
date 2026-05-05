@@ -137,8 +137,21 @@ const agentSchema = new mongoose.Schema(
             'user_message_only',       // fires only on user messages
             'human_controlled_only',   // fires only when conversation is human-controlled
             'new_conversation',        // fires when a new conversation is created
+            'inactivity',              // fires after N seconds of no messages
           ],
           required: true,
+        },
+        // Inactivity trigger config
+        inactivity_seconds: {
+          type: Number,
+          default: 60,
+          min: 10,
+        },
+        // Only fire the inactivity hook when the conversation is in this state
+        inactivity_condition: {
+          type: String,
+          enum: ['any', 'human_controlled_only', 'agent_controlled_only'],
+          default: 'any',
         },
         // LLM hook config
         prompt: {
