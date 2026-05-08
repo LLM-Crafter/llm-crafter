@@ -366,6 +366,23 @@ const agentSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    // Message transformers: post-process AI responses before sending to channels.
+    // Each transformer matches a regex pattern, calls a webhook, and replaces
+    // the match with a channel-specific rich message (card, interactive, etc.)
+    message_transformers: [
+      {
+        name: { type: String, required: true },
+        pattern: { type: String, required: true }, // Regex with capture groups
+        webhook_url: { type: String, required: true },
+        webhook_secret: { type: String }, // Shared secret for HMAC-SHA256 signing
+        channels: [{ type: String }], // Empty = all non-website channels
+        fallback: {
+          type: { type: String, enum: ['text', 'remove', 'passthrough'], default: 'passthrough' },
+        },
+        timeout_ms: { type: Number, default: 5000 },
+        enabled: { type: Boolean, default: true },
+      },
+    ],
     // GDPR configuration
     gdpr: {
       // Encrypt message content at rest using AES-256 (see src/utils/encryption.js)

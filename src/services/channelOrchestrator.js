@@ -8,6 +8,7 @@ const Conversation = require('../models/Conversation');
 const ChannelConfig = require('../models/ChannelConfig');
 const agentService = require('./agentService');
 const mediaStorageService = require('./mediaStorageService');
+const messageTransformerService = require('./messageTransformerService');
 
 // Import channel services
 const WhatsAppService = require('./channels/whatsappService');
@@ -709,15 +710,52 @@ class ChannelOrchestrator {
         throw new Error(`Unable to determine recipient for ${channel}`);
       }
 
-      // Send the message
-      await channelService.sendMessage(
-        recipient,
-        agentResponse.response,
-        sendOptions
-      );
+      // Run message transformers (if the agent has any configured)
+      let textToSend = agentResponse.response;
+      let cards = [];
+
+      try {
+        const [agent, conversation] = await Promise.all([
+          Agent.findById(agentId).select('message_transformers').lean(),
+          Conversation.findById(options.conversationId).select('current_turn_language').lean(),
+        ]);
+        if (agent?.message_transformers?.length > 0) {
+          const result = await messageTransformerService.process(
+            textToSend,
+            agent.message_transformers,
+            channel,
+            { agentId, conversationId: options.conversationId, language: conversation?.current_turn_language || null }
+          );
+          textToSend = result.text;
+          cards = result.cards;
+        }
+      } catch (transformErr) {
+        console.error(`[ChannelOrchestrator] Transformer pipeline error (non-fatal):`, transformErr.message);
+        // Fall through with original text
+      }
+
+      // 1. Send the plain text (if any remains after pattern removal)
+      if (textToSend && textToSend.trim()) {
+        await channelService.sendMessage(recipient, textToSend, sendOptions);
+      }
+
+      // 2. Send each rich card via the channel's native format
+      for (const card of cards) {
+        try {
+          await channelService.sendRichCard(recipient, card, sendOptions);
+        } catch (cardErr) {
+          console.error(`[ChannelOrchestrator] Failed to send rich card via ${channel}:`, cardErr.message);
+          // Fallback: send a text-only version of the card
+          const fallbackText = this._cardToFallbackText(card);
+          if (fallbackText) {
+            await channelService.sendMessage(recipient, fallbackText, sendOptions);
+          }
+        }
+      }
 
       console.log(
-        `[ChannelOrchestrator] Response sent via ${channel} to ${recipient}`
+        `[ChannelOrchestrator] Response sent via ${channel} to ${recipient}` +
+          (cards.length > 0 ? ` (${cards.length} card${cards.length > 1 ? 's' : ''})` : '')
       );
     } catch (error) {
       console.error(
@@ -726,6 +764,24 @@ class ChannelOrchestrator {
       );
       // Don't throw - we don't want to fail the whole operation if sending fails
     }
+  }
+
+  /**
+   * Build a plain-text fallback from a rich card when sending fails.
+   */
+  _cardToFallbackText(card) {
+    const parts = [];
+    if (card.title) parts.push(`*${card.title}*`);
+    if (card.subtitle) parts.push(card.subtitle);
+    if (card.body) parts.push(card.body);
+    if (card.actions?.length > 0) {
+      for (const action of card.actions) {
+        if (action.type === 'url' && action.url) {
+          parts.push(`${action.label}: ${action.url}`);
+        }
+      }
+    }
+    return parts.length > 0 ? parts.join('\n') : null;
   }
 
   /**

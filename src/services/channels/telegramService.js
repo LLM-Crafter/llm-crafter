@@ -189,6 +189,101 @@ class TelegramService extends BaseChannelService {
   }
 
   /**
+   * Send a rich message from a transformer webhook response.
+   * Supports "card" (photo + inline keyboard) and "list" (numbered text + inline keyboard).
+   */
+  async sendRichCard(recipient, card, options = {}) {
+    try {
+      if (card.type === 'list') {
+        return this._sendListMessage(recipient, card, options);
+      }
+
+      // Build inline keyboard from card actions
+      const inline_keyboard = [];
+      for (const action of card.actions || []) {
+        if (action.type === 'url' && action.url) {
+          inline_keyboard.push([{ text: action.label, url: action.url }]);
+        } else if (action.type === 'reply' && action.payload) {
+          inline_keyboard.push([{ text: action.label, callback_data: action.payload }]);
+        }
+      }
+
+      const reply_markup = inline_keyboard.length > 0 ? { inline_keyboard } : undefined;
+
+      const caption = [card.title ? `*${card.title}*` : null, card.subtitle, card.body]
+        .filter(Boolean)
+        .join('\n');
+
+      if (card.image_url) {
+        // Send photo with caption and buttons
+        const payload = {
+          chat_id: recipient,
+          photo: card.image_url,
+          caption: caption || undefined,
+          parse_mode: 'Markdown',
+        };
+        if (reply_markup) payload.reply_markup = reply_markup;
+
+        const response = await axios.post(`${this.apiUrl}/sendPhoto`, payload);
+        return {
+          success: true,
+          message_id: response.data.result.message_id,
+          provider: 'telegram',
+        };
+      }
+
+      // No image: send text message with buttons
+      return await this.sendMessage(recipient, caption || card.title || 'Card', {
+        ...options,
+        reply_markup,
+      });
+    } catch (error) {
+      this.handleError(error, 'sendRichCard');
+    }
+  }
+
+  /**
+   * Send a list-style message via Telegram.
+   * Rendered as text with inline keyboard buttons for each row.
+   */
+  async _sendListMessage(recipient, card, options = {}) {
+    try {
+      const lines = [];
+      if (card.title) lines.push(`*${card.title}*`);
+      if (card.body) lines.push(card.body);
+      lines.push('');
+
+      const inline_keyboard = [];
+
+      for (const section of card.sections || []) {
+        if (section.title) lines.push(`*${section.title}*`);
+        for (const row of section.rows || []) {
+          const desc = row.description ? ` — ${row.description}` : '';
+          lines.push(`• ${row.title}${desc}`);
+          // Each row becomes a callback button
+          inline_keyboard.push([{
+            text: row.title,
+            callback_data: String(row.id).substring(0, 64),
+          }]);
+        }
+        lines.push('');
+      }
+
+      if (card.footer) lines.push(`_${card.footer}_`);
+
+      const text = lines.join('\n').trim();
+      const reply_markup = inline_keyboard.length > 0 ? { inline_keyboard } : undefined;
+
+      return await this.sendMessage(recipient, text, {
+        ...options,
+        reply_markup,
+      });
+    } catch (error) {
+      this.handleError(error, '_sendListMessage');
+    }
+  }
+
+  /**
    * Handle incoming Telegram message
    */
   async handleIncomingMessage(rawMessage) {

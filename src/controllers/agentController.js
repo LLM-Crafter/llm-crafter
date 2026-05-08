@@ -172,6 +172,41 @@ const createAgent = async (req, res) => {
       }
     }
 
+    // Validate message transformers if provided
+    let messageTransformers;
+    if (req.body.message_transformers) {
+      const transformers = req.body.message_transformers;
+      if (!Array.isArray(transformers)) {
+        return res.status(400).json({ error: 'message_transformers must be an array' });
+      }
+      for (let i = 0; i < transformers.length; i++) {
+        const t = transformers[i];
+        if (!t.name || !t.pattern || !t.webhook_url) {
+          return res.status(400).json({
+            error: `message_transformers[${i}]: name, pattern, and webhook_url are required`,
+          });
+        }
+        try {
+          new RegExp(t.pattern);
+        } catch (regexErr) {
+          return res.status(400).json({
+            error: `message_transformers[${i}]: invalid regex pattern — ${regexErr.message}`,
+          });
+        }
+        try {
+          const parsed = new URL(t.webhook_url);
+          if (!['http:', 'https:'].includes(parsed.protocol)) {
+            throw new Error('must be http or https');
+          }
+        } catch (urlErr) {
+          return res.status(400).json({
+            error: `message_transformers[${i}]: invalid webhook_url — ${urlErr.message}`,
+          });
+        }
+      }
+      messageTransformers = transformers;
+    }
+
     const agent = new Agent({
       name: req.body.name,
       description: req.body.description,
@@ -185,6 +220,7 @@ const createAgent = async (req, res) => {
       config: req.body.config || {},
       question_suggestions: questionSuggestions,
       gdpr: gdprConfig,
+      message_transformers: messageTransformers || [],
     });
 
     await agent.save();
@@ -412,6 +448,42 @@ const updateAgent = async (req, res) => {
           agent.gdpr.retention_days = days;
         }
       }
+    }
+
+    // Update message transformers if provided
+    if (req.body.message_transformers !== undefined) {
+      const transformers = req.body.message_transformers;
+      if (!Array.isArray(transformers)) {
+        return res.status(400).json({ error: 'message_transformers must be an array' });
+      }
+      for (let i = 0; i < transformers.length; i++) {
+        const t = transformers[i];
+        if (!t.name || !t.pattern || !t.webhook_url) {
+          return res.status(400).json({
+            error: `message_transformers[${i}]: name, pattern, and webhook_url are required`,
+          });
+        }
+        // Validate the regex pattern
+        try {
+          new RegExp(t.pattern);
+        } catch (regexErr) {
+          return res.status(400).json({
+            error: `message_transformers[${i}]: invalid regex pattern — ${regexErr.message}`,
+          });
+        }
+        // Validate webhook URL
+        try {
+          const parsed = new URL(t.webhook_url);
+          if (!['http:', 'https:'].includes(parsed.protocol)) {
+            throw new Error('must be http or https');
+          }
+        } catch (urlErr) {
+          return res.status(400).json({
+            error: `message_transformers[${i}]: invalid webhook_url — ${urlErr.message}`,
+          });
+        }
+      }
+      agent.message_transformers = transformers;
     }
 
     // Increment version on update
