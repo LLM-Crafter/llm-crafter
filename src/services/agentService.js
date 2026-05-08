@@ -64,7 +64,8 @@ class AgentService {
     conversationId,
     userMessage,
     userIdentifier,
-    dynamicContext = {}
+    dynamicContext = {},
+    cancellationToken = null
   ) {
     //populate agent with API key and provider of api key
     const agent = await Agent.findById(agentId).populate({
@@ -188,11 +189,15 @@ class AgentService {
     }
 
     // Add user message to conversation
-    await conversation.addMessage({
+    const userMessageData = {
       role: 'user',
       content: userMessage,
       timestamp: new Date(),
-    });
+    };
+    if (dynamicContext.channel_info_for_message) {
+      userMessageData.channel_info = dynamicContext.channel_info_for_message;
+    }
+    await conversation.addMessage(userMessageData);
 
     // Fire message hooks in agent-controlled mode (non-blocking)
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
@@ -220,8 +225,8 @@ class AgentService {
     // Execute agent reasoning — route through small agent graph if enabled
     const useGraph = agent.config?.enable_small_agent_graph === true;
     const response = useGraph
-      ? await this.executeChatbotAgentGraph(agent, conversation, dynamicContext)
-      : await this.executeAgentReasoning(agent, conversation, dynamicContext);
+      ? await this.executeChatbotAgentGraph(agent, conversation, dynamicContext, cancellationToken)
+      : await this.executeAgentReasoning(agent, conversation, dynamicContext, cancellationToken);
 
     // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
     if (response.content) {
@@ -327,7 +332,8 @@ class AgentService {
     userMessage,
     userIdentifier,
     dynamicContext = {},
-    streamCallback = null
+    streamCallback = null,
+    cancellationToken = null
   ) {
     //populate agent with API key and provider of api key
     const agent = await Agent.findById(agentId).populate({
@@ -452,11 +458,15 @@ class AgentService {
     }
 
     // Add user message to conversation
-    await conversation.addMessage({
+    const userMessageData = {
       role: 'user',
       content: userMessage,
       timestamp: new Date(),
-    });
+    };
+    if (dynamicContext.channel_info_for_message) {
+      userMessageData.channel_info = dynamicContext.channel_info_for_message;
+    }
+    await conversation.addMessage(userMessageData);
 
     // Fire message hooks in agent-controlled mode (non-blocking)
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
@@ -484,8 +494,8 @@ class AgentService {
     // Execute agent reasoning with streaming — route through small agent graph if enabled
     const useGraph = agent.config?.enable_small_agent_graph === true;
     const response = useGraph
-      ? await this.executeChatbotAgentGraphStream(agent, conversation, dynamicContext, streamCallback)
-      : await this.executeAgentReasoningStream(agent, conversation, dynamicContext, streamCallback);
+      ? await this.executeChatbotAgentGraphStream(agent, conversation, dynamicContext, streamCallback, cancellationToken)
+      : await this.executeAgentReasoningStream(agent, conversation, dynamicContext, streamCallback, cancellationToken);
 
     // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
     let assistantMessageId = null;
@@ -727,7 +737,7 @@ class AgentService {
   /**
    * Core agent reasoning engine
    */
-  async executeAgentReasoning(agent, conversation, dynamicContext = {}) {
+  async executeAgentReasoning(agent, conversation, dynamicContext = {}, cancellationToken = null) {
     const decriptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
       decriptedApiKey,
@@ -759,6 +769,13 @@ class AgentService {
 
     while (currentIteration < maxIterations) {
       currentIteration++;
+
+      // Check if this execution has been cancelled by a newer incoming message
+      if (cancellationToken?.cancelled) {
+        const err = new Error('Execution cancelled — newer message received');
+        err.code = 'EXECUTION_CANCELLED';
+        throw err;
+      }
 
       // Build prompt for current iteration
       const prompt = this.buildReasoningPrompt(
@@ -987,7 +1004,8 @@ class AgentService {
     agent,
     conversation,
     dynamicContext = {},
-    streamCallback = null
+    streamCallback = null,
+    cancellationToken = null
   ) {
     const decriptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
@@ -1020,6 +1038,13 @@ class AgentService {
 
     while (currentIteration < maxIterations) {
       currentIteration++;
+
+      // Check if this execution has been cancelled by a newer incoming message
+      if (cancellationToken?.cancelled) {
+        const err = new Error('Execution cancelled — newer message received');
+        err.code = 'EXECUTION_CANCELLED';
+        throw err;
+      }
 
       // Build prompt for current iteration
       const prompt = this.buildReasoningPrompt(
@@ -3433,7 +3458,8 @@ Your response:`;
     context,
     thinkingProcess,
     toolsUsed,
-    totalTokenUsage
+    totalTokenUsage,
+    cancellationToken = null
   ) {
     const maxToolCalls = agent.config.max_tool_calls || 5;
     const maxPlannerRounds = 5; // Hard cap to prevent runaway loops
@@ -3463,6 +3489,13 @@ Your response:`;
 
     while (roundNumber < maxPlannerRounds && remainingBudget > 0) {
       roundNumber++;
+
+      // Check if this execution has been cancelled by a newer incoming message
+      if (cancellationToken?.cancelled) {
+        const err = new Error('Execution cancelled — newer message received');
+        err.code = 'EXECUTION_CANCELLED';
+        throw err;
+      }
 
       // --- Planner LLM call --------------------------------------------------
       const plannerUserPrompt = this.buildGraphPlannerUserPrompt(
@@ -3648,7 +3681,7 @@ Your response:`;
    * @param {Object} dynamicContext – per-request dynamic context
    * @returns {Promise<{content: string, thinking_process: Array, tools_used: Array, token_usage: Object}>}
    */
-  async executeChatbotAgentGraph(agent, conversation, dynamicContext = {}) {
+  async executeChatbotAgentGraph(agent, conversation, dynamicContext = {}, cancellationToken = null) {
     const thinkingProcess = [];
     const toolsUsed = [];
     const totalTokenUsage = {
@@ -3677,7 +3710,8 @@ Your response:`;
       context,
       thinkingProcess,
       toolsUsed,
-      totalTokenUsage
+      totalTokenUsage,
+      cancellationToken
     );
 
     // If handoff was triggered, return immediately
@@ -3833,7 +3867,8 @@ Your response:`;
     agent,
     conversation,
     dynamicContext = {},
-    streamCallback = null
+    streamCallback = null,
+    cancellationToken = null
   ) {
     const thinkingProcess = [];
     const toolsUsed = [];
@@ -3862,7 +3897,8 @@ Your response:`;
       context,
       thinkingProcess,
       toolsUsed,
-      totalTokenUsage
+      totalTokenUsage,
+      cancellationToken
     );
 
     // If handoff was triggered, stream the handoff message and return

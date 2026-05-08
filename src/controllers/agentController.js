@@ -3,9 +3,36 @@ const Conversation = require('../models/Conversation');
 const AgentExecution = require('../models/AgentExecution');
 const Project = require('../models/Project');
 const ApiKey = require('../models/ApiKey');
+const FileUpload = require('../models/FileUpload');
 const agentService = require('../services/agentService');
 const toolService = require('../services/toolService');
 const summarizationService = require('../services/summarizationService');
+
+/**
+ * Resolve file IDs from an upload request into media objects for channel_info.
+ * Only returns files that belong to the given agent and were successfully stored.
+ * @param {Array<string>} fileIds - File IDs from the request body
+ * @param {string} agentId - Agent ID (ownership check)
+ * @returns {Promise<Array>} - Array of media objects ready for channel_info
+ */
+async function resolveFileAttachments(fileIds, agentId) {
+  if (!fileIds || fileIds.length === 0) return [];
+
+  const files = await FileUpload.find({
+    _id: { $in: fileIds },
+    agent: agentId,
+    stored: true,
+  }).lean();
+
+  return files.map(f => ({
+    type: f.type,
+    url: f.s3_key,
+    mime_type: f.mime_type,
+    file_size: f.file_size,
+    filename: f.original_name,
+    stored: true,
+  }));
+}
 
 const createAgent = async (req, res) => {
   try {
@@ -1642,19 +1669,32 @@ const getQuestionSuggestions = async (req, res) => {
  */
 const executeChatbotAgentWithSession = async (req, res) => {
   try {
-    const { message, conversationId, userIdentifier, dynamicContext } =
+    const { message, conversationId, userIdentifier, dynamicContext, files } =
       req.body;
 
     // req.session is populated by sessionAuth middleware
     // req.agent is the agent this session is authorized for
     // req.remainingInteractions shows how many interactions are left
 
+    // Resolve uploaded file attachments (if any)
+    const resolvedContext = { ...(dynamicContext || {}) };
+    const mediaAttachments = await resolveFileAttachments(files, req.agent._id);
+    if (mediaAttachments.length > 0) {
+      resolvedContext.attachments = mediaAttachments.map(m => ({
+        type: m.type, mime_type: m.mime_type, filename: m.filename, stored: m.stored,
+      }));
+      resolvedContext.channel_info_for_message = {
+        channel: 'website',
+        media: mediaAttachments,
+      };
+    }
+
     const result = await agentService.executeChatbotAgent(
       req.agent._id,
       conversationId,
       message,
       userIdentifier || `session_${req.sessionID}`,
-      dynamicContext
+      resolvedContext
     );
 
     let parsedResult = { ...result };
@@ -1721,8 +1761,21 @@ const executeTaskAgentWithSession = async (req, res) => {
  */
 const executeChatbotAgentWithSessionStream = async (req, res) => {
   try {
-    const { message, conversationId, userIdentifier, dynamicContext } =
+    const { message, conversationId, userIdentifier, dynamicContext, files } =
       req.body;
+
+    // Resolve uploaded file attachments (if any)
+    const resolvedContext = { ...(dynamicContext || {}) };
+    const mediaAttachments = await resolveFileAttachments(files, req.agent._id);
+    if (mediaAttachments.length > 0) {
+      resolvedContext.attachments = mediaAttachments.map(m => ({
+        type: m.type, mime_type: m.mime_type, filename: m.filename, stored: m.stored,
+      }));
+      resolvedContext.channel_info_for_message = {
+        channel: 'website',
+        media: mediaAttachments,
+      };
+    }
 
     // Set up Server-Sent Events headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1759,7 +1812,7 @@ const executeChatbotAgentWithSessionStream = async (req, res) => {
         conversationId,
         message,
         userIdentifier || `session_${req.sessionID}`,
-        dynamicContext,
+        resolvedContext,
         streamCallback
       );
 
@@ -1891,7 +1944,7 @@ const executeTaskAgentWithSessionStream = async (req, res) => {
  */
 const executeChatbotAgentWithApiKey = async (req, res) => {
   try {
-    const { message, conversationId, userIdentifier, dynamicContext } =
+    const { message, conversationId, userIdentifier, dynamicContext, files } =
       req.body;
 
     // req.apiKey is populated by apiKeyAuth middleware
@@ -1906,12 +1959,25 @@ const executeChatbotAgentWithApiKey = async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
+    // Resolve uploaded file attachments (if any)
+    const resolvedContext = { ...(dynamicContext || {}) };
+    const mediaAttachments = await resolveFileAttachments(files, req.params.agentId);
+    if (mediaAttachments.length > 0) {
+      resolvedContext.attachments = mediaAttachments.map(m => ({
+        type: m.type, mime_type: m.mime_type, filename: m.filename, stored: m.stored,
+      }));
+      resolvedContext.channel_info_for_message = {
+        channel: 'website',
+        media: mediaAttachments,
+      };
+    }
+
     const result = await agentService.executeChatbotAgent(
       req.params.agentId,
       conversationId,
       message,
       userIdentifier || `apikey_${req.apiKey._id}`,
-      dynamicContext
+      resolvedContext
     );
 
     // Add API key usage information to the response

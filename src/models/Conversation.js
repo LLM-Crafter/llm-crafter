@@ -77,7 +77,7 @@ const messageSchema = new mongoose.Schema({
     reply_to: String, // For threading/replies
     media: [
       {
-        type: String, // 'image', 'video', 'document', 'audio'
+        type: { type: String }, // 'image', 'video', 'document', 'audio'
         url: String,
         mime_type: String,
         file_size: Number,

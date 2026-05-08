@@ -1,5 +1,6 @@
 const Organization = require('../models/Organization');
 const User = require('../models/User');
+const encryption = require('../utils/encryption');
 
 const createOrganization = async (req, res) => {
   try {
@@ -191,10 +192,60 @@ const removeMember = async (req, res) => {
   }
 };
 
+/**
+ * Update organization details (name, description, media_storage, etc.)
+ */
+const updateOrganization = async (req, res) => {
+  try {
+    const organization = await Organization.findById(req.params.orgId);
+    if (!organization) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    // Whitelist of updatable top-level fields
+    const { name, description, media_storage } = req.body;
+
+    if (name !== undefined) organization.name = name;
+    if (description !== undefined) organization.description = description;
+
+    // Handle media_storage update with credential encryption
+    if (media_storage !== undefined) {
+      const ms = { ...media_storage };
+
+      // Encrypt S3 credentials before storing
+      if (ms.credentials) {
+        if (ms.credentials.access_key_id && !encryption.isEncrypted(ms.credentials.access_key_id)) {
+          ms.credentials.access_key_id = encryption.encrypt(ms.credentials.access_key_id);
+        }
+        if (ms.credentials.secret_access_key && !encryption.isEncrypted(ms.credentials.secret_access_key)) {
+          ms.credentials.secret_access_key = encryption.encrypt(ms.credentials.secret_access_key);
+        }
+      }
+
+      organization.media_storage = ms;
+    }
+
+    await organization.save();
+
+    // Return without exposing decrypted credentials
+    const orgJson = organization.toJSON();
+    if (orgJson.media_storage?.credentials) {
+      orgJson.media_storage.credentials.access_key_id = '***';
+      orgJson.media_storage.credentials.secret_access_key = '***';
+    }
+
+    res.json(orgJson);
+  } catch (error) {
+    console.error('Failed to update organization:', error);
+    res.status(500).json({ error: 'Failed to update organization' });
+  }
+};
+
 module.exports = {
   getOrganization,
   getOrganizations,
   createOrganization,
+  updateOrganization,
   inviteUserToOrg,
   updateMemberRole,
   removeMember,

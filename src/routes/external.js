@@ -4,6 +4,7 @@ const router = express.Router();
 const proxyController = require('../controllers/proxyController');
 const agentController = require('../controllers/agentController');
 const handoffController = require('../controllers/handoffController');
+const { uploadMiddleware, uploadFiles } = require('../controllers/uploadController');
 const { apiKeyAuth, flexibleAuth } = require('../middleware/apiKeyAuth');
 const {
   sessionAuth,
@@ -35,6 +36,14 @@ const agentChatValidation = [
     .optional()
     .isObject()
     .withMessage('Dynamic context must be an object'),
+  body('files')
+    .optional()
+    .isArray({ max: 5 })
+    .withMessage('Files must be an array of up to 5 file IDs'),
+  body('files.*')
+    .optional()
+    .isString()
+    .withMessage('Each file ID must be a string'),
 ];
 
 const agentTaskValidation = [
@@ -74,6 +83,15 @@ router.post(
 );
 
 // ===== AGENT EXECUTION ROUTES =====
+
+// Upload files for attachment to chat messages
+router.post(
+  '/agents/upload',
+  proxyLimiter,
+  sessionAuth(),
+  uploadMiddleware,
+  uploadFiles
+);
 
 // Chat with an agent using session token
 router.post(

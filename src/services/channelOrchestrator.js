@@ -7,6 +7,7 @@ const Agent = require('../models/Agent');
 const Conversation = require('../models/Conversation');
 const ChannelConfig = require('../models/ChannelConfig');
 const agentService = require('./agentService');
+const mediaStorageService = require('./mediaStorageService');
 
 // Import channel services
 const WhatsAppService = require('./channels/whatsappService');
@@ -17,6 +18,7 @@ class ChannelOrchestrator {
   constructor() {
     this.channelServices = new Map(); // Map of agentId_channel -> service instance
     this.initialized = new Set(); // Track which agents have been initialized
+    this.executionTokens = new Map(); // Map of conversationId -> { cancelled: boolean }
   }
 
   /**
@@ -182,6 +184,30 @@ class ChannelOrchestrator {
         `[ChannelOrchestrator] Processing message for conversation: ${conversation._id}, status: ${conversation.status}, handler: ${conversation.current_handler}`
       );
 
+      // Process and store media attachments (if any) via the org's S3 config
+      let storedMedia = [];
+      if (normalizedMessage.media && normalizedMessage.media.length > 0 && channel !== 'website') {
+        try {
+          const agent = await Agent.findById(agentId).select('organization').lean();
+          storedMedia = await mediaStorageService.processAndStore({
+            orgId: agent.organization,
+            agentId,
+            conversationId: String(conversation._id),
+            mediaItems: normalizedMessage.media,
+            channelService,
+            channel,
+          });
+        } catch (mediaErr) {
+          console.error(`[ChannelOrchestrator] Media processing failed (non-fatal):`, mediaErr.message);
+        }
+      }
+
+      // If message has no text content but has media, inject a placeholder
+      if ((!normalizedMessage.content || normalizedMessage.content.trim() === '') && storedMedia.length > 0) {
+        const types = [...new Set(storedMedia.map(m => m.type))].join(', ');
+        normalizedMessage.content = `[User sent ${types} attachment${storedMedia.length > 1 ? 's' : ''}]`;
+      }
+
       // Check if conversation is human-controlled
       if (
         conversation.current_handler === 'human' &&
@@ -199,6 +225,7 @@ class ChannelOrchestrator {
           channel_info: {
             channel: channel,
             message_id: normalizedMessage.channel_metadata?.message_id,
+            media: storedMedia.length > 0 ? storedMedia : undefined,
           },
         });
         await conversation.save();
@@ -230,14 +257,54 @@ class ChannelOrchestrator {
         ...(options.context || {}),
       };
 
-      // Execute agent (your existing logic!)
-      const agentResponse = await agentService.executeChatbotAgent(
-        agentId,
-        conversation._id,
-        normalizedMessage.content,
-        normalizedMessage.user_identifier,
-        dynamicContext
-      );
+      // Include media attachment info in dynamic context so the agent knows
+      if (storedMedia.length > 0) {
+        dynamicContext.attachments = storedMedia.map(m => ({
+          type: m.type,
+          mime_type: m.mime_type,
+          filename: m.filename || null,
+          stored: m.stored,
+        }));
+        dynamicContext.channel_info_for_message = {
+          channel,
+          message_id: normalizedMessage.channel_metadata?.message_id,
+          media: storedMedia,
+        };
+      }
+
+      // Cancel any in-progress execution for this conversation, then create a fresh token
+      const convKey = String(conversation._id);
+      const existingToken = this.executionTokens.get(convKey);
+      if (existingToken) {
+        console.log(`[ChannelOrchestrator] Cancelling in-progress execution for conversation ${conversation._id}`);
+        existingToken.cancelled = true;
+      }
+      const cancellationToken = { cancelled: false };
+      this.executionTokens.set(convKey, cancellationToken);
+
+      let agentResponse;
+      try {
+        // Execute agent (your existing logic!)
+        agentResponse = await agentService.executeChatbotAgent(
+          agentId,
+          conversation._id,
+          normalizedMessage.content,
+          normalizedMessage.user_identifier,
+          dynamicContext,
+          cancellationToken
+        );
+      } catch (err) {
+        if (err.code === 'EXECUTION_CANCELLED') {
+          console.log(`[ChannelOrchestrator] Execution cancelled for conversation ${conversation._id} — newer message took over`);
+          return { success: true, status: 'cancelled', conversation_id: conversation._id };
+        }
+        throw err;
+      } finally {
+        // Only remove our token if it hasn't already been replaced by a newer execution
+        if (this.executionTokens.get(convKey) === cancellationToken) {
+          this.executionTokens.delete(convKey);
+        }
+      }
 
       // Send response back through the correct channel
       await this.sendResponse(
@@ -332,6 +399,30 @@ class ChannelOrchestrator {
         normalizedMessage.channel_metadata
       );
 
+      // Process and store media attachments (if any) via the org's S3 config
+      let storedMedia = [];
+      if (normalizedMessage.media && normalizedMessage.media.length > 0 && channel !== 'website') {
+        try {
+          const agent = await Agent.findById(agentId).select('organization').lean();
+          storedMedia = await mediaStorageService.processAndStore({
+            orgId: agent.organization,
+            agentId,
+            conversationId: String(conversation._id),
+            mediaItems: normalizedMessage.media,
+            channelService,
+            channel,
+          });
+        } catch (mediaErr) {
+          console.error(`[ChannelOrchestrator] Streaming media processing failed (non-fatal):`, mediaErr.message);
+        }
+      }
+
+      // If message has no text content but has media, inject a placeholder
+      if ((!normalizedMessage.content || normalizedMessage.content.trim() === '') && storedMedia.length > 0) {
+        const types = [...new Set(storedMedia.map(m => m.type))].join(', ');
+        normalizedMessage.content = `[User sent ${types} attachment${storedMedia.length > 1 ? 's' : ''}]`;
+      }
+
       // Build dynamic context
       const dynamicContext = {
         channel,
@@ -339,15 +430,54 @@ class ChannelOrchestrator {
         ...(options.context || {}),
       };
 
-      // Execute agent with streaming
-      const agentResponse = await agentService.executeChatbotAgentStream(
-        agentId,
-        conversation._id,
-        normalizedMessage.content,
-        normalizedMessage.user_identifier,
-        dynamicContext,
-        streamCallback
-      );
+      // Include media attachment info in dynamic context so the agent knows
+      if (storedMedia.length > 0) {
+        dynamicContext.attachments = storedMedia.map(m => ({
+          type: m.type,
+          mime_type: m.mime_type,
+          filename: m.filename || null,
+          stored: m.stored,
+        }));
+        dynamicContext.channel_info_for_message = {
+          channel,
+          message_id: normalizedMessage.channel_metadata?.message_id,
+          media: storedMedia,
+        };
+      }
+
+      // Cancel any in-progress execution for this conversation, then create a fresh token
+      const convKey = String(conversation._id);
+      const existingToken = this.executionTokens.get(convKey);
+      if (existingToken) {
+        console.log(`[ChannelOrchestrator] Cancelling in-progress streaming execution for conversation ${conversation._id}`);
+        existingToken.cancelled = true;
+      }
+      const cancellationToken = { cancelled: false };
+      this.executionTokens.set(convKey, cancellationToken);
+
+      let agentResponse;
+      try {
+        // Execute agent with streaming
+        agentResponse = await agentService.executeChatbotAgentStream(
+          agentId,
+          conversation._id,
+          normalizedMessage.content,
+          normalizedMessage.user_identifier,
+          dynamicContext,
+          streamCallback,
+          cancellationToken
+        );
+      } catch (err) {
+        if (err.code === 'EXECUTION_CANCELLED') {
+          console.log(`[ChannelOrchestrator] Streaming execution cancelled for conversation ${conversation._id} — newer message took over`);
+          return { success: true, status: 'cancelled', conversation_id: conversation._id };
+        }
+        throw err;
+      } finally {
+        if (this.executionTokens.get(convKey) === cancellationToken) {
+          this.executionTokens.delete(convKey);
+        }
+      }
 
       // Update analytics
       await this.updateChannelAnalytics(agentId, channel);

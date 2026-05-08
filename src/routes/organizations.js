@@ -65,6 +65,14 @@ router.get(
   organizationController.getOrganization
 );
 
+router.put(
+  '/:orgId',
+  generalLimiter,
+  auth,
+  orgAuth.isAdmin,
+  organizationController.updateOrganization
+);
+
 // Project routes (nested under organizations)
 router.post(
   '/:orgId/projects',

@@ -1,7 +1,40 @@
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const ExternalOperator = require('../models/ExternalOperator');
+const Agent = require('../models/Agent');
 const channelOrchestrator = require('../services/channelOrchestrator');
+const mediaStorageService = require('../services/mediaStorageService');
+
+/**
+ * Resolve S3 keys to presigned URLs for all media in an array of messages.
+ * Mutates the messages in place. Non-fatal: failures leave the S3 key as-is.
+ */
+async function resolveMediaUrls(messages, conversation) {
+  const hasMedia = messages.some(msg => msg.channel_info?.media?.length > 0);
+  if (!hasMedia || !conversation.agent) return;
+
+  const agentId = typeof conversation.agent === 'object' ? conversation.agent._id : conversation.agent;
+  const agentDoc = await Agent.findById(agentId).select('organization').lean();
+  if (!agentDoc?.organization) return;
+
+  const orgId = agentDoc.organization;
+  for (const msg of messages) {
+    if (msg.channel_info?.media?.length > 0) {
+      for (const media of msg.channel_info.media) {
+        if (media.url && !media.url.startsWith('http')) {
+          try {
+            const presignedUrl = await mediaStorageService.getPresignedUrl(orgId, media.url);
+            if (presignedUrl) {
+              media.url = presignedUrl;
+            }
+          } catch (err) {
+            // Non-fatal: leave the S3 key as-is
+          }
+        }
+      }
+    }
+  }
+}
 
 /**
  * Get conversations awaiting handoff (filtered by user's organizations)
@@ -707,9 +740,13 @@ const getConversationDetails = async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
+    // Resolve S3 keys to presigned URLs for media in all messages
+    const convObj = conversation.toJSON();
+    await resolveMediaUrls(convObj.messages || [], conversation);
+
     res.json({
       success: true,
-      conversation,
+      conversation: convObj,
     });
   } catch (error) {
     console.error('Error fetching conversation details:', error);
@@ -765,6 +802,9 @@ const getLatestMessages = async (req, res) => {
 
     // Sort by timestamp (oldest first)
     newMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // Resolve S3 keys to presigned URLs for media attachments
+    await resolveMediaUrls(newMessages, conversation);
 
     // Get current conversation state
     const handoffInfo = conversation.handoff_info || {};
