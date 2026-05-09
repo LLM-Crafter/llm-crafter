@@ -203,10 +203,9 @@ class ChannelOrchestrator {
         }
       }
 
-      // If message has no text content but has media, inject a placeholder
-      if ((!normalizedMessage.content || normalizedMessage.content.trim() === '') && storedMedia.length > 0) {
-        const types = [...new Set(storedMedia.map(m => m.type))].join(', ');
-        normalizedMessage.content = `[User sent ${types} attachment${storedMedia.length > 1 ? 's' : ''}]`;
+      // Ensure content is at least an empty string (never null/undefined)
+      if (!normalizedMessage.content) {
+        normalizedMessage.content = '';
       }
 
       // Check if conversation is human-controlled
@@ -418,10 +417,9 @@ class ChannelOrchestrator {
         }
       }
 
-      // If message has no text content but has media, inject a placeholder
-      if ((!normalizedMessage.content || normalizedMessage.content.trim() === '') && storedMedia.length > 0) {
-        const types = [...new Set(storedMedia.map(m => m.type))].join(', ');
-        normalizedMessage.content = `[User sent ${types} attachment${storedMedia.length > 1 ? 's' : ''}]`;
+      // Ensure content is at least an empty string (never null/undefined)
+      if (!normalizedMessage.content) {
+        normalizedMessage.content = '';
       }
 
       // Build dynamic context
