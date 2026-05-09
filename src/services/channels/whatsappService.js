@@ -100,7 +100,7 @@ class WhatsAppService extends BaseChannelService {
    */
   async sendViaMetaAPI(to, message, options) {
     const phoneNumberId = this.whatsappConfig.credentials.phone_number_id;
-    const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
 
     // Decrypt access token if needed
     const accessToken = this.safeDecrypt(
@@ -197,7 +197,7 @@ class WhatsAppService extends BaseChannelService {
    */
   async sendMediaViaMetaAPI(to, media, options) {
     const phoneNumberId = this.whatsappConfig.credentials.phone_number_id;
-    const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
 
     const accessToken = this.safeDecrypt(
       this.whatsappConfig.credentials.access_token
@@ -344,7 +344,7 @@ class WhatsAppService extends BaseChannelService {
    */
   async _sendCardMessageMeta(to, card) {
     const phoneNumberId = this.whatsappConfig.credentials.phone_number_id;
-    const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
     const accessToken = this.safeDecrypt(this.whatsappConfig.credentials.access_token);
     const headers = {
       Authorization: `Bearer ${accessToken}`,
@@ -516,7 +516,7 @@ class WhatsAppService extends BaseChannelService {
    */
   async _sendListMessageMeta(to, card) {
     const phoneNumberId = this.whatsappConfig.credentials.phone_number_id;
-    const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
     const accessToken = this.safeDecrypt(this.whatsappConfig.credentials.access_token);
     const headers = {
       Authorization: `Bearer ${accessToken}`,

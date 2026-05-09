@@ -304,7 +304,7 @@ class MediaStorageService {
 
     // Step 1: Get the download URL from the media ID
     const metaResponse = await axios.get(
-      `https://graph.facebook.com/v18.0/${mediaItem.url}`,
+      `https://graph.facebook.com/v25.0/${mediaItem.url}`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
