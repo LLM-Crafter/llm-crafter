@@ -71,6 +71,13 @@ const messageSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  // Machine-readable code for system state-transition messages
+  // Allows 3rd-party applications to render these messages as they please
+  code: {
+    type: String,
+    enum: ['HUMAN_JOINED', 'AI_JOINED', 'HANDOFF_REFUSED', 'HANDOFF_REQUESTED'],
+    default: null,
+  },
   // Channel-specific information for each message
   channel_info: {
     channel: String, // 'whatsapp', 'telegram', 'email', 'website'
@@ -738,6 +745,7 @@ conversationSchema.methods.assignHuman = function (
   this.messages.push({
     role: 'system',
     content: `You are now connected with ${humanName} from our support team.`,
+    code: 'HUMAN_JOINED',
     timestamp: new Date(),
     handler_info: {
       human_operator: {
@@ -773,6 +781,7 @@ conversationSchema.methods.assignExternalOperator = function (
   this.messages.push({
     role: 'system',
     content: `You are now connected with ${name} from our support team.`,
+    code: 'HUMAN_JOINED',
     timestamp: new Date(),
     handler_info: {
       external_operator: {
@@ -797,6 +806,7 @@ conversationSchema.methods.handBackToAgent = function () {
   this.messages.push({
     role: 'system',
     content: 'You are now back with our AI assistant.',
+    code: 'AI_JOINED',
     timestamp: new Date(),
   });
 
@@ -831,6 +841,7 @@ conversationSchema.methods.refuseHandoff = function (
     content:
       `A human operator has declined the handoff request.${reasonText} ` +
       'Inform the user politely that no human operator is available right now and offer to continue assisting them yourself.',
+    code: 'HANDOFF_REFUSED',
     timestamp: new Date(),
   });
 
