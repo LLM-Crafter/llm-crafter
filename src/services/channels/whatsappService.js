@@ -139,6 +139,60 @@ class WhatsAppService extends BaseChannelService {
   }
 
   /**
+   * Send a pre-approved template message via Meta Cloud API.
+   * Used when the 24-hour messaging window has expired.
+   *
+   * @param {string} to - Recipient phone number
+   * @param {string} templateName - Meta-registered template name
+   * @param {string} languageCode - Template language (e.g. "en", "pt_BR")
+   * @param {Array} components - Optional template components with parameters
+   *   e.g. [{ type: "body", parameters: [{ type: "text", text: "value" }] }]
+   */
+  async sendTemplateViaMetaAPI(to, templateName, languageCode, components = []) {
+    const phoneNumberId = this.whatsappConfig.credentials.phone_number_id;
+    const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
+
+    const accessToken = this.safeDecrypt(
+      this.whatsappConfig.credentials.access_token
+    );
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+      },
+    };
+
+    if (components.length > 0) {
+      payload.template.components = components;
+    }
+
+    const response = await axios.post(url, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    this.log('Template message sent via Meta API', {
+      to,
+      template: templateName,
+      language: languageCode,
+      messageId: response.data.messages[0].id,
+    });
+
+    return {
+      success: true,
+      message_id: response.data.messages[0].id,
+      provider: 'meta',
+    };
+  }
+
+  /**
    * Send message via 360Dialog
    */
   async sendVia360Dialog(to, message, options) {

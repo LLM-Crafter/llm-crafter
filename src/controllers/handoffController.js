@@ -744,9 +744,31 @@ const getConversationDetails = async (req, res) => {
     const convObj = conversation.toJSON();
     await resolveMediaUrls(convObj.messages || [], conversation);
 
+    // Compute messaging window for WhatsApp conversations
+    let messagingWindow = null;
+    if (conversation.channel === 'whatsapp') {
+      const WINDOW_MS = 24 * 60 * 60 * 1000;
+      const lastCustomerMsg = conversation.last_customer_message_at;
+      if (lastCustomerMsg) {
+        const expiresAt = new Date(lastCustomerMsg.getTime() + WINDOW_MS);
+        messagingWindow = {
+          last_customer_message_at: lastCustomerMsg.toISOString(),
+          expires_at: expiresAt.toISOString(),
+          is_open: Date.now() < expiresAt.getTime(),
+        };
+      } else {
+        messagingWindow = {
+          last_customer_message_at: null,
+          expires_at: null,
+          is_open: false,
+        };
+      }
+    }
+
     res.json({
       success: true,
       conversation: convObj,
+      messaging_window: messagingWindow,
     });
   } catch (error) {
     console.error('Error fetching conversation details:', error);
@@ -811,11 +833,33 @@ const getLatestMessages = async (req, res) => {
     const currentHandler = conversation.current_handler || 'agent';
     const conversationStatus = conversation.status || 'agent_controlled';
 
+    // Compute messaging window status for channels with time limits (e.g. WhatsApp 24h)
+    let messagingWindow = null;
+    if (conversation.channel === 'whatsapp') {
+      const WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+      const lastCustomerMsg = conversation.last_customer_message_at;
+      if (lastCustomerMsg) {
+        const expiresAt = new Date(lastCustomerMsg.getTime() + WINDOW_MS);
+        messagingWindow = {
+          last_customer_message_at: lastCustomerMsg.toISOString(),
+          expires_at: expiresAt.toISOString(),
+          is_open: Date.now() < expiresAt.getTime(),
+        };
+      } else {
+        messagingWindow = {
+          last_customer_message_at: null,
+          expires_at: null,
+          is_open: false,
+        };
+      }
+    }
+
     res.json({
       conversation_id: conversationId,
       new_messages: newMessages,
       current_handler: currentHandler,
       conversation_status: conversationStatus,
+      messaging_window: messagingWindow,
       handoff_active:
         conversationStatus === 'human_controlled' ||
         conversationStatus === 'handoff_requested',

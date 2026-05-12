@@ -42,6 +42,7 @@ const channelConfigSchema = new mongoose.Schema(
         auth_token: String, // Encrypted
         // Meta Cloud API
         phone_number_id: String,
+        waba_id: String, // WhatsApp Business Account ID — needed for template management
         access_token: String, // Encrypted
         // 360Dialog
         api_key: String, // Encrypted

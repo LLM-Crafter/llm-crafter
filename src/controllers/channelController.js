@@ -257,6 +257,11 @@ const updateChannelConfig = async (req, res) => {
           incomingCreds.business_account_id;
       }
 
+      if (incomingCreds.waba_id) {
+        channelConfig.whatsapp.credentials.waba_id =
+          incomingCreds.waba_id;
+      }
+
       // Copy other non-credential fields
       if (updates.whatsapp.enabled !== undefined) {
         channelConfig.whatsapp.enabled = updates.whatsapp.enabled;

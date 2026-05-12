@@ -75,7 +75,7 @@ const messageSchema = new mongoose.Schema({
   // Allows 3rd-party applications to render these messages as they please
   code: {
     type: String,
-    enum: ['HUMAN_JOINED', 'AI_JOINED', 'HANDOFF_REFUSED', 'HANDOFF_REQUESTED'],
+    enum: ['HUMAN_JOINED', 'AI_JOINED', 'HANDOFF_REFUSED', 'HANDOFF_REQUESTED', 'TEMPLATE_SENT'],
     default: null,
   },
   // Channel-specific information for each message
@@ -238,6 +238,12 @@ const conversationSchema = new mongoose.Schema(
         default: null,
       },
     },
+    // Timestamp of the last message sent by the end-user (customer).
+    // Used to compute channel-specific messaging windows (e.g. WhatsApp 24 h).
+    last_customer_message_at: {
+      type: Date,
+      default: null,
+    },
     metadata: {
       total_tokens_used: {
         type: Number,
@@ -395,6 +401,13 @@ conversationSchema.index({ agent: 1, archived: 1 });
 conversationSchema.pre('save', function (next) {
   if (this.isModified('messages')) {
     this.metadata.last_activity = new Date();
+
+    // Track when the customer (end-user) last sent a message.
+    // Used for channel messaging-window calculations (e.g. WhatsApp 24 h).
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      this.last_customer_message_at = new Date();
+    }
 
     // Auto-unarchive when a new message is added so operators see the conversation again
     if (this.archived) {
