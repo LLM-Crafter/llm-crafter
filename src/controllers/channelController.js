@@ -125,6 +125,160 @@ const handleEmailWebhook = async (req, res) => {
   }
 };
 
+/**
+ * Instagram webhook handler (shared endpoint — routes by recipient ID)
+ */
+const handleInstagramWebhook = async (req, res) => {
+  try {
+    // Meta webhook verification (GET request)
+    if (req.method === 'GET') {
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
+
+      const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+
+      if (mode === 'subscribe' && token === expectedToken) {
+        console.log('[Instagram] Webhook verified');
+        return res.status(200).send(challenge);
+      } else {
+        return res.status(403).send('Verification failed');
+      }
+    }
+
+    // Handle incoming message
+    console.log(
+      '[Instagram] Received webhook:',
+      JSON.stringify(req.body, null, 2)
+    );
+
+    // Extract recipient ID to route to the correct agent
+    const entry = req.body.entry?.[0];
+    let recipientId;
+
+    if (entry?.messaging?.[0]) {
+      recipientId = entry.messaging[0].recipient?.id;
+    } else if (entry?.changes) {
+      const messageChange = entry.changes.find(c => c.field === 'messages');
+      recipientId = messageChange?.value?.recipient?.id;
+    }
+
+    if (!recipientId) {
+      console.warn('[Instagram] Could not extract recipient ID from webhook');
+      return res.status(200).json({ success: true });
+    }
+
+    // Look up which agent owns this Instagram account
+    const channelConfig = await ChannelConfig.findOne({
+      'instagram.credentials.page_id': recipientId,
+      'instagram.enabled': true,
+    }).lean();
+
+    if (!channelConfig) {
+      console.warn(
+        `[Instagram] No agent configured for recipient ID: ${recipientId}`
+      );
+      return res.status(200).json({ success: true });
+    }
+
+    const agentId = channelConfig.agent;
+
+    // Process message asynchronously
+    channelOrchestrator
+      .handleIncomingMessage(agentId, 'instagram', req.body, {
+        ip_address: req.ip,
+      })
+      .then(result => {
+        if (result?.conversation_id) {
+          console.log('[Instagram] Message processed:', result.conversation_id);
+        }
+      })
+      .catch(error => {
+        console.error('[Instagram] Error processing message:', error);
+      });
+
+    // Respond to webhook quickly (within 5 seconds for Meta)
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[Instagram] Webhook error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Facebook Messenger webhook handler (shared endpoint — routes by recipient ID)
+ */
+const handleMessengerWebhook = async (req, res) => {
+  try {
+    // Meta webhook verification (GET request)
+    if (req.method === 'GET') {
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
+
+      const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+
+      if (mode === 'subscribe' && token === expectedToken) {
+        console.log('[Messenger] Webhook verified');
+        return res.status(200).send(challenge);
+      } else {
+        return res.status(403).send('Verification failed');
+      }
+    }
+
+    // Handle incoming message
+    console.log(
+      '[Messenger] Received webhook:',
+      JSON.stringify(req.body, null, 2)
+    );
+
+    // Extract recipient ID (the Page ID that received the message)
+    const entry = req.body.entry?.[0];
+    const messaging = entry?.messaging?.[0];
+    const recipientId = messaging?.recipient?.id;
+
+    if (!recipientId) {
+      console.warn('[Messenger] Could not extract recipient ID from webhook');
+      return res.status(200).json({ success: true });
+    }
+
+    // Look up which agent owns this Facebook Page
+    const channelConfig = await ChannelConfig.findOne({
+      'messenger.credentials.page_id': recipientId,
+      'messenger.enabled': true,
+    }).lean();
+
+    if (!channelConfig) {
+      console.warn(
+        `[Messenger] No agent configured for page ID: ${recipientId}`
+      );
+      return res.status(200).json({ success: true });
+    }
+
+    const agentId = channelConfig.agent;
+
+    // Process message asynchronously
+    channelOrchestrator
+      .handleIncomingMessage(agentId, 'messenger', req.body, {
+        ip_address: req.ip,
+      })
+      .then(result => {
+        if (result?.conversation_id) {
+          console.log('[Messenger] Message processed:', result.conversation_id);
+        }
+      })
+      .catch(error => {
+        console.error('[Messenger] Error processing message:', error);
+      });
+
+    // Respond to webhook quickly (within 5 seconds for Meta)
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[Messenger] Webhook error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // ===== CHANNEL CONFIGURATION =====
 
 /**
@@ -154,6 +308,8 @@ const getChannelConfig = async (req, res) => {
         whatsapp: { enabled: false },
         telegram: { enabled: false },
         email: { enabled: false },
+        instagram: { enabled: false },
+        messenger: { enabled: false },
         website: { enabled: true },
       });
     }
@@ -332,6 +488,114 @@ const updateChannelConfig = async (req, res) => {
             );
           }
         });
+      }
+    }
+
+    // Update Instagram config
+    if (updates.instagram) {
+      if (!channelConfig.instagram) {
+        channelConfig.instagram = { credentials: {} };
+      }
+      if (!channelConfig.instagram.credentials) {
+        channelConfig.instagram.credentials = {};
+      }
+
+      const incomingCreds = updates.instagram.credentials || updates.instagram;
+
+      if (incomingCreds.page_id) {
+        channelConfig.instagram.credentials.page_id = incomingCreds.page_id;
+      }
+
+      if (incomingCreds.access_token) {
+        if (!incomingCreds.access_token.startsWith('U2FsdGVkX1')) {
+          channelConfig.instagram.credentials.access_token = encryption.encrypt(
+            incomingCreds.access_token
+          );
+        } else {
+          channelConfig.instagram.credentials.access_token =
+            incomingCreds.access_token;
+        }
+      }
+
+      if (incomingCreds.app_secret) {
+        if (!incomingCreds.app_secret.startsWith('U2FsdGVkX1')) {
+          channelConfig.instagram.credentials.app_secret = encryption.encrypt(
+            incomingCreds.app_secret
+          );
+        } else {
+          channelConfig.instagram.credentials.app_secret =
+            incomingCreds.app_secret;
+        }
+      }
+
+      if (updates.instagram.enabled !== undefined) {
+        channelConfig.instagram.enabled = updates.instagram.enabled;
+      }
+      if (updates.instagram.verify_token) {
+        channelConfig.instagram.verify_token = updates.instagram.verify_token;
+      }
+      if (updates.instagram.webhook_url) {
+        channelConfig.instagram.webhook_url = updates.instagram.webhook_url;
+      }
+      if (updates.instagram.settings) {
+        channelConfig.instagram.settings = {
+          ...channelConfig.instagram.settings,
+          ...updates.instagram.settings,
+        };
+      }
+    }
+
+    // Update Messenger config
+    if (updates.messenger) {
+      if (!channelConfig.messenger) {
+        channelConfig.messenger = { credentials: {} };
+      }
+      if (!channelConfig.messenger.credentials) {
+        channelConfig.messenger.credentials = {};
+      }
+
+      const incomingCreds = updates.messenger.credentials || updates.messenger;
+
+      if (incomingCreds.page_id) {
+        channelConfig.messenger.credentials.page_id = incomingCreds.page_id;
+      }
+
+      if (incomingCreds.access_token) {
+        if (!incomingCreds.access_token.startsWith('U2FsdGVkX1')) {
+          channelConfig.messenger.credentials.access_token = encryption.encrypt(
+            incomingCreds.access_token
+          );
+        } else {
+          channelConfig.messenger.credentials.access_token =
+            incomingCreds.access_token;
+        }
+      }
+
+      if (incomingCreds.app_secret) {
+        if (!incomingCreds.app_secret.startsWith('U2FsdGVkX1')) {
+          channelConfig.messenger.credentials.app_secret = encryption.encrypt(
+            incomingCreds.app_secret
+          );
+        } else {
+          channelConfig.messenger.credentials.app_secret =
+            incomingCreds.app_secret;
+        }
+      }
+
+      if (updates.messenger.enabled !== undefined) {
+        channelConfig.messenger.enabled = updates.messenger.enabled;
+      }
+      if (updates.messenger.verify_token) {
+        channelConfig.messenger.verify_token = updates.messenger.verify_token;
+      }
+      if (updates.messenger.webhook_url) {
+        channelConfig.messenger.webhook_url = updates.messenger.webhook_url;
+      }
+      if (updates.messenger.settings) {
+        channelConfig.messenger.settings = {
+          ...channelConfig.messenger.settings,
+          ...updates.messenger.settings,
+        };
       }
     }
 
@@ -548,6 +812,8 @@ module.exports = {
   handleWhatsAppWebhook,
   handleTelegramWebhook,
   handleEmailWebhook,
+  handleInstagramWebhook,
+  handleMessengerWebhook,
 
   // Configuration
   getChannelConfig,

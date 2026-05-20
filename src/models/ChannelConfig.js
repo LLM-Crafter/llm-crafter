@@ -160,6 +160,59 @@ const channelConfigSchema = new mongoose.Schema(
         },
       },
     },
+    // Instagram Configuration
+    instagram: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      credentials: {
+        page_id: String, // Instagram-connected Facebook Page ID
+        app_secret: String, // Encrypted - for webhook signature validation
+        access_token: String, // Encrypted - Page Access Token
+      },
+      webhook_url: String,
+      verify_token: String, // For Meta webhook verification
+      settings: {
+        auto_reply_delay_ms: {
+          type: Number,
+          default: 1000,
+        },
+        show_typing_indicator: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    },
+    // Facebook Messenger Configuration
+    messenger: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      credentials: {
+        page_id: String, // Facebook Page ID
+        app_secret: String, // Encrypted - for webhook signature validation
+        access_token: String, // Encrypted - Page Access Token
+      },
+      webhook_url: String,
+      verify_token: String, // For Meta webhook verification
+      settings: {
+        auto_reply_delay_ms: {
+          type: Number,
+          default: 1000,
+        },
+        show_typing_indicator: {
+          type: Boolean,
+          default: true,
+        },
+        enable_get_started: {
+          type: Boolean,
+          default: false,
+        },
+        greeting_text: String,
+      },
+    },
     // Website Widget Configuration
     website: {
       enabled: {
@@ -249,6 +302,8 @@ const channelConfigSchema = new mongoose.Schema(
       last_whatsapp_message: Date,
       last_telegram_message: Date,
       last_email_message: Date,
+      last_instagram_message: Date,
+      last_messenger_message: Date,
       last_website_message: Date,
       total_messages_by_channel: {
         whatsapp: {
@@ -260,6 +315,14 @@ const channelConfigSchema = new mongoose.Schema(
           default: 0,
         },
         email: {
+          type: Number,
+          default: 0,
+        },
+        instagram: {
+          type: Number,
+          default: 0,
+        },
+        messenger: {
           type: Number,
           default: 0,
         },
@@ -288,6 +351,18 @@ const channelConfigSchema = new mongoose.Schema(
         if (ret.telegram?.bot_token) {
           ret.telegram.bot_token = '***REDACTED***';
         }
+        if (ret.instagram?.credentials) {
+          ret.instagram.credentials = {
+            configured: !!(ret.instagram.credentials.access_token),
+            page_id: ret.instagram.credentials.page_id,
+          };
+        }
+        if (ret.messenger?.credentials) {
+          ret.messenger.credentials = {
+            configured: !!(ret.messenger.credentials.access_token),
+            page_id: ret.messenger.credentials.page_id,
+          };
+        }
         if (ret.email?.smtp_config?.password) {
           ret.email.smtp_config.password = '***REDACTED***';
         }
@@ -312,6 +387,8 @@ const channelConfigSchema = new mongoose.Schema(
 channelConfigSchema.index({ agent: 1 });
 channelConfigSchema.index({ organization: 1 });
 channelConfigSchema.index({ project: 1 });
+channelConfigSchema.index({ 'instagram.credentials.page_id': 1 }, { sparse: true });
+channelConfigSchema.index({ 'messenger.credentials.page_id': 1 }, { sparse: true });
 
 // Instance methods
 channelConfigSchema.methods.isChannelEnabled = function (channel) {
@@ -324,6 +401,8 @@ channelConfigSchema.methods.getEnabledChannels = function () {
   if (this.whatsapp?.enabled) enabled.push('whatsapp');
   if (this.telegram?.enabled) enabled.push('telegram');
   if (this.email?.enabled) enabled.push('email');
+  if (this.instagram?.enabled) enabled.push('instagram');
+  if (this.messenger?.enabled) enabled.push('messenger');
   if (this.website?.enabled) enabled.push('website');
   return enabled;
 };
@@ -342,6 +421,14 @@ channelConfigSchema.methods.updateAnalytics = function (channel) {
     case 'email':
       this.analytics.last_email_message = now;
       this.analytics.total_messages_by_channel.email += 1;
+      break;
+    case 'instagram':
+      this.analytics.last_instagram_message = now;
+      this.analytics.total_messages_by_channel.instagram += 1;
+      break;
+    case 'messenger':
+      this.analytics.last_messenger_message = now;
+      this.analytics.total_messages_by_channel.messenger += 1;
       break;
     case 'website':
       this.analytics.last_website_message = now;

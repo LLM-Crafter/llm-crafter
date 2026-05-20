@@ -14,6 +14,8 @@ const messageTransformerService = require('./messageTransformerService');
 const WhatsAppService = require('./channels/whatsappService');
 const TelegramService = require('./channels/telegramService');
 const EmailService = require('./channels/emailService');
+const InstagramService = require('./channels/instagramService');
+const MessengerService = require('./channels/messengerService');
 
 class ChannelOrchestrator {
   constructor() {
@@ -76,6 +78,26 @@ class ChannelOrchestrator {
         console.log(`[ChannelOrchestrator] Email enabled for agent ${agentId}`);
       }
 
+      // Initialize Instagram if enabled
+      if (channelConfig.instagram?.enabled) {
+        const service = new InstagramService(channelConfig);
+        this.channelServices.set(`${agentId}_instagram`, service);
+        enabledChannels.push('instagram');
+        console.log(
+          `[ChannelOrchestrator] Instagram enabled for agent ${agentId}`
+        );
+      }
+
+      // Initialize Messenger if enabled
+      if (channelConfig.messenger?.enabled) {
+        const service = new MessengerService(channelConfig);
+        this.channelServices.set(`${agentId}_messenger`, service);
+        enabledChannels.push('messenger');
+        console.log(
+          `[ChannelOrchestrator] Messenger enabled for agent ${agentId}`
+        );
+      }
+
       // Website is always available (backward compatibility)
       enabledChannels.push('website');
 
@@ -106,6 +128,10 @@ class ChannelOrchestrator {
     if (this.channelServices.has(`${agentId}_telegram`))
       channels.push('telegram');
     if (this.channelServices.has(`${agentId}_email`)) channels.push('email');
+    if (this.channelServices.has(`${agentId}_instagram`))
+      channels.push('instagram');
+    if (this.channelServices.has(`${agentId}_messenger`))
+      channels.push('messenger');
     channels.push('website'); // Always available
     return channels;
   }
@@ -172,13 +198,26 @@ class ChannelOrchestrator {
           await channelService.sendTypingAction(chatId);
         }
       }
+      if (channel === 'instagram' && channelService) {
+        const senderId = normalizedMessage.channel_metadata?.instagram?.sender_id;
+        if (senderId) {
+          await channelService.sendTypingAction(senderId);
+        }
+      }
+      if (channel === 'messenger' && channelService) {
+        const senderId = normalizedMessage.channel_metadata?.messenger?.sender_id;
+        if (senderId) {
+          await channelService.sendTypingAction(senderId);
+        }
+      }
 
       // Find or create conversation
       const conversation = await this.getOrCreateConversation(
         agentId,
         normalizedMessage.user_identifier,
         channel,
-        normalizedMessage.channel_metadata
+        normalizedMessage.channel_metadata,
+        channelService
       );
 
       console.log(
@@ -396,7 +435,8 @@ class ChannelOrchestrator {
         agentId,
         normalizedMessage.user_identifier,
         channel,
-        normalizedMessage.channel_metadata
+        normalizedMessage.channel_metadata,
+        channelService
       );
 
       // Process and store media attachments (if any) via the org's S3 config
@@ -508,7 +548,8 @@ class ChannelOrchestrator {
     agentId,
     userIdentifier,
     channel,
-    channelMetadata
+    channelMetadata,
+    channelService
   ) {
     try {
       // Channels with session windows that require new conversations after inactivity
@@ -568,6 +609,35 @@ class ChannelOrchestrator {
       }
 
       if (!conversation) {
+        // Fetch user profile for channels that support it
+        if (
+          (channel === 'instagram' || channel === 'messenger') &&
+          channelService
+        ) {
+          try {
+            const profile = await channelService.getUserProfile(userIdentifier);
+            if (profile) {
+              if (!channelMetadata) channelMetadata = {};
+              if (!channelMetadata[channel]) channelMetadata[channel] = {};
+              if (channel === 'messenger') {
+                const fullName = [profile.first_name, profile.last_name]
+                  .filter(Boolean)
+                  .join(' ');
+                channelMetadata[channel].user_name = fullName || null;
+                channelMetadata[channel].profile_pic = profile.profile_pic || null;
+              } else {
+                channelMetadata[channel].user_name = profile.name || null;
+                channelMetadata[channel].profile_pic = profile.profile_pic || null;
+              }
+            }
+          } catch (profileErr) {
+            console.warn(
+              `[ChannelOrchestrator] Failed to fetch ${channel} user profile (non-fatal):`,
+              profileErr.message
+            );
+          }
+        }
+
         // Create new conversation
         const title = this.generateConversationTitle(
           channel,
@@ -637,6 +707,18 @@ class ChannelOrchestrator {
           ? `Email: ${emailName}`
           : `Email: ${channelMetadata?.email?.from_email || userIdentifier}`;
 
+      case 'instagram':
+        const igName = channelMetadata?.instagram?.user_name;
+        return igName
+          ? `Instagram: ${igName}`
+          : `Instagram: ${userIdentifier}`;
+
+      case 'messenger':
+        const fbName = channelMetadata?.messenger?.user_name;
+        return fbName
+          ? `Messenger: ${fbName}`
+          : `Messenger: ${userIdentifier}`;
+
       case 'website':
         return `Website Chat: ${userIdentifier}`;
 
@@ -697,6 +779,14 @@ class ChannelOrchestrator {
             inReplyTo: channelMetadata?.email?.message_id,
             references: channelMetadata?.email?.thread_id,
           };
+          break;
+
+        case 'instagram':
+          recipient = channelMetadata?.instagram?.sender_id || userIdentifier;
+          break;
+
+        case 'messenger':
+          recipient = channelMetadata?.messenger?.sender_id || userIdentifier;
           break;
 
         default:
@@ -920,6 +1010,10 @@ class ChannelOrchestrator {
         } else if (channel === 'email' && userIdentifier.startsWith('email_')) {
           const email = userIdentifier.replace('email_', '');
           channelMetadata.email = { email_address: email };
+        } else if (channel === 'instagram') {
+          channelMetadata.instagram = { sender_id: userIdentifier };
+        } else if (channel === 'messenger') {
+          channelMetadata.messenger = { sender_id: userIdentifier };
         }
       }
 

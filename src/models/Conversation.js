@@ -80,7 +80,7 @@ const messageSchema = new mongoose.Schema({
   },
   // Channel-specific information for each message
   channel_info: {
-    channel: String, // 'whatsapp', 'telegram', 'email', 'website'
+    channel: String, // 'whatsapp', 'telegram', 'email', 'instagram', 'messenger', 'website'
     message_id: String, // Platform-specific message ID
     reply_to: String, // For threading/replies
     media: [
@@ -126,7 +126,7 @@ const conversationSchema = new mongoose.Schema(
     // Channel where this conversation is taking place
     channel: {
       type: String,
-      enum: ['website', 'whatsapp', 'telegram', 'email'],
+      enum: ['website', 'whatsapp', 'telegram', 'email', 'instagram', 'messenger'],
       default: 'website',
     },
     // Channel-specific metadata

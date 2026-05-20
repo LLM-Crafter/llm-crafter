@@ -31,6 +31,26 @@ router.post(
 // Email webhooks
 router.post('/webhooks/email/:agentId', channelController.handleEmailWebhook);
 
+// Instagram webhooks (shared endpoint — routes by recipient ID in payload)
+router.get(
+  '/webhooks/instagram',
+  channelController.handleInstagramWebhook
+);
+router.post(
+  '/webhooks/instagram',
+  channelController.handleInstagramWebhook
+);
+
+// Facebook Messenger webhooks (shared endpoint — routes by recipient ID in payload)
+router.get(
+  '/webhooks/messenger',
+  channelController.handleMessengerWebhook
+);
+router.post(
+  '/webhooks/messenger',
+  channelController.handleMessengerWebhook
+);
+
 // ===== AUTHENTICATED CHANNEL CONFIGURATION ROUTES =====
 
 // Get channel configuration for an agent
