@@ -1,12 +1,14 @@
 /**
  * Instagram Channel Service
- * Uses the Meta Instagram Messaging API (Graph API)
+ * Uses the Instagram API with Instagram Login (graph.instagram.com)
  */
 
 const BaseChannelService = require('./baseChannelService');
 const axios = require('axios');
 const crypto = require('crypto');
 const encryption = require('../../utils/encryption');
+
+const IG_API_BASE = 'https://graph.instagram.com/v25.0';
 
 class InstagramService extends BaseChannelService {
   constructor(channelConfig) {
@@ -31,8 +33,8 @@ class InstagramService extends BaseChannelService {
         throw new Error('Instagram channel is not enabled');
       }
 
-      const pageId = this.instagramConfig.credentials.page_id;
-      const url = `https://graph.facebook.com/v25.0/${pageId}/messages`;
+      const igId = this.instagramConfig.credentials.page_id;
+      const url = `${IG_API_BASE}/${igId}/messages`;
 
       const accessToken = this.safeDecrypt(
         this.instagramConfig.credentials.access_token
@@ -41,7 +43,6 @@ class InstagramService extends BaseChannelService {
       const payload = {
         recipient: { id: recipient },
         message: { text: message },
-        messaging_type: 'RESPONSE',
       };
 
       const response = await axios.post(url, payload, {
@@ -67,7 +68,8 @@ class InstagramService extends BaseChannelService {
   }
 
   /**
-   * Send a media message (image) via Instagram Messaging API
+   * Send a media message via Instagram Messaging API
+   * Supports: image, video, audio, file (pdf)
    */
   async sendMediaMessage(recipient, media, options = {}) {
     try {
@@ -75,14 +77,14 @@ class InstagramService extends BaseChannelService {
         throw new Error('Instagram channel is not enabled');
       }
 
-      const pageId = this.instagramConfig.credentials.page_id;
-      const url = `https://graph.facebook.com/v25.0/${pageId}/messages`;
+      const igId = this.instagramConfig.credentials.page_id;
+      const url = `${IG_API_BASE}/${igId}/messages`;
 
       const accessToken = this.safeDecrypt(
         this.instagramConfig.credentials.access_token
       );
 
-      // Instagram supports image, video, audio, file attachments
+      // Map document type to file (Instagram supports: image, video, audio, file)
       const attachmentType = media.type === 'document' ? 'file' : media.type;
 
       const payload = {
@@ -92,11 +94,9 @@ class InstagramService extends BaseChannelService {
             type: attachmentType,
             payload: {
               url: media.url,
-              is_reusable: true,
             },
           },
         },
-        messaging_type: 'RESPONSE',
       };
 
       const response = await axios.post(url, payload, {
@@ -245,8 +245,8 @@ class InstagramService extends BaseChannelService {
    */
   async sendTypingAction(recipientId) {
     try {
-      const pageId = this.instagramConfig.credentials.page_id;
-      const url = `https://graph.facebook.com/v25.0/${pageId}/messages`;
+      const igId = this.instagramConfig.credentials.page_id;
+      const url = `${IG_API_BASE}/${igId}/messages`;
 
       const accessToken = this.safeDecrypt(
         this.instagramConfig.credentials.access_token
@@ -281,10 +281,10 @@ class InstagramService extends BaseChannelService {
       );
 
       const response = await axios.get(
-        `https://graph.facebook.com/v25.0/${userId}`,
+        `${IG_API_BASE}/${userId}`,
         {
           params: {
-            fields: 'name,profile_pic',
+            fields: 'name,username',
             access_token: accessToken,
           },
         }
@@ -292,7 +292,8 @@ class InstagramService extends BaseChannelService {
 
       return response.data;
     } catch (error) {
-      console.warn('[Instagram] Failed to get user profile:', error.message);
+      const errData = error.response?.data;
+      console.warn('[Instagram] Failed to get user profile:', error.message, errData ? JSON.stringify(errData) : '');
       return null;
     }
   }

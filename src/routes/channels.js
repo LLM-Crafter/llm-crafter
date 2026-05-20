@@ -12,7 +12,17 @@ const organizationAuth = require('../middleware/organizationAuth');
 // ===== PUBLIC WEBHOOK ENDPOINTS (No authentication) =====
 // These are called by external services (WhatsApp, Telegram, etc.)
 
-// WhatsApp webhooks
+// WhatsApp webhooks (shared endpoint — routes by phone_number_id in payload)
+router.get(
+  '/webhooks/whatsapp',
+  channelController.handleWhatsAppSharedWebhook
+);
+router.post(
+  '/webhooks/whatsapp',
+  channelController.handleWhatsAppSharedWebhook
+);
+
+// WhatsApp webhooks (per-agent — legacy, kept for existing customers)
 router.get(
   '/webhooks/whatsapp/:agentId',
   channelController.handleWhatsAppWebhook

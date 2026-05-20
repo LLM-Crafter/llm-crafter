@@ -65,6 +65,80 @@ const handleWhatsAppWebhook = async (req, res) => {
 };
 
 /**
+ * WhatsApp shared webhook handler (routes by phone_number_id in payload)
+ */
+const handleWhatsAppSharedWebhook = async (req, res) => {
+  try {
+    // Meta webhook verification (GET request)
+    if (req.method === 'GET') {
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
+
+      const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN;
+
+      if (mode === 'subscribe' && token === expectedToken) {
+        console.log('[WhatsApp] Shared webhook verified');
+        return res.status(200).send(challenge);
+      } else {
+        return res.status(403).send('Verification failed');
+      }
+    }
+
+    // Handle incoming message
+    console.log(
+      '[WhatsApp] Received shared webhook:',
+      JSON.stringify(req.body, null, 2)
+    );
+
+    // Extract phone_number_id from the webhook payload
+    const entry = req.body.entry?.[0];
+    const phoneNumberId =
+      entry?.changes?.[0]?.value?.metadata?.phone_number_id;
+
+    if (!phoneNumberId) {
+      console.warn('[WhatsApp] Could not extract phone_number_id from webhook');
+      return res.status(200).json({ success: true });
+    }
+
+    // Look up which agent owns this WhatsApp phone number
+    const channelConfig = await ChannelConfig.findOne({
+      'whatsapp.credentials.phone_number_id': phoneNumberId,
+      'whatsapp.enabled': true,
+    }).lean();
+
+    if (!channelConfig) {
+      console.warn(
+        `[WhatsApp] No agent configured for phone_number_id: ${phoneNumberId}`
+      );
+      return res.status(200).json({ success: true });
+    }
+
+    const agentId = channelConfig.agent;
+
+    // Process message asynchronously
+    channelOrchestrator
+      .handleIncomingMessage(agentId, 'whatsapp', req.body, {
+        ip_address: req.ip,
+      })
+      .then(result => {
+        if (result?.conversation_id) {
+          console.log('[WhatsApp] Message processed:', result.conversation_id);
+        }
+      })
+      .catch(error => {
+        console.error('[WhatsApp] Error processing message:', error);
+      });
+
+    // Respond to webhook quickly (within 5 seconds for Meta)
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[WhatsApp] Shared webhook error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
  * Telegram webhook handler
  */
 const handleTelegramWebhook = async (req, res) => {
@@ -175,8 +249,16 @@ const handleInstagramWebhook = async (req, res) => {
     }).lean();
 
     if (!channelConfig) {
+      // Debug: log all instagram configs to help identify the mismatch
+      const allInstagramConfigs = await ChannelConfig.find({
+        'instagram.enabled': true,
+      }).select('agent instagram.credentials.page_id').lean();
       console.warn(
-        `[Instagram] No agent configured for recipient ID: ${recipientId}`
+        `[Instagram] No agent configured for recipient ID: ${recipientId}. Existing configs:`,
+        JSON.stringify(allInstagramConfigs.map(c => ({
+          agent: c.agent,
+          page_id: c.instagram?.credentials?.page_id,
+        })))
       );
       return res.status(200).json({ success: true });
     }
@@ -810,6 +892,7 @@ const getEnabledChannels = async (req, res) => {
 module.exports = {
   // Webhooks
   handleWhatsAppWebhook,
+  handleWhatsAppSharedWebhook,
   handleTelegramWebhook,
   handleEmailWebhook,
   handleInstagramWebhook,

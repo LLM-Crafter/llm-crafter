@@ -627,6 +627,7 @@ class ChannelOrchestrator {
                 channelMetadata[channel].profile_pic = profile.profile_pic || null;
               } else {
                 channelMetadata[channel].user_name = profile.name || null;
+                channelMetadata[channel].username = profile.username || null;
                 channelMetadata[channel].profile_pic = profile.profile_pic || null;
               }
             }
@@ -666,8 +667,9 @@ class ChannelOrchestrator {
           conversation.channel_metadata = conversation.channel_metadata || {};
           conversation.channel_metadata[channel] = channelMetadata[channel];
           conversation.markModified('channel_metadata');
-          await conversation.save();
         }
+
+        await conversation.save();
       }
 
       return conversation;
