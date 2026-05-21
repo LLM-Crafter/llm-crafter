@@ -240,6 +240,13 @@ const agentSchema = new mongoose.Schema(
         type: String,
         default: null,
       },
+      // Optional custom prompt for generating conversation titles.
+      // When set, this prompt is used instead of the default title generation prompt.
+      // The conversation messages will be appended as context.
+      title_generation_prompt: {
+        type: String,
+        default: null,
+      },
       // Small agent graph mode (optional, chatbot-only)
       // When true, routes chatbot reasoning through a multi-role orchestrator
       // (planner → responder → optional critic) instead of the single iterative loop.

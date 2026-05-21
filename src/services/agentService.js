@@ -240,15 +240,13 @@ class AgentService {
       });
     }
 
-    // Generate AI-powered conversation title after second user message
+    // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter
     const userMessageCount = conversation.messages.filter(
       msg => msg.role === 'user'
     ).length;
     
-    if (
-      userMessageCount === 2 &&
-      conversation.title === 'New Conversation'
-    ) {
+    const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
+    if (shouldGenerateTitle) {
       const titleResult = await this.generateAIConversationTitle(
         conversation,
         agent
@@ -512,15 +510,13 @@ class AgentService {
       assistantMessageId = lastMsg?._id || null;
     }
 
-    // Generate AI-powered conversation title after second user message
+    // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter
     const userMessageCount = conversation.messages.filter(
       msg => msg.role === 'user'
     ).length;
     
-    if (
-      userMessageCount === 2 &&
-      conversation.title === 'New Conversation'
-    ) {
+    const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
+    if (shouldGenerateTitle) {
       const titleResult = await this.generateAIConversationTitle(
         conversation,
         agent
@@ -2542,8 +2538,10 @@ Your response:`;
    */
   async generateAIConversationTitle(conversation, agent) {
     try {
-      // Get the conversation messages (first 4 messages for context), decrypted
-      const messages = conversation.getDecryptedMessages().slice(0, 4);
+      // Get the conversation messages for context, decrypted
+      // Use more messages on regeneration for better context
+      const allMessages = conversation.getDecryptedMessages();
+      const messages = allMessages.slice(0, Math.min(allMessages.length, 10));
       
       if (messages.length < 2) {
         return null; // Not enough context yet
@@ -2562,8 +2560,11 @@ Your response:`;
 
       // Use a cost-effective model
       const model = 'gpt-5.4-nano';
-      
-      const prompt = `Based on the following conversation, generate a concise title (maximum 10 words) that captures the main topic or intent. Respond with only the title, no quotes or additional text.\n\n${conversationContext}`;
+
+      const customTitlePrompt = agent.config?.title_generation_prompt;
+      const prompt = customTitlePrompt
+        ? `${customTitlePrompt}\n\n${conversationContext}`
+        : `Based on the following conversation, generate a concise title (maximum 10 words) that captures the main topic or intent. Respond with only the title, no quotes or additional text.\n\n${conversationContext}`;
 
       const systemPrompt = 'You are a helpful assistant that generates concise, descriptive conversation titles. Keep titles under 10 words and make them clear and informative.';
 
