@@ -232,6 +232,14 @@ const agentSchema = new mongoose.Schema(
         type: [String],
         default: [],
       },
+      // Optional custom prompt for generating a user-facing display summary.
+      // When set, an additional LLM call formats the structured summary into
+      // human-readable text using this prompt. Does not affect the internal
+      // structured summary used for context/token-saving.
+      display_summary_prompt: {
+        type: String,
+        default: null,
+      },
       // Small agent graph mode (optional, chatbot-only)
       // When true, routes chatbot reasoning through a multi-role orchestrator
       // (planner → responder → optional critic) instead of the single iterative loop.

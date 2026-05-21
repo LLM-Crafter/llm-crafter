@@ -324,6 +324,56 @@ Guidelines:
   }
 
   /**
+   * Generate a user-facing display summary using a custom prompt.
+   * Takes the structured summary data and conversation messages, then formats
+   * via an LLM call guided by the agent's display_summary_prompt.
+   *
+   * @param {Object} summaryData - The structured summary (key_topics, decisions, etc.)
+   * @param {string} displayPrompt - The custom prompt defining desired format
+   * @param {Object} agent - Populated Agent document (needs api_key populated)
+   * @param {Array} messages - The conversation messages that were summarized
+   * @returns {Promise<{text: string, usage: Object|null}>}
+   */
+  async generateDisplaySummary(summaryData, displayPrompt, agent, messages = []) {
+    try {
+      const apiKey = await APIKey.findById(agent.api_key._id).populate('provider');
+      const decryptedKey = apiKey.getDecryptedKey();
+      const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
+
+      const model = this.selectSummaryModel(agent.llm_settings.model);
+
+      // Build conversation excerpt from messages (truncate to avoid excessive tokens)
+      let conversationExcerpt = '';
+      if (messages.length > 0) {
+        const relevantMessages = messages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => {
+            const content = m.content && m.content.length > 300
+              ? m.content.substring(0, 297) + '...'
+              : m.content;
+            return `${m.role.toUpperCase()}: ${content}`;
+          })
+          .join('\n');
+        conversationExcerpt = `\n\nConversation messages:\n${relevantMessages}`;
+      }
+
+      const prompt = `Here is the structured conversation summary data:\n${JSON.stringify(summaryData, null, 2)}${conversationExcerpt}\n\nGenerate a display summary following these instructions:\n${displayPrompt}`;
+
+      const response = await openai.generateCompletion(
+        model,
+        prompt,
+        { temperature: 0.4, max_tokens: 700 },
+        'You are a summary formatter. Return only the formatted summary text, nothing else.'
+      );
+
+      return { text: response.content.trim(), usage: response.usage };
+    } catch (error) {
+      console.error('Display summary generation failed:', error);
+      return { text: null, usage: null };
+    }
+  }
+
+  /**
    * Estimate token savings from summarization
    */
   estimateTokenSavings(originalMessages, summaryLength = 200) {

@@ -2758,13 +2758,30 @@ Your response:`;
         existingSummary
       );
 
+      // Generate display summary text — either via custom prompt or fallback formatter
+      let displaySummaryText;
+      let displaySummaryUsage = null;
+      const displayPrompt = agent.config?.display_summary_prompt;
+      if (displayPrompt) {
+        const displayResult = await summarizationService.generateDisplaySummary(
+          result.summary,
+          displayPrompt,
+          agent,
+          messagesToSummarize
+        );
+        displaySummaryText = displayResult.text || this.generateSimpleSummaryText(result.summary);
+        displaySummaryUsage = displayResult.usage;
+      } else {
+        displaySummaryText = this.generateSimpleSummaryText(result.summary);
+      }
+
       // Generate translations for the simple summary text if required languages are configured
       const requiredLanguages = agent.config?.required_languages || [];
       let summaryTranslations = [];
       let translationUsage = null;
       if (requiredLanguages.length > 0) {
         const translationResult = await summarizationService.generateTranslations(
-          this.generateSimpleSummaryText(result.summary),
+          displaySummaryText,
           requiredLanguages,
           agent
         );
@@ -2773,16 +2790,18 @@ Your response:`;
       }
 
       // Update conversation with new summary and translations
-      await conversation.updateSummary(result.summary, summaryTranslations);
+      await conversation.updateSummary(result.summary, summaryTranslations, displaySummaryText);
 
-      // Accumulate background LLM costs (summarization + translations) into conversation metadata
+      // Accumulate background LLM costs (summarization + translations + display summary) into conversation metadata
       const summaryCost = result.token_usage?.cost || 0;
       const summaryTokens = result.token_usage?.total_tokens || 0;
       const translationCost = translationUsage?.cost || 0;
       const translationTokens = translationUsage?.total_tokens || 0;
-      if (summaryCost + translationCost > 0) {
-        conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + summaryCost + translationCost;
-        conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + summaryTokens + translationTokens;
+      const displayCost = displaySummaryUsage?.cost || 0;
+      const displayTokens = displaySummaryUsage?.total_tokens || 0;
+      if (summaryCost + translationCost + displayCost > 0) {
+        conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + summaryCost + translationCost + displayCost;
+        conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + summaryTokens + translationTokens + displayTokens;
         await conversation.save();
       }
 

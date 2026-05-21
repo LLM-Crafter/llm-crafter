@@ -645,7 +645,7 @@ conversationSchema.methods.buildSummaryContext = function () {
 };
 
 // Method to update conversation summary
-conversationSchema.methods.updateSummary = function (summaryData, summaryTranslations = []) {
+conversationSchema.methods.updateSummary = function (summaryData, summaryTranslations = [], displaySummaryText = null) {
   this.conversation_summary = {
     key_topics: summaryData.key_topics || [],
     user_preferences: summaryData.user_preferences || {},
@@ -665,8 +665,8 @@ conversationSchema.methods.updateSummary = function (summaryData, summaryTransla
   this.metadata.summary_version += 1;
   this.metadata.requires_summarization = false;
 
-  // Also update the simple summary field for backwards compatibility
-  this.summary = this.generateSimpleSummary(summaryData);
+  // Use custom display summary if provided, otherwise fall back to simple format
+  this.summary = displaySummaryText || this.generateSimpleSummary(summaryData);
 
   return this.save();
 };
