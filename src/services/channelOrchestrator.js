@@ -353,7 +353,7 @@ class ChannelOrchestrator {
         agentResponse,
         channel,
         normalizedMessage.channel_metadata,
-        options
+        { ...options, conversationId: conversation._id }
       );
 
       // Update channel analytics
