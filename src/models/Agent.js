@@ -633,4 +633,43 @@ agentSchema.methods.getGoogleCalendarConfig = function () {
   };
 };
 
+// Method to configure voice (TTS) for presentation and future voice features
+agentSchema.methods.configureVoice = function (config) {
+  const VOICE_TOOLS = ['add_slide', 'generate_slide_audio'];
+
+  // Apply config to all voice-capable tools that are attached to this agent
+  let configured = false;
+  for (const toolName of VOICE_TOOLS) {
+    const tool = this.tools.find(t => t.name === toolName);
+    if (tool) {
+      tool.parameters = { ...tool.parameters, ...config };
+      configured = true;
+    }
+  }
+
+  if (!configured) {
+    throw new Error(
+      'No voice-capable tools found on this agent. Add add_slide or generate_slide_audio first.'
+    );
+  }
+
+  return this.save();
+};
+
+// Method to get voice configuration (never exposes raw keys)
+agentSchema.methods.getVoiceConfig = function () {
+  const tool =
+    this.tools.find(t => t.name === 'generate_slide_audio') ||
+    this.tools.find(t => t.name === 'add_slide');
+
+  if (!tool) return null;
+
+  return {
+    provider: tool.parameters?.provider || 'openai',
+    voice_id: tool.parameters?.voice_id || null,
+    model: tool.parameters?.model || null,
+    has_elevenlabs_api_key: !!tool.parameters?.elevenlabs_api_key,
+  };
+};
+
 module.exports = mongoose.model('Agent', agentSchema);

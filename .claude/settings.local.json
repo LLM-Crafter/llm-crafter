@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm install *)",
+      "Bash(node -e \"require\\('pptxgenjs'\\); console.log\\('pptxgenjs OK'\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node --check src/services/toolService.js)",
+      "Bash(node --check src/config/systemTools.js)",
+      "Bash(node --check src/services/voiceService.js)"
+    ]
+  }
+}

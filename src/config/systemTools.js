@@ -834,6 +834,393 @@ const systemTools = [
     },
     is_system_tool: true,
   },
+
+  // ===== PRESENTATION TOOLS =====
+
+  {
+    name: 'create_presentation',
+    display_name: 'Create Presentation',
+    description:
+      'Start a new PowerPoint presentation session. Returns a session_id used by all subsequent presentation tools. Before adding any slides, decide on a bold color palette and font pair that fits the topic — commit to it across all slides. Use dark backgrounds for title/conclusion slides and lighter ones for content slides (sandwich structure), or go fully dark for a premium feel.',
+    category: 'utility',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Title of the presentation',
+        },
+        author: {
+          type: 'string',
+          description: 'Author name embedded in the file metadata',
+        },
+        theme_color: {
+          type: 'string',
+          description: 'Primary hex color for the theme, e.g. "1E2761"',
+        },
+        layout: {
+          type: 'string',
+          description: 'Slide layout: LAYOUT_16x9 (default) or LAYOUT_4x3',
+          enum: ['LAYOUT_16x9', 'LAYOUT_4x3'],
+          default: 'LAYOUT_16x9',
+        },
+      },
+      required: ['title'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        session_id: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'createPresentationHandler',
+      config: {},
+    },
+    is_system_tool: true,
+  },
+
+  {
+    name: 'add_slide',
+    display_name: 'Add Slide',
+    description: `Add a slide to an existing presentation session.
+
+DESIGN RULES — apply every time, no exceptions:
+1. ALWAYS pass a design object with explicit hex colors (WITHOUT # prefix) on every slide. Never leave colors at defaults.
+2. Pick a palette suited to the topic. Use it consistently on every slide — same bg, title, text, accent throughout.
+3. VARY layouts — do not use the same layout_type back-to-back.
+4. Title font size: 36-44pt. Body text: 14-18pt. Never skip this contrast.
+5. Left-align body text. Center only for title_slide.
+6. For a modern look: use gradient_from + gradient_to instead of a flat background_color.
+
+MODERN PALETTES — use these exact hex values (no # prefix):
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ Slate Pro       bg=1E293B  title=F1F5F9  text=94A3B8  accent=38BDF8            │
+│ Midnight Indigo bg=0F172A  title=E2E8F0  text=94A3B8  accent=818CF8            │
+│ Charcoal Ember  bg=1C1917  title=FAFAF9  text=A8A29E  accent=F97316            │
+│ Navy Gold       bg=1E3A5F  title=FFFFFF  text=CBD5E1  accent=F59E0B            │
+│ Deep Green      bg=052E16  title=DCFCE7  text=86EFAC  accent=4ADE80            │
+│ Dark Rose       bg=1F0B12  title=FDF2F8  text=F3BAD4  accent=EC4899            │
+│ Gunmetal        bg=212121  title=FAFAFA  text=9E9E9E  accent=FFD600            │
+│ Clean Light     bg=F8FAFC  title=0F172A  text=475569  accent=6366F1            │
+│ Warm Paper      bg=FAFAF0  title=1C1917  text=44403C  accent=D97706            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+GRADIENT BACKGROUNDS (highly recommended for modern look):
+• Use gradient_from + gradient_to + gradient_angle (135 = diagonal)
+• Slate gradient:    gradient_from=0F172A gradient_to=1E293B angle=135
+• Indigo gradient:   gradient_from=0F0C29 gradient_to=302B63 angle=135
+• Ember gradient:    gradient_from=1C1917 gradient_to=3D1A0F angle=160
+• Navy gradient:     gradient_from=0D1B2A gradient_to=1E3A5F angle=135
+• Green gradient:    gradient_from=052E16 gradient_to=14532D angle=160
+
+FONT PAIRS — use title_font + body_font on every slide:
+• Trebuchet MS / Calibri       — clean, tech-forward (default)
+• Georgia / Calibri            — editorial, trustworthy
+• Arial Black / Arial          — bold, impactful
+• Cambria / Calibri Light      — professional, refined
+
+LAYOUT SELECTION:
+• title_slide    → opening/closing only; split accent-block left, title right
+• section_header → chapter dividers; left accent strip + title
+• content        → main slides; left accent strip + title + bullets
+• two_column     → comparisons; vertical rule between columns
+• big_fact       → single impactful stat (use max once per deck)
+• quote          → testimonials; vertical left bar + italic quote
+
+AVOID:
+• Flat white backgrounds — use a dark palette or gradient
+• Same layout_type consecutively
+• More than 5-6 bullets per slide — split into two slides
+• Low-contrast text (e.g., gray text on dark gray bg)
+• Long bullet text — keep each bullet under 10 words`,
+    category: 'utility',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        session_id: {
+          type: 'string',
+          description: 'Presentation session ID returned by create_presentation',
+        },
+        title: {
+          type: 'string',
+          description: 'Slide title (or the main quote/stat for quote/big_fact layouts)',
+        },
+        layout_type: {
+          type: 'string',
+          description: 'Visual layout type. title_slide: centered hero (opening/closing only). section_header: full-bleed accent divider. content: title + bullets (main slides). two_column: two equal bullet columns. big_fact: giant stat + label (max one per deck). quote: italic blockquote + attribution.',
+          enum: ['content', 'title_slide', 'section_header', 'quote', 'big_fact', 'two_column'],
+          default: 'content',
+        },
+        subtitle: {
+          type: 'string',
+          description: 'Secondary text. Role depends on layout: tagline for title_slide, description for section_header, attribution (speaker name) for quote, supporting label for big_fact.',
+        },
+        bullets: {
+          type: 'array',
+          description: 'Bullet point strings for content layout. Keep to 4-6 short, punchy points. For two_column use left_bullets + right_bullets instead.',
+          items: { type: 'string' },
+        },
+        left_bullets: {
+          type: 'array',
+          description: 'Left column bullet points (two_column layout only)',
+          items: { type: 'string' },
+        },
+        right_bullets: {
+          type: 'array',
+          description: 'Right column bullet points (two_column layout only)',
+          items: { type: 'string' },
+        },
+        notes: {
+          type: 'string',
+          description: 'Speaker notes. Also used as TTS narration script when generate_audio is true — write it as natural speech.',
+        },
+        design: {
+          type: 'object',
+          description: 'Visual design tokens. ALWAYS include these — never leave colors at defaults. Use one of the curated palettes from the tool description.',
+          properties: {
+            background_color: {
+              type: 'string',
+              description: 'Background hex color WITHOUT #. Dark backgrounds recommended for premium look. Examples from palettes: "1E2761" (Midnight Executive), "028090" (Teal Trust), "990011" (Cherry Bold), "36454F" (Charcoal Minimal)',
+            },
+            title_color: {
+              type: 'string',
+              description: 'Title/heading hex color WITHOUT #. Must contrast strongly with background. Examples: "CADCFC", "F9E795", "FFFFFF", "F2F2F2"',
+            },
+            text_color: {
+              type: 'string',
+              description: 'Body text hex color WITHOUT #. Must be readable on the background. Examples: "E8EAF6", "D0D0D0", "E0F7FA"',
+            },
+            accent_color: {
+              type: 'string',
+              description: 'Sharp accent hex color WITHOUT # for dividers, shapes, and highlights. Should pop against the background. Examples: "FFFFFF", "F96167", "4FC3F7", "02C39A"',
+            },
+            title_font: {
+              type: 'string',
+              description: 'Font face for slide titles. Use a font with character. Examples: "Georgia", "Arial Black", "Trebuchet MS", "Cambria", "Palatino Linotype"',
+            },
+            body_font: {
+              type: 'string',
+              description: 'Font face for body text and bullets. Use a clean, readable font. Examples: "Calibri", "Arial", "Calibri Light"',
+            },
+            title_font_size: {
+              type: 'number',
+              description: 'Title font size in pt. Range 36-44 for normal slides. title_slide can go up to 52. big_fact uses 80 automatically.',
+            },
+            text_font_size: {
+              type: 'number',
+              description: 'Body/bullet font size in pt. Range 14-18. Use 16 as a solid default.',
+            },
+            align: {
+              type: 'string',
+              description: 'Text alignment. Use "left" for content/two_column (default). Use "center" only for title_slide.',
+              enum: ['left', 'center', 'right'],
+            },
+            gradient_from: {
+              type: 'string',
+              description: 'Gradient start color hex WITHOUT #. Overrides background_color when set together with gradient_to. Highly recommended for modern look. Example: "0F172A"',
+            },
+            gradient_to: {
+              type: 'string',
+              description: 'Gradient end color hex WITHOUT #. Example: "1E293B". Pair with gradient_from.',
+            },
+            gradient_angle: {
+              type: 'number',
+              description: 'Gradient direction in degrees. 0=top→bottom, 90=left→right, 135=diagonal top-left (default), 160=steep diagonal.',
+            },
+            background_image: {
+              type: 'string',
+              description: 'URL or local path to an image that fills the entire slide background. A semi-transparent dark overlay is added automatically to keep text legible. Use this when a client logo or photo background is desired for a specific slide.',
+            },
+          },
+          additionalProperties: false,
+        },
+        generate_audio: {
+          type: 'boolean',
+          description: 'Auto-generate TTS audio from notes and attach to this slide. Requires notes to be set.',
+          default: false,
+        },
+      },
+      required: ['session_id', 'title'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        slide_index: { type: 'number' },
+        slide_count: { type: 'number' },
+        audio_cost: { type: 'number' },
+        message: { type: 'string' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'addSlideHandler',
+      config: {},
+    },
+    is_system_tool: true,
+  },
+
+  {
+    name: 'generate_slide_audio',
+    display_name: 'Generate Slide Audio',
+    description:
+      'Generate TTS audio narration for a specific slide and embed it. Audio autoplays when the slide appears in slideshow mode — no manual setup required. Write the text as natural spoken language, complete sentences.',
+    category: 'utility',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        session_id: {
+          type: 'string',
+          description: 'Presentation session ID',
+        },
+        slide_index: {
+          type: 'number',
+          description: 'Zero-based index of the slide to attach audio to (0 = first slide)',
+        },
+        text: {
+          type: 'string',
+          description: 'Narration text to convert to speech. Write as natural spoken language — complete sentences, conversational tone. Avoid bullet-point formatting.',
+        },
+        provider: {
+          type: 'string',
+          description: 'TTS provider. "openai" uses the agent\'s existing API key. "elevenlabs" requires a separately configured ElevenLabs API key.',
+          enum: ['openai', 'elevenlabs'],
+          default: 'openai',
+        },
+        voice_id: {
+          type: 'string',
+          description: 'Voice selection. OpenAI options: alloy (neutral), echo (male), fable (storytelling), onyx (deep male), nova (female), shimmer (soft female). ElevenLabs: voice UUID from your ElevenLabs account.',
+        },
+        model: {
+          type: 'string',
+          description: 'TTS model. OpenAI: "tts-1" (fast, lower quality) or "tts-1-hd" (slower, higher quality). ElevenLabs: "eleven_turbo_v2_5" (fast) or "eleven_multilingual_v2" (highest quality).',
+        },
+      },
+      required: ['session_id', 'slide_index', 'text'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        attached: { type: 'boolean' },
+        characters_used: { type: 'number' },
+        cost: { type: 'number' },
+        provider: { type: 'string' },
+        model: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'generateSlideAudioHandler',
+      config: {},
+    },
+    is_system_tool: true,
+  },
+
+  {
+    name: 'save_presentation',
+    display_name: 'Save Presentation',
+    description:
+      'Finalize and save the presentation as a .pptx file. Cleans up the session and temporary audio files. Call this once after all slides have been added.',
+    category: 'utility',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        session_id: {
+          type: 'string',
+          description: 'Presentation session ID',
+        },
+        filename: {
+          type: 'string',
+          description: 'Output filename without extension, e.g. "q2_results" or "ai_healthcare_2025"',
+        },
+      },
+      required: ['session_id', 'filename'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string' },
+        slides_count: { type: 'number' },
+        total_audio_cost: { type: 'number' },
+        message: { type: 'string' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'savePresentationHandler',
+      config: {},
+    },
+    is_system_tool: true,
+  },
+
+  {
+    name: 'set_presentation_logo',
+    display_name: 'Set Presentation Logo',
+    description: `Attach a logo image to a presentation session. The logo will be automatically placed on every slide added after this call.
+
+Use this whenever a client logo or branding image is provided (e.g. via an uploaded file URL). Call this right after create_presentation and before adding any slides.
+
+POSITION guide:
+• bottom-right — safe for most layouts; never overlaps content (default)
+• bottom-left  — use when bullets or content are on the right side
+• top-right    — use for title slides or when bottom is busy
+• top-left     — rare; reserve for brand-heavy designs
+
+SIZE guide: keep width between 0.8–1.5 inches. Most logos look best at w=1.2, h=0.5.`,
+    category: 'utility',
+    parameters_schema: {
+      type: 'object',
+      properties: {
+        session_id: {
+          type: 'string',
+          description: 'Presentation session ID',
+        },
+        logo_url: {
+          type: 'string',
+          description: 'URL or local file path to the logo image (PNG or JPG recommended)',
+        },
+        position: {
+          type: 'string',
+          description: 'Where to place the logo on each slide.',
+          enum: ['bottom-right', 'bottom-left', 'top-right', 'top-left'],
+          default: 'bottom-right',
+        },
+        width: {
+          type: 'number',
+          description: 'Logo width in inches (default 1.2)',
+        },
+        height: {
+          type: 'number',
+          description: 'Logo height in inches (default 0.5)',
+        },
+        opacity: {
+          type: 'number',
+          description: 'Transparency 0–100 where 0 = fully opaque (default 0)',
+        },
+      },
+      required: ['session_id', 'logo_url'],
+      additionalProperties: false,
+    },
+    return_schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    },
+    implementation: {
+      type: 'internal',
+      handler: 'setPresentationLogoHandler',
+      config: {},
+    },
+    is_system_tool: true,
+  },
 ];
 
 async function initializeSystemTools() {

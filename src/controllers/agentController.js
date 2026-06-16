@@ -4,9 +4,79 @@ const AgentExecution = require('../models/AgentExecution');
 const Project = require('../models/Project');
 const ApiKey = require('../models/ApiKey');
 const FileUpload = require('../models/FileUpload');
+const Organization = require('../models/Organization');
 const agentService = require('../services/agentService');
 const toolService = require('../services/toolService');
 const summarizationService = require('../services/summarizationService');
+const { v4: uuidv4 } = require('uuid');
+const path = require('path');
+const fs = require('fs');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const encryptionUtil = require('../utils/encryption');
+
+/**
+ * Store uploaded files (from multer memoryStorage) for a task agent execution.
+ * If the org has S3 configured, uploads there and returns presigned URLs.
+ * Otherwise writes to local temp storage and returns file:// paths.
+ *
+ * @param {Array} files - req.files from multer
+ * @param {string} orgId
+ * @returns {Promise<Array>} - [{ filename, url, mime_type, size }]
+ */
+async function storeInputFiles(files, orgId) {
+  if (!files || files.length === 0) return [];
+
+  const org = await Organization.findById(orgId).select('media_storage').lean();
+  const ms = org?.media_storage;
+
+  const results = [];
+
+  for (const file of files) {
+    try {
+      if (ms?.enabled && ms?.credentials?.bucket) {
+        const creds = ms.credentials;
+        const accessKeyId = encryptionUtil.isEncrypted(creds.access_key_id)
+          ? encryptionUtil.decrypt(creds.access_key_id) : creds.access_key_id;
+        const secretAccessKey = encryptionUtil.isEncrypted(creds.secret_access_key)
+          ? encryptionUtil.decrypt(creds.secret_access_key) : creds.secret_access_key;
+
+        const clientConfig = { region: creds.region || 'us-east-1', credentials: { accessKeyId, secretAccessKey } };
+        if (creds.endpoint) { clientConfig.endpoint = creds.endpoint; clientConfig.forcePathStyle = true; }
+
+        const s3 = new S3Client(clientConfig);
+        const keyParts = [ms.base_path, String(orgId), 'task-inputs', `${uuidv4()}_${file.originalname}`].filter(Boolean);
+        const s3Key = keyParts.join('/');
+
+        await s3.send(new PutObjectCommand({ Bucket: creds.bucket, Key: s3Key, Body: file.buffer, ContentType: file.mimetype }));
+        const url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: creds.bucket, Key: s3Key }), { expiresIn: 86400 });
+        results.push({ filename: file.originalname, url, mime_type: file.mimetype, size: file.size });
+      } else {
+        // Local fallback — write to storage/task-inputs/
+        const dir = path.join(process.cwd(), 'storage', 'task-inputs');
+        fs.mkdirSync(dir, { recursive: true });
+        const stored = `${uuidv4()}_${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const filePath = path.join(dir, stored);
+        fs.writeFileSync(filePath, file.buffer);
+        results.push({ filename: file.originalname, url: filePath, mime_type: file.mimetype, size: file.size });
+      }
+    } catch (err) {
+      console.warn(`[TaskAgent] Failed to store uploaded file "${file.originalname}":`, err.message);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Parse a value that may be a JSON string (from multipart form data) or already an object.
+ */
+function parseBodyField(value) {
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch (_) { return value; }
+  }
+  return value;
+}
 
 /**
  * Resolve file IDs from an upload request into media objects for channel_info.
@@ -596,17 +666,25 @@ const executeChatbotAgent = async (req, res) => {
 
 const executeTaskAgent = async (req, res) => {
   try {
-    const { input, user_identifier, context } = req.body;
+    const input = parseBodyField(req.body.input);
+    const user_identifier = req.body.user_identifier;
+    const context = parseBodyField(req.body.context) || {};
 
     if (!input) {
       return res.status(400).json({ error: 'Input is required' });
     }
 
+    // Store any uploaded files and pass them as input_files in context
+    const inputFiles = await storeInputFiles(req.files, req.params.orgId);
+    const dynamicContext = inputFiles.length > 0
+      ? { ...context, input_files: inputFiles }
+      : context;
+
     const result = await agentService.executeTaskAgent(
       req.params.agentId,
       input,
       user_identifier,
-      context
+      dynamicContext
     );
 
     res.json(result);
@@ -620,11 +698,18 @@ const executeTaskAgent = async (req, res) => {
 
 const executeTaskAgentStream = async (req, res) => {
   try {
-    const { input, user_identifier, context } = req.body;
+    const input = parseBodyField(req.body.input);
+    const user_identifier = req.body.user_identifier;
+    const context = parseBodyField(req.body.context) || {};
 
     if (!input) {
       return res.status(400).json({ error: 'Input is required' });
     }
+
+    const inputFiles = await storeInputFiles(req.files, req.params.orgId);
+    const dynamicContext = inputFiles.length > 0
+      ? { ...context, input_files: inputFiles }
+      : context;
 
     // Set up Server-Sent Events headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -660,7 +745,7 @@ const executeTaskAgentStream = async (req, res) => {
         req.params.agentId,
         input,
         user_identifier,
-        context,
+        dynamicContext,
         streamCallback
       );
 
@@ -2454,6 +2539,76 @@ const deleteGoogleCalendarConfig = async (req, res) => {
   }
 };
 
+// ===== VOICE CONFIGURATION =====
+
+const configureVoice = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const { provider, api_key, voice_id, model } = req.body;
+
+    const config = {};
+    if (provider) config.provider = provider;
+    if (voice_id) config.voice_id = voice_id;
+    if (model) config.model = model;
+
+    if (api_key) {
+      const encryptionUtil = require('../utils/encryption');
+      if (provider === 'elevenlabs' || (!provider && api_key)) {
+        config.elevenlabs_api_key = encryptionUtil.encrypt(api_key);
+      }
+    }
+
+    await agent.configureVoice(config);
+
+    res.json({
+      message: 'Voice configuration updated successfully',
+      provider: provider || 'openai',
+      voice_id: voice_id || null,
+      model: model || null,
+      has_api_key: !!api_key,
+    });
+  } catch (error) {
+    console.error('Configure voice error:', error);
+    res.status(500).json({ error: error.message || 'Failed to configure voice' });
+  }
+};
+
+const getVoiceConfig = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const voiceConfig = agent.getVoiceConfig();
+    if (!voiceConfig) {
+      return res.status(404).json({
+        error: 'No voice tools configured on this agent',
+        message: 'Add the add_slide or generate_slide_audio tool first.',
+      });
+    }
+
+    res.json({ success: true, data: voiceConfig });
+  } catch (error) {
+    console.error('Get voice config error:', error);
+    res.status(500).json({ error: 'Failed to get voice configuration' });
+  }
+};
+
 // ===== TOOL MANAGEMENT =====
 
 const addToolToAgent = async (req, res) => {
@@ -2741,6 +2896,8 @@ module.exports = {
   configureGoogleCalendar,
   getGoogleCalendarConfig,
   deleteGoogleCalendarConfig,
+  configureVoice,
+  getVoiceConfig,
   addToolToAgent,
   removeToolFromAgent,
   getAgentTools,

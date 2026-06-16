@@ -644,11 +644,15 @@ class AgentService {
 
       await execution.complete(result.output);
       execution.usage = result.token_usage;
+      if (result.output_files && result.output_files.length > 0) {
+        execution.output_files = result.output_files;
+      }
       await execution.save();
 
       return {
         execution_id: execution._id,
         output: result.output,
+        output_files: result.output_files || [],
         thinking_process: execution.thinking_process,
         tools_used: execution.tools_executed,
         token_usage: result.token_usage,
@@ -714,11 +718,15 @@ class AgentService {
 
       await execution.complete(result.output);
       execution.usage = result.token_usage;
+      if (result.output_files && result.output_files.length > 0) {
+        execution.output_files = result.output_files;
+      }
       await execution.save();
 
       return {
         execution_id: execution._id,
         output: result.output,
+        output_files: result.output_files || [],
         thinking_process: execution.thinking_process,
         tools_used: execution.tools_executed,
         token_usage: result.token_usage,
@@ -1717,6 +1725,7 @@ class AgentService {
     const maxIterations = agent.config.max_tool_calls || 5;
     let currentIteration = 0;
     let finalOutput = '';
+    const outputFiles = [];
 
     while (currentIteration < maxIterations) {
       currentIteration++;
@@ -1727,7 +1736,8 @@ class AgentService {
         input,
         thinkingProcess,
         toolsUsed,
-        currentIteration
+        currentIteration,
+        dynamicContext
       );
 
       // Get LLM response with optimized system prompt for caching
@@ -1796,6 +1806,14 @@ class AgentService {
         if (toolResult.success) {
           toolResultForAgent.result = toolResult.result;
           toolResultForAgent.success = true;
+
+          // Collect file outputs produced by tools (e.g. save_presentation)
+          if (toolResult.result && toolResult.result._output_file) {
+            outputFiles.push({
+              ...toolResult.result._output_file,
+              tool_name: parsedResponse.tool_name,
+            });
+          }
 
           await execution.addToolExecution(
             parsedResponse.tool_name,
@@ -1887,6 +1905,7 @@ class AgentService {
 
     return {
       output: finalOutput,
+      output_files: outputFiles,
       token_usage: totalTokenUsage,
     };
   }
@@ -1930,18 +1949,9 @@ class AgentService {
     const maxIterations = agent.config.max_tool_calls || 5;
     let currentIteration = 0;
     let finalOutput = '';
+    const outputFiles = [];
 
     while (currentIteration < maxIterations) {
-      currentIteration++;
-
-      // Build prompt for current iteration
-      const prompt = this.buildTaskReasoningPrompt(
-        agent,
-        input,
-        thinkingProcess,
-        toolsUsed,
-        currentIteration
-      );
 
       // Get LLM response with streaming and optimized system prompt for caching
       const enhancedSystemPrompt = this.buildEnhancedSystemPrompt(
@@ -2055,6 +2065,14 @@ class AgentService {
           toolResultForAgent.result = toolResult.result;
           toolResultForAgent.success = true;
 
+          // Collect file outputs produced by tools (e.g. save_presentation)
+          if (toolResult.result && toolResult.result._output_file) {
+            outputFiles.push({
+              ...toolResult.result._output_file,
+              tool_name: parsedResponse.tool_name,
+            });
+          }
+
           await execution.addToolExecution(
             parsedResponse.tool_name,
             parsedResponse.tool_parameters,
@@ -2148,6 +2166,7 @@ class AgentService {
 
     return {
       output: finalOutput,
+      output_files: outputFiles,
       token_usage: totalTokenUsage,
     };
   }
@@ -2239,17 +2258,28 @@ Your response:`;
     input,
     thinkingProcess,
     toolsUsed,
-    iteration
+    iteration,
+    dynamicContext = {}
   ) {
     // Only include dynamic content that changes each iteration
     let prompt = `## Task Input\n${JSON.stringify(input, null, 2)}\n\n`;
-    
+
+    // Surface attached files prominently so the agent can reference their URLs in tool calls
+    if (dynamicContext.input_files && dynamicContext.input_files.length > 0) {
+      prompt += `## Attached Files\n`;
+      prompt += `The following files were uploaded with this task. Use their URLs directly in tool calls (e.g. logo_url, background_image):\n`;
+      dynamicContext.input_files.forEach(f => {
+        prompt += `- **${f.filename}** (${f.mime_type}, ${f.size ? Math.round(f.size / 1024) + ' KB' : 'unknown size'}): ${f.url}\n`;
+      });
+      prompt += `\n`;
+    }
+
     if (thinkingProcess.length > 0) {
       prompt += `## Previous Thinking Process\n`;
       prompt += thinkingProcess.map(step => `${step.step}: ${step.reasoning}`).join('\n');
       prompt += `\n\n`;
     }
-    
+
     if (toolsUsed.length > 0) {
       prompt += `## Tools Used So Far\n`;
       prompt += toolsUsed.map(tool => {
@@ -2261,7 +2291,7 @@ Your response:`;
       }).join('\n');
       prompt += `\n\n`;
     }
-    
+
     prompt += `## Current Iteration\n${iteration} of ${agent.config.max_tool_calls || 5}\n\n`;
     prompt += `Analyze the task and choose your action based on the response format in the system instructions:`;
 
@@ -2413,7 +2443,13 @@ Your response:`;
     }
 
     // Legacy text-based parsing
-    const lines = content.split('\n');
+    // When the LLM outputs multiple ACTION blocks, only parse the first one.
+    // The loop-based field extraction would otherwise mix the last TOOL with
+    // the first PARAMETERS, producing mismatched results.
+    const secondActionIdx = content.indexOf('\nACTION:', content.indexOf('ACTION:') + 1);
+    const contentToParse = secondActionIdx !== -1 ? content.substring(0, secondActionIdx) : content;
+
+    const lines = contentToParse.split('\n');
     const result = {};
 
     // First pass: extract simple single-line fields (except RESPONSE which can be multi-line)
@@ -2428,9 +2464,9 @@ Your response:`;
     }
 
     // Handle multi-line RESPONSE
-    const responseIndex = content.indexOf('RESPONSE:');
+    const responseIndex = contentToParse.indexOf('RESPONSE:');
     if (responseIndex !== -1) {
-      const afterResponse = content.substring(
+      const afterResponse = contentToParse.substring(
         responseIndex + 'RESPONSE:'.length
       );
 
@@ -2448,9 +2484,9 @@ Your response:`;
 
     // Second pass: extract potentially multi-line PARAMETERS
     // Find the start of PARAMETERS and manually parse the JSON object
-    const parametersIndex = content.indexOf('PARAMETERS:');
+    const parametersIndex = contentToParse.indexOf('PARAMETERS:');
     if (parametersIndex !== -1) {
-      const afterParameters = content
+      const afterParameters = contentToParse
         .substring(parametersIndex + 'PARAMETERS:'.length)
         .trim();
 
@@ -2651,6 +2687,14 @@ Your response:`;
       // Pass the full API key object so it can be decrypted
       if (toolName === 'faq') {
         config._agent_api_key = agent.api_key; // Pass full object with decryption method
+      }
+
+      // Pass agent's primary API key for OpenAI TTS in presentation tools
+      if (['add_slide', 'generate_slide_audio'].includes(toolName)) {
+        config._agent_api_key = agent.api_key;
+        config.agent_id = agent._id;
+        // execution_id is already in config.conversation_id for task agents (see getAgentToolConfig call sites)
+        config.execution_id = conversationId;
       }
     }
 

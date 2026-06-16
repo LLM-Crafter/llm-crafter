@@ -1,10 +1,17 @@
 const express = require('express');
 const { body } = require('express-validator');
+const multer = require('multer');
 const router = express.Router({ mergeParams: true });
 const agentController = require('../controllers/agentController');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const orgAuth = require('../middleware/organizationAuth');
+
+// Multer for optional file attachments on task-agent execute endpoints
+const taskUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024, files: 10 },
+});
 
 // Validation middleware
 const createAgentValidation = [
@@ -242,6 +249,7 @@ router.post(
   '/:agentId/execute',
   auth,
   orgAuth.hasRole('member'),
+  taskUpload.any(),
   taskExecutionValidation,
   validate,
   agentController.executeTaskAgent
@@ -251,6 +259,7 @@ router.post(
   '/:agentId/execute/stream',
   auth,
   orgAuth.hasRole('member'),
+  taskUpload.any(),
   taskExecutionValidation,
   validate,
   agentController.executeTaskAgentStream
@@ -608,6 +617,44 @@ router.delete(
   auth,
   orgAuth.hasRole('member'),
   agentController.deleteGoogleCalendarConfig
+);
+
+// ===== VOICE CONFIGURATION ROUTES =====
+
+const voiceConfigValidation = [
+  body('provider')
+    .optional()
+    .isIn(['openai', 'elevenlabs'])
+    .withMessage('Provider must be openai or elevenlabs'),
+  body('api_key')
+    .optional()
+    .isString()
+    .isLength({ min: 1 })
+    .withMessage('API key must be a non-empty string'),
+  body('voice_id')
+    .optional()
+    .isString()
+    .withMessage('voice_id must be a string'),
+  body('model')
+    .optional()
+    .isString()
+    .withMessage('model must be a string'),
+];
+
+router.post(
+  '/:agentId/voice-config',
+  auth,
+  orgAuth.hasRole('member'),
+  voiceConfigValidation,
+  validate,
+  agentController.configureVoice
+);
+
+router.get(
+  '/:agentId/voice-config',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getVoiceConfig
 );
 
 // ===== TOOL MANAGEMENT ROUTES =====

@@ -5,7 +5,16 @@ const InternetSearchService = require('./internetSearchService');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const { v4: uuidv4 } = require('uuid');
+const voiceService = require('./voiceService');
+const encryptionUtil = require('../utils/encryption');
 const ApiKey = require('../models/ApiKey');
+const Organization = require('../models/Organization');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 // Language-specific abbreviation dictionaries for multi-language FAQ support
 const LANGUAGE_ABBREVIATIONS = {
@@ -200,6 +209,8 @@ class ToolService {
   constructor() {
     this.toolHandlers = new Map();
     this.internetSearchService = new InternetSearchService();
+    // In-memory store for stateful presentation sessions (session_id → session data)
+    this.presentationSessions = new Map();
     this.initializeSystemTools();
   }
 
@@ -254,6 +265,13 @@ class ToolService {
       'google_calendar',
       this.googleCalendarHandler.bind(this)
     );
+
+    // Presentation tools
+    this.registerToolHandler('create_presentation', this.createPresentationHandler.bind(this));
+    this.registerToolHandler('add_slide', this.addSlideHandler.bind(this));
+    this.registerToolHandler('generate_slide_audio', this.generateSlideAudioHandler.bind(this));
+    this.registerToolHandler('save_presentation', this.savePresentationHandler.bind(this));
+    this.registerToolHandler('set_presentation_logo', this.setPresentationLogoHandler.bind(this));
   }
 
   /**
@@ -2772,6 +2790,594 @@ class ToolService {
       created: event.created,
       updated: event.updated,
     };
+  }
+
+  // ===== PRESENTATION TOOL HANDLERS =====
+
+  async createPresentationHandler(parameters, config) {
+    const PptxGenJS = require('pptxgenjs');
+    const { title, author, theme_color, layout = 'LAYOUT_16x9' } = parameters;
+
+    const pptx = new PptxGenJS();
+    pptx.layout = layout;
+    pptx.title = title;
+    if (author) pptx.author = author;
+    if (theme_color) pptx.theme = { headFontColor: theme_color };
+
+    const sessionId = uuidv4();
+    this.presentationSessions.set(sessionId, {
+      pptx,
+      slides: [],
+      audioFiles: [],
+      totalAudioCost: 0,
+      branding: {},
+      createdAt: new Date(),
+    });
+
+    return {
+      session_id: sessionId,
+      message: `Presentation "${title}" created. session_id is "${sessionId}". You MUST use this exact session_id value in every subsequent add_slide and save_presentation call.`,
+    };
+  }
+
+  async addSlideHandler(parameters, config) {
+    // Flatten 'slide' wrapper — LLM often nests everything inside a 'slide' key
+    const p = parameters.slide ? { ...parameters, ...parameters.slide } : parameters;
+
+    const session_id     = p.session_id;
+    const layout_type    = p.layout_type || 'content';
+    const generate_audio = p.generate_audio || false;
+
+    // Flatten any nested 'content' wrapper the LLM sometimes produces
+    const contentObj = p.content || {};
+
+    const title    = p.title    || contentObj.title    || '';
+    const subtitle = p.subtitle || contentObj.subtitle || null;
+    const notes    = p.notes    || p.speaker_notes || contentObj.notes || null;
+    const design   = p.design   || {};
+
+    // Bullets: top-level or nested in content{}
+    const bullets = p.bullets || p.bullet_points || contentObj.bullets || [];
+
+    // For big_fact: LLM sometimes puts the short stat in content.fact and uses title for the sentence
+    const bigFactStat  = (layout_type === 'big_fact' && contentObj.fact) ? contentObj.fact  : title;
+    const bigFactLabel = (layout_type === 'big_fact' && contentObj.fact) ? (subtitle || title) : subtitle;
+
+    const session = this.presentationSessions.get(session_id);
+    if (!session) {
+      throw new Error(`Presentation session "${session_id}" not found. Call create_presentation first.`);
+    }
+
+    // Auto-apply logo if the LLM passed logo_url directly on add_slide instead of calling set_presentation_logo
+    const inlineLogo = p.logo_url || contentObj.logo_url;
+    if (inlineLogo && !session.branding.logo) {
+      session.branding.logo = { url: inlineLogo, position: 'bottom-right', w: 1.2, h: 0.5, transparency: 0 };
+    }
+
+    // ── Resolve design tokens ──────────────────────────────────────────────
+    // Strip any # prefix — pptxgenjs expects bare hex (e.g. “1E293B” not “#1E293B”)
+    const stripHex = c => String(c || '').replace(/^#/, '');
+
+    const bg          = stripHex(design.background_color || design.bg_color         || '1E293B');
+    const titleColor  = stripHex(design.title_color      || design.heading_color    || 'F1F5F9');
+    const textColor   = stripHex(design.text_color       || design.body_color       || '94A3B8');
+    const accentColor = stripHex(design.accent_color     || design.highlight_color  || '38BDF8');
+    const titleSize   = design.title_font_size  || design.title_size || (layout_type === 'title_slide' ? 44 : 36);
+    const textSize    = design.text_font_size   || design.body_size  || 16;
+    const align       = design.align            || (layout_type === 'title_slide' ? 'center' : 'left');
+    const titleFont   = design.title_font       || design.heading_font || 'Trebuchet MS';
+    const bodyFont    = design.body_font        || design.text_font    || 'Calibri';
+
+    const W = 10;     // slide width  in inches (LAYOUT_16x9 = 10” × 5.625”)
+    const H = 5.625;  // slide height in inches
+
+    const slide = session.pptx.addSlide();
+    slide.background = { color: bg };
+
+    // Optional gradient background — rendered as a full-bleed shape on top of the solid bg
+    if (design.gradient_from && design.gradient_to) {
+      slide.addShape(session.pptx.ShapeType.rect, {
+        x: 0, y: 0, w: W, h: H,
+        fill: {
+          type: 'gradient',
+          color: [stripHex(design.gradient_from), stripHex(design.gradient_to)],
+          angle: design.gradient_angle || 135,
+        },
+        line: { color: bg },
+      });
+    }
+
+    // Optional full-bleed background image — applied after solid/gradient so it sits on top
+    if (design.background_image) {
+      slide.addImage({ path: design.background_image, x: 0, y: 0, w: W, h: H, sizing: { type: 'cover', w: W, h: H } });
+      // Semi-transparent dark overlay so text stays legible
+      slide.addShape(session.pptx.ShapeType.rect, {
+        x: 0, y: 0, w: W, h: H,
+        fill: { color: '000000', transparency: 45 },
+        line: { type: 'none' },
+      });
+    }
+
+    // ── Layout renderers ───────────────────────────────────────────────────
+
+    if (layout_type === 'title_slide') {
+      // Modern split layout: accent color block on left ~35%, dark content on right
+      const splitX = W * 0.34;
+      slide.addShape(session.pptx.ShapeType.rect, {
+        x: 0, y: 0, w: splitX, h: H,
+        fill: { color: accentColor }, line: { color: accentColor },
+      });
+      slide.addText(title, {
+        x: splitX + 0.45, y: 0.9, w: W - splitX - 0.65, h: 2.4,
+        fontSize: titleSize, bold: true, color: titleColor, align: 'left',
+        fontFace: titleFont, valign: 'middle',
+      });
+      if (subtitle) {
+        slide.addText(subtitle, {
+          x: splitX + 0.45, y: 3.5, w: W - splitX - 0.65, h: 0.85,
+          fontSize: 18, color: textColor, align: 'left',
+          fontFace: bodyFont,
+        });
+      }
+
+    } else if (layout_type === 'section_header') {
+      // Full-bleed bg color + large centered title + subtle accent corner block
+      slide.addShape(session.pptx.ShapeType.rect, {
+        x: 0, y: 0, w: 0.4, h: H,
+        fill: { color: accentColor }, line: { color: accentColor },
+      });
+      slide.addText(title, {
+        x: 0.65, y: 1.4, w: W - 0.85, h: 1.9,
+        fontSize: titleSize, bold: true, color: titleColor, align: 'left',
+        fontFace: titleFont,
+      });
+      if (subtitle) {
+        slide.addText(subtitle, {
+          x: 0.65, y: 3.45, w: W - 0.85, h: 0.8,
+          fontSize: 20, color: textColor, align: 'left',
+          fontFace: bodyFont,
+        });
+      }
+
+    } else if (layout_type === 'quote') {
+      // Full-height left accent bar + large italic quote + right-aligned attribution
+      slide.addShape(session.pptx.ShapeType.rect, {
+        x: 0.5, y: 0.65, w: 0.12, h: 3.5,
+        fill: { color: accentColor }, line: { color: accentColor },
+      });
+      slide.addText(`”${title}”`, {
+        x: 0.85, y: 0.65, w: W - 1.15, h: 3.5,
+        fontSize: titleSize, italic: true, color: titleColor, align: 'left',
+        fontFace: titleFont, valign: 'middle',
+      });
+      if (subtitle) {
+        slide.addText(`— ${subtitle}`, {
+          x: 0.85, y: 4.3, w: W - 1.15, h: 0.65,
+          fontSize: 14, color: accentColor, align: 'right',
+          fontFace: bodyFont,
+        });
+      }
+
+    } else if (layout_type === 'big_fact') {
+      // Giant centered stat + supporting label below
+      slide.addText(bigFactStat, {
+        x: 0.5, y: 0.4, w: W - 1, h: 3.0,
+        fontSize: 88, bold: true, color: accentColor, align: 'center',
+        fontFace: titleFont, valign: 'middle',
+      });
+      if (bigFactLabel) {
+        slide.addText(bigFactLabel, {
+          x: 0.5, y: 3.55, w: W - 1, h: 1.1,
+          fontSize: 22, color: textColor, align: 'center',
+          fontFace: bodyFont,
+        });
+      }
+
+    } else if (layout_type === 'two_column') {
+      // Title + two equal columns; accent dot separates columns
+      slide.addText(title, {
+        x: 0.5, y: 0.22, w: W - 1, h: 0.78,
+        fontSize: titleSize, bold: true, color: titleColor, align,
+        fontFace: titleFont,
+      });
+      const colW = (W - 1.3) / 2;
+      const leftBullets  = p.left_bullets  || p.left_column_bullets  || p.column_left  || contentObj.left_bullets  || contentObj.left_column_bullets  || contentObj.left_column?.bullets  || bullets.slice(0, Math.ceil(bullets.length / 2));
+      const rightBullets = p.right_bullets || p.right_column_bullets || p.column_right || contentObj.right_bullets || contentObj.right_column_bullets || contentObj.right_column?.bullets || bullets.slice(Math.ceil(bullets.length / 2));
+      if (leftBullets.length > 0) {
+        slide.addText(leftBullets.map(t => ({ text: t, options: { bullet: true, fontSize: textSize, color: textColor, paraSpaceAfter: 12, fontFace: bodyFont } })), { x: 0.5, y: 1.15, w: colW, h: 4.1 });
+      }
+      if (rightBullets.length > 0) {
+        slide.addText(rightBullets.map(t => ({ text: t, options: { bullet: true, fontSize: textSize, color: textColor, paraSpaceAfter: 12, fontFace: bodyFont } })), { x: 0.65 + colW, y: 1.15, w: colW, h: 4.1 });
+      }
+      // Vertical accent rule between columns
+      slide.addShape(session.pptx.ShapeType.rect, {
+        x: 0.57 + colW, y: 1.15, w: 0.03, h: 4.1,
+        fill: { color: accentColor }, line: { color: accentColor },
+      });
+
+    } else {
+      // ── Default: 'content' layout ──────────────────────────────────────
+      // Thin accent strip on the left edge
+      slide.addShape(session.pptx.ShapeType.rect, {
+        x: 0, y: 0, w: 0.07, h: H,
+        fill: { color: accentColor }, line: { color: accentColor },
+      });
+      // Title
+      slide.addText(title, {
+        x: 0.28, y: 0.3, w: W - 0.48, h: 0.85,
+        fontSize: titleSize, bold: true, color: titleColor, align,
+        fontFace: titleFont,
+      });
+      // Optional subtitle
+      if (subtitle) {
+        slide.addText(subtitle, {
+          x: 0.28, y: 1.25, w: W - 0.48, h: 0.6,
+          fontSize: textSize + 2, color: accentColor, align,
+          fontFace: bodyFont,
+        });
+      }
+      // Bullets
+      if (bullets.length > 0) {
+        const bulletY = subtitle ? 1.95 : 1.25;
+        const bulletH = subtitle ? 3.45 : 4.1;
+        slide.addText(
+          bullets.map(t => ({ text: t, options: { bullet: true, fontSize: textSize, color: textColor, paraSpaceAfter: 12, align, fontFace: bodyFont } })),
+          { x: 0.28, y: bulletY, w: W - 0.48, h: bulletH }
+        );
+      }
+    }
+
+    // Brand logo — rendered last so it sits on top of all content
+    if (session.branding?.logo) {
+      const logo = session.branding.logo;
+      const margin = 0.15;
+      let lx, ly;
+      switch (logo.position) {
+        case 'top-left':    lx = margin;                   ly = margin; break;
+        case 'top-right':   lx = W - logo.w - margin;      ly = margin; break;
+        case 'bottom-left': lx = margin;                   ly = H - logo.h - margin; break;
+        default:            lx = W - logo.w - margin;      ly = H - logo.h - margin; // bottom-right
+      }
+      slide.addImage({
+        path: logo.url,
+        x: lx, y: ly, w: logo.w, h: logo.h,
+        transparency: logo.transparency || 0,
+      });
+    }
+
+    // Speaker notes
+    if (notes) slide.addNotes(notes);
+
+    const slideIndex = session.slides.length;
+    session.slides.push({ title, notes, audioFile: null });
+
+    let audioCost = 0;
+    if (generate_audio && notes) {
+      const audioResult = await this._attachAudioToSlide(session, slide, slideIndex, notes, config);
+      audioCost = audioResult.cost;
+    }
+
+    return {
+      slide_index: slideIndex,
+      slide_count: session.slides.length,
+      audio_cost: audioCost,
+      message: `Slide ${slideIndex} "${title}" added (layout: ${layout_type}).${audioCost > 0 ? ` Audio $${audioCost.toFixed(5)}.` : ''}`,
+    };
+  }
+
+  async generateSlideAudioHandler(parameters, config) {
+    const { session_id, slide_index, provider, voice_id, model } = parameters;
+    // Accept all naming variants the LLM produces
+    const text = parameters.text || parameters.input || parameters.script || parameters.narration || parameters.content;
+
+    if (!text) {
+      throw new Error('generate_slide_audio requires a "text" parameter with the narration content.');
+    }
+
+    const session = this.presentationSessions.get(session_id);
+    if (!session) {
+      throw new Error(`Presentation session "${session_id}" not found.`);
+    }
+    if (slide_index < 0 || slide_index >= session.slides.length) {
+      throw new Error(`Slide index ${slide_index} is out of range (${session.slides.length} slides).`);
+    }
+
+    // Re-access the pptx slide object via internal slides list — we need to add media
+    // pptxgenjs exposes slides on pptx.slides array
+    const pptxSlide = session.pptx.slides[slide_index];
+    if (!pptxSlide) {
+      throw new Error(`Could not access pptx slide object at index ${slide_index}.`);
+    }
+
+    const overrideConfig = {};
+    if (provider) overrideConfig.provider = provider;
+    if (voice_id) overrideConfig.voice_id = voice_id;
+    if (model) overrideConfig.model = model;
+
+    const result = await this._attachAudioToSlide(session, pptxSlide, slide_index, text, { ...config, ...overrideConfig });
+
+    return {
+      attached: true,
+      characters_used: result.characters_used,
+      cost: result.cost,
+      provider: result.provider,
+      model: result.model,
+      message: `Audio attached to slide ${slide_index}. Cost: $${result.cost.toFixed(5)} (${result.characters_used} chars).`,
+    };
+  }
+
+  async setPresentationLogoHandler(parameters, config) {
+    const p = parameters.slide ? { ...parameters, ...parameters.slide } : parameters;
+    const { session_id, logo_url, position = 'bottom-right', width = 1.2, height = 0.5, opacity = 0 } = p;
+
+    const session = this.presentationSessions.get(session_id);
+    if (!session) {
+      throw new Error(`Presentation session "${session_id}" not found.`);
+    }
+
+    session.branding.logo = {
+      url: logo_url,
+      position,
+      w: width,
+      h: height,
+      transparency: Math.min(100, Math.max(0, opacity)),
+    };
+
+    return { message: `Logo set. It will be placed at ${position} on every slide (${width}" × ${height}").` };
+  }
+
+  async savePresentationHandler(parameters, config) {
+    const { session_id } = parameters;
+    const filename = parameters.filename || parameters.file_name || `presentation_${Date.now()}`;
+
+    const session = this.presentationSessions.get(session_id);
+    if (!session) {
+      throw new Error(`Presentation session "${session_id}" not found.`);
+    }
+
+    const safeFilename = filename.replace(/[^a-zA-Z0-9_\-]/g, '_');
+
+    // Always write to a temp local path first (needed for OOXML injection)
+    const tmpDir = path.join(process.cwd(), 'storage', 'presentations');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const filePath = path.join(tmpDir, `${safeFilename}.pptx`);
+
+    await session.pptx.writeFile({ fileName: filePath });
+
+    try {
+      await this._injectAudioAutoplay(filePath, session.slides);
+    } catch (err) {
+      console.warn('[Presentation] Audio autoplay injection failed (non-fatal):', err.message);
+    }
+
+    // Clean up temp audio files
+    for (const audioFile of session.audioFiles) {
+      try { fs.unlinkSync(audioFile); } catch (_) { /* ignore */ }
+    }
+
+    this.presentationSessions.delete(session_id);
+
+    // Try to upload to the org's S3 bucket
+    let s3Key = null;
+    let downloadUrl = null;
+    if (config.organization_id) {
+      try {
+        const org = await Organization.findById(config.organization_id).select('media_storage').lean();
+        const ms = org?.media_storage;
+        if (ms?.enabled && ms?.credentials?.bucket) {
+          const creds = ms.credentials;
+          const accessKeyId = encryptionUtil.isEncrypted(creds.access_key_id)
+            ? encryptionUtil.decrypt(creds.access_key_id)
+            : creds.access_key_id;
+          const secretAccessKey = encryptionUtil.isEncrypted(creds.secret_access_key)
+            ? encryptionUtil.decrypt(creds.secret_access_key)
+            : creds.secret_access_key;
+
+          const clientConfig = {
+            region: creds.region || 'us-east-1',
+            credentials: { accessKeyId, secretAccessKey },
+          };
+          if (creds.endpoint) {
+            clientConfig.endpoint = creds.endpoint;
+            clientConfig.forcePathStyle = true;
+          }
+
+          const s3 = new S3Client(clientConfig);
+          const keyParts = [ms.base_path, String(config.organization_id), 'presentations', `${safeFilename}.pptx`].filter(Boolean);
+          s3Key = keyParts.join('/');
+
+          const fileBuffer = fs.readFileSync(filePath);
+          await s3.send(new PutObjectCommand({
+            Bucket: creds.bucket,
+            Key: s3Key,
+            Body: fileBuffer,
+            ContentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          }));
+
+          console.log(`[Presentation] Uploaded to S3: ${s3Key}`);
+
+          // Generate a 24-hour presigned download URL
+          const getCmd = new GetObjectCommand({ Bucket: creds.bucket, Key: s3Key });
+          downloadUrl = await getSignedUrl(s3, getCmd, { expiresIn: 86400 });
+
+          // Remove local file after successful upload
+          try { fs.unlinkSync(filePath); } catch (_) { /* ignore */ }
+        }
+      } catch (err) {
+        console.warn('[Presentation] S3 upload failed (non-fatal), keeping local file:', err.message);
+      }
+    }
+
+    const result = {
+      slides_count: session.slides.length,
+      total_audio_cost: session.totalAudioCost,
+    };
+
+    if (s3Key) {
+      result.s3_key = s3Key;
+      result.download_url = downloadUrl;
+      result.message = `Presentation uploaded to S3 (${session.slides.length} slides). Download URL valid for 24 hours.`;
+      result._output_file = {
+        filename: `${safeFilename}.pptx`,
+        s3_key: s3Key,
+        download_url: downloadUrl,
+        mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      };
+    } else {
+      result.file_path = filePath;
+      result.message = `Presentation saved locally to ${filePath} (${session.slides.length} slides, total audio cost $${session.totalAudioCost.toFixed(5)}).`;
+      result._output_file = {
+        filename: `${safeFilename}.pptx`,
+        file_path: filePath,
+        mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      };
+    }
+
+    return result;
+  }
+
+  async _attachAudioToSlide(session, pptxSlide, slideIndex, text, config) {
+    const provider = config.provider || 'openai';
+
+    let apiKey = null;
+    if (provider === 'elevenlabs' && config.elevenlabs_api_key) {
+      try {
+        apiKey = encryptionUtil.decrypt(config.elevenlabs_api_key);
+      } catch (_) {
+        apiKey = config.elevenlabs_api_key;
+      }
+    } else if (provider === 'openai' && config._agent_api_key) {
+      const raw = config._agent_api_key;
+      apiKey = typeof raw === 'string' ? raw : (raw.key ? encryptionUtil.decrypt(raw.key) : null);
+    }
+
+    if (!apiKey) {
+      throw new Error(`No API key found for voice provider "${provider}". Configure the agent's tool parameters.`);
+    }
+
+    const result = await voiceService.synthesize(text, {
+      provider,
+      api_key: apiKey,
+      voice_id: config.voice_id,
+      model: config.model,
+      meta: {
+        agent_id: config.agent_id,
+        organization_id: config.organization_id,
+        project_id: config.project_id,
+        execution_id: config.execution_id,
+        use_case: 'presentation',
+      },
+    });
+
+    // Write audio buffer to a temp file for pptxgenjs to embed
+    const tmpFile = path.join(os.tmpdir(), `slide_audio_${uuidv4()}.mp3`);
+    fs.writeFileSync(tmpFile, result.audioBuffer);
+    session.audioFiles.push(tmpFile);
+    session.totalAudioCost += result.cost;
+
+    if (session.slides[slideIndex]) {
+      session.slides[slideIndex].audioFile = tmpFile;
+    }
+
+    // Small audio icon tucked into bottom-right corner.
+    // In PowerPoint: right-click the icon → Playback → Start: Automatically
+    // to make it play without clicking.
+    pptxSlide.addMedia({
+      type: 'audio',
+      path: tmpFile,
+      x: 9.55, y: 5.25, w: 0.35, h: 0.35,
+    });
+
+    return result;
+  }
+
+  // ===== AUDIO AUTOPLAY (OOXML POST-PROCESSING) =====
+
+  async _injectAudioAutoplay(filePath, slides) {
+    const JSZip = require('jszip');
+    const fileData = fs.readFileSync(filePath);
+    const zip = await JSZip.loadAsync(fileData);
+
+    let modified = false;
+
+    for (let i = 0; i < slides.length; i++) {
+      if (!slides[i] || !slides[i].audioFile) continue;
+
+      const slideFileName = `ppt/slides/slide${i + 1}.xml`;
+      const slideFile = zip.file(slideFileName);
+      if (!slideFile) continue;
+
+      const xml = await slideFile.async('string');
+      const shapeId = this._extractAudioShapeId(xml);
+      if (!shapeId) {
+        console.warn(`[Autoplay] Could not find audio shape ID in slide ${i + 1}`);
+        continue;
+      }
+
+      // Remove any existing <p:timing> block then inject autoplay timing
+      let newXml = xml.replace(/<p:timing>[\s\S]*?<\/p:timing>/, '');
+      newXml = newXml.replace('</p:sld>', `${this._buildAutoplayTimingXml(shapeId)}</p:sld>`);
+
+      zip.file(slideFileName, newXml);
+      modified = true;
+      console.log(`[Autoplay] Injected timing for slide ${i + 1} (shape ${shapeId})`);
+    }
+
+    if (modified) {
+      const newData = await zip.generateAsync({
+        type: 'nodebuffer',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+      });
+      fs.writeFileSync(filePath, newData);
+    }
+  }
+
+  _extractAudioShapeId(xml) {
+    // Find <p:audioFile in the XML, then search backward for the nearest <p:cNvPr id="X"
+    // Structure: <p:cNvPr id="N" .../> ... <p:audioFile r:link="rIdX"/>
+    const audioIdx = xml.indexOf('<p:audioFile');
+    if (audioIdx === -1) return null;
+    const before = xml.substring(0, audioIdx);
+    const match = before.match(/[\s\S]*<p:cNvPr\s+id="(\d+)"/);
+    return match ? parseInt(match[1]) : null;
+  }
+
+  _buildAutoplayTimingXml(shapeId) {
+    // delay="0" on the outer par under mainSeq = autoplay on slide entry (no click needed)
+    return (
+      '<p:timing>' +
+      '<p:tnLst><p:par>' +
+      '<p:cTn id="1" dur="indefinite" restart="whenNotActive" nodeType="tmRoot">' +
+      '<p:childTnLst><p:seq concurrent="1" nextAc="seek">' +
+      '<p:cTn id="2" dur="indefinite" nodeType="mainSeq">' +
+      '<p:childTnLst><p:par>' +
+      '<p:cTn id="3" fill="hold">' +
+      '<p:stCondLst><p:cond delay="0"/></p:stCondLst>' +
+      '<p:childTnLst><p:par>' +
+      '<p:cTn id="4" fill="hold">' +
+      '<p:stCondLst><p:cond delay="0"/></p:stCondLst>' +
+      '<p:childTnLst><p:par>' +
+      '<p:cTn id="5" dur="indefinite" fill="hold">' +
+      '<p:stCondLst><p:cond delay="0"/></p:stCondLst>' +
+      '<p:childTnLst>' +
+      '<p:audio>' +
+      `<p:cMediaNode vol="80000" mute="0" numSld="0" showWhenStopped="0">` +
+      '<p:cTn id="6" fill="hold" display="0">' +
+      '<p:stCondLst><p:cond delay="0"/></p:stCondLst>' +
+      '</p:cTn>' +
+      `<p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl>` +
+      '</p:cMediaNode>' +
+      '</p:audio>' +
+      '</p:childTnLst></p:cTn>' +
+      '</p:par></p:childTnLst></p:cTn>' +
+      '</p:par></p:childTnLst></p:cTn>' +
+      '</p:par></p:childTnLst></p:cTn>' +
+      '</p:seq></p:childTnLst></p:cTn>' +
+      '</p:par></p:tnLst>' +
+      '<p:bldLst/>' +
+      '</p:timing>'
+    );
   }
 
   // ===== HELPER METHODS =====

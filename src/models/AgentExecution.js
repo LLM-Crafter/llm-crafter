@@ -64,6 +64,17 @@ const agentExecutionSchema = new mongoose.Schema(
         },
       },
     ],
+    output_files: [
+      {
+        filename: { type: String, required: true },
+        s3_key: String,
+        download_url: String,
+        mime_type: String,
+        size: Number,
+        tool_name: String,
+        created_at: { type: Date, default: Date.now },
+      },
+    ],
     usage: {
       prompt_tokens: {
         type: Number,
