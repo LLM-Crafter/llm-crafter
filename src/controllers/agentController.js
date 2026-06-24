@@ -883,7 +883,7 @@ const getConversations = async (req, res) => {
         .skip(skip)
         .limit(parseInt(limit))
         .select(
-          '_id user_identifier title status metadata created_at updated_at dynamic_context dynamic_context_updated_at'
+          '_id user_identifier title status channel channel_metadata metadata created_at updated_at dynamic_context dynamic_context_updated_at'
         ),
 
       Conversation.countDocuments(filter),

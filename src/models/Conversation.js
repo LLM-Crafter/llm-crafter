@@ -93,6 +93,12 @@ const messageSchema = new mongoose.Schema({
       },
     ],
   },
+  // Free-form metadata for channel-specific annotations (e.g. outbound_id,
+  // outbound_state for email drafts/sent tracking).
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: undefined,
+  },
 });
 
 const conversationSchema = new mongoose.Schema(
@@ -151,6 +157,7 @@ const conversationSchema = new mongoose.Schema(
         subject: String,
         thread_id: String, // For email threading
         message_id: String,
+        mail_account: String, // MailAccount _id — used by frontend to build outbound URLs
       },
       // Website specific
       website: {

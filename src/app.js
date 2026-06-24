@@ -32,6 +32,7 @@ const channelRoutes = require('./routes/channels');
 const widgetRoutes = require('./routes/widget');
 const externalOperatorRoutes = require('./routes/externalOperators');
 const templateRoutes = require('./routes/templates');
+const mailAccountRoutes = require('./routes/mailAccounts');
 
 // Middleware
 app.use(
@@ -77,6 +78,7 @@ app.use('/api/v1/handoffs', handoffRoutes);
 app.use('/api/v1/external', externalOperatorRoutes);
 app.use('/api/v1/channels', channelRoutes);
 app.use('/api/v1', templateRoutes);
+app.use('/api/v1', mailAccountRoutes);
 
 // Serve chat widget files
 app.use('/widget', widgetRoutes);
@@ -105,6 +107,16 @@ initializeDefaultProviders().catch(console.error);
 // Initialize background job processor for RAG indexing
 console.log('🚀 Initializing RAG indexing job processor...');
 require('./services/indexingJobProcessor');
+
+// Initialize email pipeline (IMAP poller scheduler + ingest worker + outbound sender).
+// Gated by EMAIL_PIPELINE_ENABLED so existing deployments stay unaffected.
+// Safe to run in multi-instance setups — per-account locks + atomic queue claims
+// + idempotency indexes prevent double processing.
+try {
+  require('./services/email').start();
+} catch (err) {
+  console.error('[EmailPipeline] failed to start:', err.message);
+}
 
 // ─── GDPR Retention Cron ─────────────────────────────────────────────────────
 // Runs daily at 02:00 UTC to delete conversations/executions that have exceeded
