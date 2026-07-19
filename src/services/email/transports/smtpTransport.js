@@ -12,14 +12,31 @@
  */
 
 const nodemailer = require('nodemailer');
+const gmailOAuthService = require('../gmailOAuthService');
 
 /**
  * Build a nodemailer transporter for the given account.
+ * For Gmail accounts (provider='gmail') uses OAuth2 instead of a password.
  * @param {Object} account - MailAccount document
  */
-function buildTransporter(account) {
+async function buildTransporter(account) {
   const creds = account.getDecryptedCredentials();
   const smtp = creds.smtp || {};
+
+  if (account.provider === 'gmail') {
+    const accessToken = await gmailOAuthService.getFreshAccessToken(account);
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: smtp.username || creds.imap?.username,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        refreshToken: creds.oauth?.refresh_token,
+        accessToken,
+      },
+    });
+  }
 
   if (!smtp.host || !smtp.username || !smtp.password) {
     throw new Error(
@@ -46,7 +63,7 @@ function buildTransporter(account) {
  * @returns {Promise<{ providerMessageId: string }>}
  */
 async function sendOutbound(account, outbound) {
-  const transporter = buildTransporter(account);
+  const transporter = await buildTransporter(account);
 
   const fromHeader = outbound.from_name
     ? `${outbound.from_name} <${outbound.from_email}>`

@@ -286,4 +286,26 @@ router.post(
   mailAccountController.sendToThread
 );
 
+// ─── Gmail OAuth ────────────────────────────────────────────────────────
+
+// Step 1 (authenticated): get the Google consent URL.
+// ?accountId=  optional — connect to an existing account instead of creating one
+// ?redirect_url= optional — where to land after the callback
+router.get(
+  '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/oauth/google/authorize',
+  auth,
+  organizationAuth.hasRole('admin'),
+  baseScope,
+  validate,
+  mailAccountController.getGmailAuthorizeUrl
+);
+
+// Step 2 (public): Google redirects here after consent.
+// Mounted separately in app.js at /api/v1/email/oauth/google/callback
+// (exported so app.js can register it without a second require).
+router.get(
+  '/email/oauth/google/callback',
+  mailAccountController.gmailOAuthCallback
+);
+
 module.exports = router;

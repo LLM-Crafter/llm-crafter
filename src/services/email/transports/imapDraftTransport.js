@@ -18,6 +18,7 @@
 
 const { ImapFlow } = require('imapflow');
 const nodemailer = require('nodemailer');
+const gmailOAuthService = require('../gmailOAuthService');
 
 /**
  * Build a minimal RFC822 raw message buffer from an OutboundEmail document.
@@ -68,25 +69,32 @@ async function buildRaw(outbound, account) {
  */
 async function appendDraft(account, outbound) {
   if (account.ingest_mode !== 'imap_poll') {
-    // Non-IMAP accounts need provider-specific draft APIs — not yet implemented.
+    // Non-IMAP accounts need provider-specific draft APIs (Graph createDraft etc.).
     return null;
   }
 
   const creds = account.getDecryptedCredentials();
   const imap = creds.imap || {};
 
-  if (!imap.host || !imap.username || !imap.password) {
-    throw new Error(`MailAccount ${account._id} has no IMAP credentials for draft save`);
+  let imapAuth;
+  if (account.provider === 'gmail') {
+    const accessToken = await gmailOAuthService.getFreshAccessToken(account);
+    imapAuth = { user: imap.username || creds.oauth?.email, accessToken };
+  } else {
+    if (!imap.host || !imap.username || !imap.password) {
+      throw new Error(`MailAccount ${account._id} has no IMAP credentials for draft save`);
+    }
+    imapAuth = { user: imap.username, pass: imap.password };
   }
 
-  const draftsFolder = imap.drafts_folder || 'Drafts';
+  const draftsFolder = imap.drafts_folder || (account.provider === 'gmail' ? '[Gmail]/Drafts' : 'Drafts');
   const raw = await buildRaw(outbound, account);
 
   const client = new ImapFlow({
-    host: imap.host,
+    host: imap.host || 'imap.gmail.com',
     port: imap.port || 993,
     secure: imap.secure !== false,
-    auth: { user: imap.username, pass: imap.password },
+    auth: imapAuth,
     logger: false,
     disableAutoIdle: true,
   });

@@ -23,6 +23,7 @@ const OutboundEmail = require('../models/OutboundEmail');
 const ProcessedEmail = require('../models/ProcessedEmail');
 const emailUtils = require('../services/email/emailUtils');
 const imapDraftTransport = require('../services/email/transports/imapDraftTransport');
+const gmailOAuthService = require('../services/email/gmailOAuthService');
 const lockService = require('../services/distributedLockService');
 const imapPoller = require('../services/email/pollers/imapPoller');
 const smtpTransport = require('../services/email/transports/smtpTransport');
@@ -596,6 +597,159 @@ const sendToThread = async (req, res) => {
   }
 };
 
+// ─── Gmail OAuth ────────────────────────────────────────────────────────
+
+/**
+ * Step 1 — return the Google consent URL.
+ *
+ * The frontend opens this URL (popup or redirect). Google will send the user
+ * to /api/v1/email/oauth/google/callback after consent.
+ *
+ * Query params:
+ *   accountId  {string} optional — if supplied the callback UPDATES the
+ *                                   existing MailAccount; if omitted a new one
+ *                                   is created after the callback.
+ */
+const getGmailAuthorizeUrl = async (req, res) => {
+  try {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      return res.status(501).json({
+        error: 'Google OAuth is not configured on this server (missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).',
+      });
+    }
+
+    const agent = await getAgentOr404(req, res);
+    if (!agent) return;
+
+    // Encode context in the state token so the callback can resume it.
+    // base64(JSON) is simple and readable — not a security token (we validate
+    // orgId/agentId again inside the callback).
+    const state = Buffer.from(
+      JSON.stringify({
+        orgId: req.params.orgId,
+        projectId: req.params.projectId,
+        agentId: agent._id,
+        accountId: req.query.accountId || null,
+        redirectUrl: req.query.redirect_url || null,
+      })
+    ).toString('base64url');
+
+    const url = gmailOAuthService.getAuthorizationUrl(state);
+    res.json({ url });
+  } catch (err) {
+    console.error('[Gmail OAuth] authorize error:', err);
+    res.status(500).json({ error: 'Failed to build authorization URL' });
+  }
+};
+
+/**
+ * Step 2 — OAuth callback. Google redirects here after the user consents.
+ *
+ * This is a PUBLIC endpoint (no JWT) because Google calls it directly.
+ * Security is maintained by:
+ *   - The `state` param encoding the orgId/agentId (validated on decode)
+ *   - The `code` being single-use and short-lived
+ *
+ * On success: creates or updates a MailAccount with Gmail OAuth credentials
+ * and redirects the browser to the frontend with ?account_id=<id>&status=ok.
+ */
+const gmailOAuthCallback = async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+  const redirect = (status, extra = {}) => {
+    const params = new URLSearchParams({ status, ...extra });
+    // If the state carried a custom redirectUrl, use it; otherwise a default.
+    const base = extra._redirectUrl || `${frontendUrl}/email-accounts/connected`;
+    delete extra._redirectUrl;
+    return res.redirect(`${base}?${params}`);
+  };
+
+  try {
+    const { code, state, error } = req.query;
+
+    if (error) {
+      return redirect('denied', { error });
+    }
+    if (!code || !state) {
+      return redirect('error', { error: 'missing_params' });
+    }
+
+    let ctx;
+    try {
+      ctx = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+    } catch {
+      return redirect('error', { error: 'invalid_state' });
+    }
+
+    // Exchange code for tokens and fetch the Gmail address.
+    const tokens = await gmailOAuthService.exchangeCode(code);
+
+    let account;
+    if (ctx.accountId) {
+      // Update existing MailAccount.
+      account = await MailAccount.findOne({
+        _id: ctx.accountId,
+        agent: ctx.agentId,
+      });
+      if (!account) return redirect('error', { error: 'account_not_found' });
+    } else {
+      // Create a new MailAccount.
+      account = new MailAccount({
+        organization: ctx.orgId,
+        project: ctx.projectId,
+        agent: ctx.agentId,
+        display_name: tokens.email,
+        provider: 'gmail',
+        ingest_mode: 'imap_poll',
+        send_profile: {
+          from_email: tokens.email,
+          from_name: '',
+        },
+        is_active: true,
+        is_paused: false,
+      });
+    }
+
+    // Store tokens (pre-save hook encrypts them).
+    account.credentials = account.credentials || {};
+    account.credentials.oauth = {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+      scope: 'https://mail.google.com/',
+      token_type: 'Bearer',
+    };
+    // For Gmail, IMAP host is fixed.
+    account.credentials.imap = {
+      ...((account.credentials.imap || {})),
+      host: 'imap.gmail.com',
+      port: 993,
+      secure: true,
+      username: tokens.email,
+      mailbox: 'INBOX',
+      drafts_folder: '[Gmail]/Drafts',
+    };
+    account.credentials.smtp = {
+      ...((account.credentials.smtp || {})),
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      username: tokens.email,
+    };
+
+    await account.save();
+
+    return redirect('ok', {
+      account_id: account._id,
+      email: tokens.email,
+      ...(ctx.redirectUrl ? { _redirectUrl: ctx.redirectUrl } : {}),
+    });
+  } catch (err) {
+    console.error('[Gmail OAuth] callback error:', err);
+    return redirect('error', { error: encodeURIComponent(err.message) });
+  }
+};
+
 module.exports = {
   listMailAccounts,
   getMailAccount,
@@ -610,4 +764,6 @@ module.exports = {
   listEmailThreads,
   getEmailThread,
   sendToThread,
+  getGmailAuthorizeUrl,
+  gmailOAuthCallback,
 };

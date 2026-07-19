@@ -21,15 +21,30 @@ const { ImapFlow } = require('imapflow');
 
 const MailAccount = require('../../../models/MailAccount');
 const jobQueue = require('../../jobQueueService');
+const gmailOAuthService = require('../gmailOAuthService');
 
 const QUEUE_NAME = 'email.ingest';
 
 /**
  * Build an ImapFlow client from decrypted account credentials.
+ * For Gmail accounts (provider='gmail') uses XOAUTH2 instead of a password.
  */
-function buildClient(account) {
+async function buildClient(account) {
   const creds = account.getDecryptedCredentials();
   const imap = creds.imap || {};
+
+  if (account.provider === 'gmail') {
+    // Refresh the access token if needed and build an XOAUTH2 client.
+    const accessToken = await gmailOAuthService.getFreshAccessToken(account);
+    return new ImapFlow({
+      host: 'imap.gmail.com',
+      port: 993,
+      secure: true,
+      auth: { user: imap.username || creds.oauth?.email, accessToken },
+      logger: false,
+      disableAutoIdle: true,
+    });
+  }
 
   if (!imap.host || !imap.username || !imap.password) {
     throw new Error(
@@ -55,7 +70,7 @@ function buildClient(account) {
  * Returns: { enqueued, skipped, uid_range, reset }
  */
 async function pollAccount(account) {
-  const client = buildClient(account);
+  const client = await buildClient(account);
   const result = {
     enqueued: 0,
     skipped: 0,
