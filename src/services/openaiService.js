@@ -464,6 +464,13 @@ class OpenAIService {
       completionOptions.response_format = responseFormat;
     }
 
+    // Diagnostic: log estimated prompt size so over-limit errors are traceable.
+    const estChars = messages.reduce((s, m) => s + (m.content?.length ?? 0), 0);
+    if (estChars > 200_000) {
+      const breakdown = messages.map(m => `${m.role}:${m.content?.length ?? 0}`).join(' ');
+      console.warn(`[OpenAI] large prompt estimate=${estChars} chars model=${model} breakdown=${breakdown}`);
+    }
+
     try {
       const completion =
         await this.client.chat.completions.create(completionOptions);

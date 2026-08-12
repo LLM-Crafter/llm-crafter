@@ -533,9 +533,14 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
       messages.push(...overlapMessages);
     }
 
-    // Include recent messages after the last summary
-    const recentMessages = workingMessages.slice(
-      this.metadata.last_summary_index + 1
+    // Include recent messages after the last summary, but still respect the
+    // token budget. Without this guard a long thread with a summary blows
+    // through the model's context window.
+    const alreadyUsed = this.estimateTokenCount(messages);
+    const remainingTokens = Math.max(maxTokens - alreadyUsed, 500);
+    const recentMessages = this._getSmartTruncatedFromArray(
+      workingMessages.slice(this.metadata.last_summary_index + 1),
+      remainingTokens
     );
     messages.push(...recentMessages);
   } else {
@@ -550,8 +555,10 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
 // Method to estimate token count for messages (rough approximation)
 conversationSchema.methods.estimateTokenCount = function (messages) {
   return messages.reduce((total, msg) => {
-    // Rough estimate: 1 token ≈ 4 characters
-    const contentTokens = Math.ceil(msg.content.length / 4);
+    // Rough estimate: 1 token ≈ 4 characters for ASCII English.
+    // Email bodies can contain dense HTML/quoted text where the real ratio
+    // is closer to 1 token per 2-3 chars, so we use a conservative 3.
+    const contentTokens = Math.ceil((msg.content || '').length / 3);
     const metadataTokens = msg.thinking_process
       ? Math.ceil(JSON.stringify(msg.thinking_process).length / 4)
       : 0;

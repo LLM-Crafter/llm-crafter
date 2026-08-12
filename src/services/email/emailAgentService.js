@@ -98,9 +98,27 @@ class EmailAgentService {
     });
 
     // ── 3. Append inbound message ────────────────────────────────────────
+    // Cap body length before storage so a single large email cannot exceed
+    // the model's context window. The rough token estimator used by
+    // getContextForAgent (1 token ≈ 3 chars) means 120 000 chars ≈ 40 000 tokens —
+    // a safe upper bound that still comfortably fits within modern model limits.
+    const MAX_BODY_CHARS = 120_000;
+    let bodyText = emailUtils.stripQuotedHistory(email.body_text) || '';
+    if (bodyText.length > MAX_BODY_CHARS) {
+      bodyText = bodyText.slice(0, MAX_BODY_CHARS) +
+        '\n\n[Message truncated — original was too long to process in full]';
+      console.warn(
+        `[EmailAgent] body truncated account=${mailAccountId} original_len=${email.body_text?.length}`
+      );
+    }
+
+    console.log(
+      `[EmailAgent] context account=${mailAccountId} body_len=${bodyText.length} conv_messages=${conversation.messages.length} system_prompt_len=${agent.system_prompt?.length ?? 0} tools=${agent.tools?.length ?? 0}`
+    );
+
     await conversation.addMessage({
       role: 'user',
-      content: emailUtils.stripQuotedHistory(email.body_text) || '',
+      content: bodyText,
       timestamp: email.received_at || new Date(),
       channel_info: {
         channel: 'email',

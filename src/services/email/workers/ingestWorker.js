@@ -84,6 +84,9 @@ async function handleIngestJob(payload, job) {
   try {
     const raw = Buffer.from(raw_base64, 'base64');
     email = await emailParser.parseRaw(raw);
+    console.log(
+      `[IngestWorker] parsed job=${job._id} raw_bytes=${raw.length} body_text_len=${email.body_text?.length ?? 0} body_html_len=${email.body_html?.length ?? 0} attachments=${email.attachments?.length ?? 0}`
+    );
   } catch (e) {
     await ProcessedEmail.updateOne(
       { _id: processedEmail._id },
