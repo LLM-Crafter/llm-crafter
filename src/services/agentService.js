@@ -884,6 +884,18 @@ class AgentService {
         if (toolResult.success) {
           toolResultForAgent.result = toolResult.result;
           toolResultForAgent.success = true;
+
+          const resultJson = JSON.stringify(toolResult.result);
+          if (resultJson.length > 10_000) {
+            console.warn(
+              `[ToolResult] LARGE response — tool=${parsedResponse.tool_name}` +
+              ` result_chars=${resultJson.length}` +
+              ` params=${JSON.stringify(parsedResponse.tool_parameters).slice(0, 300)}` +
+              ` preview=${resultJson.slice(0, 500)}`
+            );
+          } else {
+            console.log(`[ToolResult] tool=${parsedResponse.tool_name} result_chars=${resultJson.length}`);
+          }
         } else {
           toolResultForAgent.error = toolResult.error;
           toolResultForAgent.success = false;
