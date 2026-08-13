@@ -564,7 +564,13 @@ const getOrganizationConversations = async (req, res) => {
       filter.status = status;
     }
     if (channel) {
-      filter.channel = channel;
+      const channels = Array.isArray(channel)
+        ? channel
+        : channel
+            .split(',')
+            .map(c => c.trim())
+            .filter(Boolean);
+      filter.channel = channels.length > 1 ? { $in: channels } : channels[0];
     }
     // archived filter: 'true' = only archived, 'false' = only not archived (incl. null/missing), omitted = all
     if (archived === 'true') {
