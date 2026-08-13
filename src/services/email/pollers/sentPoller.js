@@ -120,7 +120,12 @@ async function pollSent(account) {
         { uid: `${lastSentUid + 1}:*` },
         { uid: true }
       );
-      const sorted = (uids || []).sort((a, b) => a - b);
+      // Some IMAP servers (including Gmail) normalize an out-of-range lower
+      // bound (e.g. 20:* when max UID is 19) to the last message. Filter
+      // explicitly so we never re-process a UID we've already seen.
+      const sorted = (uids || [])
+        .filter(uid => uid > lastSentUid)
+        .sort((a, b) => a - b);
 
       // Cap to avoid flooding on first real run after anchor.
       const slice = sorted.slice(0, 50);
