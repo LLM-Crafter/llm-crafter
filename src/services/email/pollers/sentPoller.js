@@ -99,6 +99,10 @@ async function pollSent(account) {
       const currentUidValidity = Number(status.uidValidity);
       const lastSentUid = account.state?.sent_last_uid || 0;
 
+      console.log(
+        `[SentPoller] account=${account._id} folder="${sentFolder}" lastSentUid=${lastSentUid}`
+      );
+
       // First-time: anchor to current uidNext-1, capture nothing yet.
       if (lastSentUid === 0) {
         const anchor = Math.max(0, Number(status.uidNext) - 1);
@@ -181,18 +185,25 @@ async function pollSent(account) {
             continue;
           }
 
-          // Avoid duplicate back-fills: check if a message with this
-          // message-id is already in the conversation.
+          // Avoid duplicate back-fills. Primary key: Message-ID header.
+          // Fallback: subject + from + approximate date (same day).
           const messageId = email.message_id;
-          if (messageId) {
-            const alreadyPresent = conversation.messages.some(
-              m => m.channel_info?.email?.message_id === messageId
+          const dedupKey = messageId
+            || `${email.subject}|${email.from_address}|${(email.received_at || new Date()).toISOString().slice(0, 10)}`;
+
+          const alreadyPresent = conversation.messages.some(m => {
+            const mid = m.channel_info?.email?.message_id;
+            if (messageId && mid) return mid === messageId;
+            // Fallback: same subject+from+day
+            return (
+              m.channel_info?.email?.subject === email.subject &&
+              m.channel_info?.email?.from_email === email.from_address
             );
-            if (alreadyPresent) {
-              result.skipped++;
-              if (uid > highestUid) highestUid = uid;
-              continue;
-            }
+          });
+          if (alreadyPresent) {
+            result.skipped++;
+            if (uid > highestUid) highestUid = uid;
+            continue;
           }
 
           // Strip quoted history so we only store the new reply text.
@@ -218,7 +229,7 @@ async function pollSent(account) {
           result.captured++;
           console.log(
             `[SentPoller] captured manual reply account=${account._id}` +
-            ` conv=${conversation._id} subject="${email.subject}" uid=${uid}`
+            ` conv=${conversation._id} subject="${email.subject}" uid=${uid} message_id=${email.message_id || '(none)'}`
           );
         } catch (msgErr) {
           console.error(`[SentPoller] error processing sent UID ${uid}:`, msgErr.message);
@@ -227,10 +238,19 @@ async function pollSent(account) {
         if (uid > highestUid) highestUid = uid;
       }
 
-      await MailAccount.updateOne(
+      const updateRes = await MailAccount.updateOne(
         { _id: account._id },
         { $set: { 'state.sent_last_uid': highestUid } }
       );
+      if (updateRes.modifiedCount === 0 && updateRes.matchedCount === 0) {
+        console.warn(
+          `[SentPoller] watermark updateOne matched 0 docs — account=${account._id} _id type=${typeof account._id}`
+        );
+      } else {
+        console.log(
+          `[SentPoller] watermark saved account=${account._id} sent_last_uid=${highestUid} modified=${updateRes.modifiedCount}`
+        );
+      }
     } finally {
       lock.release();
     }
