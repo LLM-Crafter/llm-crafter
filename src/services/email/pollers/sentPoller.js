@@ -72,7 +72,6 @@ async function buildClient(account) {
 async function pollSent(account) {
   const creds = account.getDecryptedCredentials();
   const imap = creds.imap || {};
-  const sentFolder = imap.sent_folder || _defaultSentFolder(account);
 
   const result = { captured: 0, skipped: 0 };
 
@@ -80,14 +79,16 @@ async function pollSent(account) {
   try {
     await client.connect();
 
-    // Check the folder exists before trying to open it.
+    // Auto-discover the SENT folder:
+    // 1. Look for \Sent special-use attribute (works on Gmail, Outlook, Dovecot…)
+    // 2. Fall back to explicitly configured sent_folder
+    // 3. Last resort: provider-specific default name
     const mailboxes = await client.list();
-    const folderExists = mailboxes.some(
-      m => m.path.toLowerCase() === sentFolder.toLowerCase()
-    );
-    if (!folderExists) {
+    const sentFolder = _resolveSentFolder(mailboxes, imap, account);
+
+    if (!sentFolder) {
       console.log(
-        `[SentPoller] account=${account._id} sent folder "${sentFolder}" not found — skipping`
+        `[SentPoller] account=${account._id} no SENT folder found — skipping`
       );
       return result;
     }
@@ -241,13 +242,44 @@ async function pollSent(account) {
 }
 
 /**
- * Derive a sensible default SENT folder name for the account's provider.
+ * Resolve the actual SENT folder path using (in order):
+ *   1. \Sent special-use attribute from the IMAP LIST response
+ *   2. Explicitly configured imap.sent_folder (if non-default or explicitly set)
+ *   3. Provider-specific fallback name
+ *
+ * Returns the folder path string, or null if nothing matched.
  */
-function _defaultSentFolder(account) {
-  if (account.provider === 'gmail') return '[Gmail]/Sent Mail';
-  // Outlook/Exchange commonly uses "Sent Items"
-  // Fall back to generic "Sent" for everything else.
-  return 'Sent';
+function _resolveSentFolder(mailboxes, imap, account) {
+  // 1. Special-use \Sent (RFC 6154) — most reliable across providers.
+  const specialUse = mailboxes.find(
+    m => m.specialUse === '\\Sent' || (m.flags && m.flags.has('\\Sent'))
+  );
+  if (specialUse) return specialUse.path;
+
+  // 2. Explicitly configured name (skip generic 'Sent' default so we don't
+  //    accidentally use it when the real folder has a different name).
+  const configured = imap.sent_folder;
+  if (configured && configured !== 'Sent') {
+    const found = mailboxes.find(
+      m => m.path.toLowerCase() === configured.toLowerCase()
+    );
+    if (found) return found.path;
+  }
+
+  // 3. Try common well-known names in priority order.
+  const candidates =
+    account.provider === 'gmail'
+      ? ['[Gmail]/Sent Mail']
+      : ['Sent Items', 'Sent', 'SENT', 'Sent Messages'];
+
+  for (const candidate of candidates) {
+    const found = mailboxes.find(
+      m => m.path.toLowerCase() === candidate.toLowerCase()
+    );
+    if (found) return found.path;
+  }
+
+  return null;
 }
 
 module.exports = { pollSent };
