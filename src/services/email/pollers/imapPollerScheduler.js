@@ -20,6 +20,7 @@
 const MailAccount = require('../../../models/MailAccount');
 const lockService = require('../../distributedLockService');
 const imapPoller = require('./imapPoller');
+const sentPoller = require('./sentPoller');
 
 // How often the scheduler wakes up to look for accounts due for polling.
 // Shorter than the per-account `poll_config.interval_seconds` so timing
@@ -116,6 +117,15 @@ class ImapPollerScheduler {
               if (res.enqueued > 0) {
                 console.log(
                   `[ImapPollerScheduler] account=${account._id} enqueued=${res.enqueued} uid_range=${res.uid_range}`
+                );
+              }
+
+              // Also scan the SENT folder for manual replies the operator
+              // sent directly from their email client.
+              const sentRes = await sentPoller.pollSent(account);
+              if (sentRes.captured > 0) {
+                console.log(
+                  `[ImapPollerScheduler] account=${account._id} sent_captured=${sentRes.captured}`
                 );
               }
             } catch (e) {

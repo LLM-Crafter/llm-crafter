@@ -83,6 +83,9 @@ const mailAccountSchema = new mongoose.Schema(
         //   Outlook: 'Drafts'
         //   Generic: 'Drafts'
         drafts_folder: { type: String, default: 'Drafts' },
+        // Folder where the operator's manual sent mail lives.
+        // Gmail: '[Gmail]/Sent Mail'  Outlook: 'Sent Items'  Generic: 'Sent'
+        sent_folder: { type: String, default: 'Sent' },
         // Use TLS even on plaintext port (STARTTLS)
         starttls: { type: Boolean, default: false },
       },
@@ -178,6 +181,8 @@ const mailAccountSchema = new mongoose.Schema(
     state: {
       // Highest UID seen in the last successful poll cycle (IMAP).
       last_uid: { type: Number, default: 0 },
+      // Same watermark for the SENT folder (operator-manual-reply capture).
+      sent_last_uid: { type: Number, default: 0 },
       // IMAP UIDVALIDITY — if this changes the mailbox was reset and we
       // must drop our cached `last_uid` and reseed.
       uid_validity: { type: Number, default: null },
