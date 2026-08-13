@@ -761,6 +761,13 @@ class AgentService {
     // Build context for the agent
     const context = this.buildAgentContext(agent, conversation);
 
+    console.log(
+      `[Reasoning] agent=${agent._id} conv=${conversation._id} db_messages=${conversation.messages.length}` +
+      ` history_messages=${context.conversation_history.length}` +
+      ` history_chars=${context.conversation_history.reduce((s, m) => s + (m.content?.length ?? 0), 0)}` +
+      ` has_summary=${context.has_summary}`
+    );
+
     // Initial reasoning step
     thinkingProcess.push({
       step: 'analyze_input',
