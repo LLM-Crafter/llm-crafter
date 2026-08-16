@@ -138,6 +138,19 @@ const updateDraft = async (req, res) => {
     }
 
     await outbound.save();
+
+    // Keep the conversation message in sync so the thread view shows the
+    // edited body instead of the original AI-drafted content.
+    if (outbound.conversation && body.text !== undefined) {
+      await Conversation.updateOne(
+        {
+          _id: outbound.conversation,
+          'messages.metadata.outbound_id': outbound._id,
+        },
+        { $set: { 'messages.$.content': outbound.text } }
+      ).catch(() => {});
+    }
+
     res.json(outbound);
   } catch (err) {
     console.error('[Outbound] update draft error:', err);
@@ -179,14 +192,21 @@ const sendDraft = async (req, res) => {
       });
     }
 
-    // Sync state on the conversation message so thread views update immediately.
+    // Sync state, final content, and timestamp on the conversation message
+    // so the thread view reflects what was actually sent.
     if (claimed.conversation) {
       await Conversation.updateOne(
         {
           _id: claimed.conversation,
           'messages.metadata.outbound_id': claimed._id,
         },
-        { $set: { 'messages.$.metadata.outbound_state': 'queued' } }
+        {
+          $set: {
+            'messages.$.metadata.outbound_state': 'queued',
+            'messages.$.content': claimed.text,
+            'messages.$.timestamp': new Date(),
+          },
+        }
       ).catch(() => {});
     }
 
