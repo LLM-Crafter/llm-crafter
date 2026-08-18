@@ -177,6 +177,9 @@ class EmailAgentService {
             // Effective reply recipient: honour Reply-To if the inbound
             // message set one, otherwise fall back to From.
             reply_to: email.reply_to || email.from_address,
+            // CC addresses from the inbound message so the frontend can
+            // offer a "Reply All" option that re-includes them.
+            cc_addresses: email.cc_addresses || [],
           },
         },
         metadata: {

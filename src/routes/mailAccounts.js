@@ -221,6 +221,8 @@ router.post(
   auth,
   organizationAuth.hasRole('member'),
   outboundIdParam,
+  body('cc').optional().isArray(),
+  body('bcc').optional().isArray(),
   validate,
   outboundController.sendDraft
 );

@@ -169,19 +169,25 @@ const sendDraft = async (req, res) => {
     const account = await getAccountOr404(req, res, agent._id);
     if (!account) return;
 
+    const body = req.body || {};
+
+    // Build the atomic update. CC/BCC can be overridden at send-time so the
+    // frontend can implement "Reply" (strip CC) vs "Reply All" (keep CC).
+    const setFields = {
+      state: 'queued',
+      reason: 'manual',
+      last_error: null,
+    };
+    if (Array.isArray(body.cc)) setFields.cc = body.cc;
+    if (Array.isArray(body.bcc)) setFields.bcc = body.bcc;
+
     const claimed = await OutboundEmail.findOneAndUpdate(
       {
         _id: req.params.outboundId,
         mail_account: account._id,
         state: 'drafted',
       },
-      {
-        $set: {
-          state: 'queued',
-          reason: 'manual',
-          last_error: null,
-        },
-      },
+      { $set: setFields },
       { new: true }
     );
 
