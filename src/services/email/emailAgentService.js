@@ -128,6 +128,7 @@ class EmailAgentService {
           subject: email.subject,
           from_email: email.from_address,
           from_name: email.from_name,
+          body_html: email.body_html || null,
         },
       },
     });

@@ -308,7 +308,7 @@ const testMailAccount = async (req, res) => {
 
     // SMTP test (verify connection — does not send)
     try {
-      const transporter = smtpTransport.buildTransporter(account);
+      const transporter = await smtpTransport.buildTransporter(account);
       await transporter.verify();
       results.smtp = { ok: true };
     } catch (e) {
