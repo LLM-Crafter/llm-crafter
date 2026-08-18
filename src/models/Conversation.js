@@ -92,6 +92,9 @@ const messageSchema = new mongoose.Schema({
         filename: String,
       },
     ],
+    // Email-specific fields — stored as Mixed so any shape is accepted.
+    // See channel_info.email schema in docs/api/individual-api-endpoints.md.
+    email: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },
   // Free-form metadata for channel-specific annotations (e.g. outbound_id,
   // outbound_state for email drafts/sent tracking).
