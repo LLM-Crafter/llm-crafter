@@ -7,6 +7,7 @@
  * Normalized shape:
  * {
  *   message_id:     string | null,   // header Message-Id (RFC822, with <>)
+ *   reply_to:        string | null,   // Reply-To header address (may differ from from_address)
  *   in_reply_to:    string | null,
  *   references:     string[],
  *   subject:        string,
@@ -53,6 +54,11 @@ async function parseRaw(raw) {
   const fromAddress = (fromValue.address || '').toLowerCase();
   const fromName = fromValue.name || '';
 
+  const replyToValue = parsed.replyTo?.value?.[0] || null;
+  const replyToAddress = replyToValue
+    ? (replyToValue.address || '').toLowerCase() || null
+    : null;
+
   const references = Array.isArray(parsed.references)
     ? parsed.references
     : parsed.references
@@ -66,6 +72,7 @@ async function parseRaw(raw) {
     subject: parsed.subject || '',
     from_address: fromAddress,
     from_name: fromName,
+    reply_to: replyToAddress,   // use this as the reply recipient if set
     to_addresses: pickEnvelopeAddresses(parsed.to),
     cc_addresses: pickEnvelopeAddresses(parsed.cc),
     received_at: parsed.date || new Date(),

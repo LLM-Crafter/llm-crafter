@@ -128,6 +128,9 @@ class EmailAgentService {
           subject: email.subject,
           from_email: email.from_address,
           from_name: email.from_name,
+          reply_to: email.reply_to || null,
+          to_addresses: email.to_addresses || [],
+          cc_addresses: email.cc_addresses || [],
           body_html: email.body_html || null,
         },
       },
@@ -168,6 +171,14 @@ class EmailAgentService {
         tools_used: reasoning.tools_used,
         token_usage: reasoning.token_usage,
         timestamp: new Date(),
+        channel_info: {
+          channel: 'email',
+          email: {
+            // Effective reply recipient: honour Reply-To if the inbound
+            // message set one, otherwise fall back to From.
+            reply_to: email.reply_to || email.from_address,
+          },
+        },
         metadata: {
           outbound_id: null,      // back-filled below once the OutboundEmail row exists
           outbound_state: null,
@@ -407,7 +418,7 @@ class EmailAgentService {
       mail_account: account._id,
       agent: agent._id,
       conversation: conversation._id,
-      to: [email.from_address],
+      to: [email.reply_to || email.from_address],
       cc: send.default_cc || [],
       bcc: send.default_bcc || [],
       from_email: send.from_email,
