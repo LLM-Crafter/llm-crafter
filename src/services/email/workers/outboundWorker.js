@@ -25,6 +25,7 @@ const OutboundEmail = require('../../../models/OutboundEmail');
 const Conversation = require('../../../models/Conversation');
 const lockService = require('../../distributedLockService');
 const smtpTransport = require('../transports/smtpTransport');
+const imapDraftTransport = require('../transports/imapDraftTransport');
 // (require paths are relative to src/services/email/workers/)
 
 const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_OUTBOUND_POLL_MS, 10) || 2000;
@@ -160,6 +161,26 @@ class OutboundWorker {
         },
       }
     );
+
+    // SMTP delivery has succeeded, so the server-side draft is no longer
+    // needed. Cleanup is deliberately non-fatal: an IMAP failure must not
+    // cause the worker to retry SMTP and send a duplicate email.
+    if (account.ingest_mode === 'imap_poll') {
+      try {
+        const removed = await imapDraftTransport.removeDraft(account, outbound);
+        if (removed) {
+          await OutboundEmail.updateOne(
+            { _id: outbound._id },
+            { $set: { imap_draft_uid: null } }
+          );
+        }
+      } catch (err) {
+        console.error(
+          `[OutboundWorker] sent email but failed to remove IMAP draft ${outbound._id}:`,
+          err.message
+        );
+      }
+    }
 
     // Sync state onto the linked conversation message so the thread view
     // reflects sent/draft without a separate OutboundEmail query.

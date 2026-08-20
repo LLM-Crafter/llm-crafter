@@ -60,6 +60,21 @@ async function buildRaw(outbound, account) {
   });
 }
 
+function resolveDraftsFolder(mailboxes, configuredFolder) {
+  const specialUseDrafts = mailboxes.find(
+    mailbox => mailbox.specialUse === '\\Drafts'
+  );
+  if (specialUseDrafts) {
+    return specialUseDrafts.path;
+  }
+
+  const configured = configuredFolder || 'Drafts';
+  const existing = mailboxes.find(
+    mailbox => mailbox.path.toLowerCase() === configured.toLowerCase()
+  );
+  return existing?.path || configured;
+}
+
 /**
  * Append a draft to the IMAP Drafts folder.
  *
@@ -87,7 +102,6 @@ async function appendDraft(account, outbound) {
     imapAuth = { user: imap.username, pass: imap.password };
   }
 
-  const draftsFolder = imap.drafts_folder || (account.provider === 'gmail' ? '[Gmail]/Drafts' : 'Drafts');
   const raw = await buildRaw(outbound, account);
 
   const client = new ImapFlow({
@@ -102,8 +116,11 @@ async function appendDraft(account, outbound) {
   try {
     await client.connect();
 
-    // Ensure the Drafts folder exists — some servers auto-create, some don't.
+    // Prefer the server's RFC 6154 special-use Drafts mailbox. This matters
+    // for Gmail accounts configured as generic IMAP: appending to "Drafts"
+    // otherwise creates an [Imap]/Drafts label instead of a real Gmail draft.
     const mailboxes = await client.list();
+    const draftsFolder = resolveDraftsFolder(mailboxes, imap.drafts_folder);
     const exists = mailboxes.some(
       m => m.path.toLowerCase() === draftsFolder.toLowerCase()
     );
@@ -133,4 +150,68 @@ async function appendDraft(account, outbound) {
   }
 }
 
-module.exports = { appendDraft };
+/**
+ * Remove the server-side draft after the same OutboundEmail is sent by SMTP.
+ * The custom outbound-id header identifies the exact draft even when the
+ * server did not return APPENDUID or mailbox UIDs were reset.
+ */
+async function removeDraft(account, outbound) {
+  if (account.ingest_mode !== 'imap_poll') {
+    return false;
+  }
+
+  const creds = account.getDecryptedCredentials();
+  const imap = creds.imap || {};
+
+  let imapAuth;
+  if (account.provider === 'gmail') {
+    const accessToken = await gmailOAuthService.getFreshAccessToken(account);
+    imapAuth = { user: imap.username || creds.oauth?.email, accessToken };
+  } else {
+    if (!imap.host || !imap.username || !imap.password) {
+      return false;
+    }
+    imapAuth = { user: imap.username, pass: imap.password };
+  }
+
+  const client = new ImapFlow({
+    host: imap.host || 'imap.gmail.com',
+    port: imap.port || 993,
+    secure: imap.secure !== false,
+    auth: imapAuth,
+    logger: false,
+    disableAutoIdle: true
+  });
+
+  try {
+    await client.connect();
+    const mailboxes = await client.list();
+    const draftsFolder = resolveDraftsFolder(mailboxes, imap.drafts_folder);
+    const exists = mailboxes.some(
+      mailbox => mailbox.path.toLowerCase() === draftsFolder.toLowerCase()
+    );
+    if (!exists) {
+      return false;
+    }
+
+    const lock = await client.getMailboxLock(draftsFolder);
+    try {
+      const matchingUids = await client.search(
+        { header: { 'X-LLMCrafter-Outbound-Id': String(outbound._id) } },
+        { uid: true }
+      );
+      if (!matchingUids.length) {
+        return false;
+      }
+
+      await client.messageDelete(matchingUids, { uid: true });
+      return true;
+    } finally {
+      lock.release();
+    }
+  } finally {
+    try { await client.logout(); } catch { /* ignore */ }
+  }
+}
+
+module.exports = { appendDraft, removeDraft };

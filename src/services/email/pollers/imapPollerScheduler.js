@@ -128,6 +128,11 @@ class ImapPollerScheduler {
                   `[ImapPollerScheduler] account=${account._id} sent_captured=${sentRes.captured}`
                 );
               }
+              if (sentRes.reconciled > 0) {
+                console.log(
+                  `[ImapPollerScheduler] account=${account._id} sent_reconciled=${sentRes.reconciled}`
+                );
+              }
             } catch (e) {
               console.error(
                 `[ImapPollerScheduler] poll failed for ${account._id}:`,

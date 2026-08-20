@@ -8,11 +8,9 @@
  * messages to the matching Conversation so the AI has full context the next
  * time a customer replies.
  *
- * What it does NOT do:
- *   - Trigger the agent reasoning loop (no reply is generated)
- *   - Process messages already tracked via our API (detected by the
- *     X-LLMCrafter-Outbound-Id header)
- *   - Create OutboundEmail records (these are informal context messages)
+ * It never triggers the agent reasoning loop. Messages sent from drafts that
+ * LLM Crafter created are reconciled with their existing OutboundEmail and
+ * Conversation message; other manual replies are appended as new context.
  *
  * Matching strategy:
  *   The sent message's In-Reply-To / References headers contain the
@@ -28,6 +26,7 @@ const { ImapFlow } = require('imapflow');
 
 const Conversation = require('../../../models/Conversation');
 const MailAccount = require('../../../models/MailAccount');
+const OutboundEmail = require('../../../models/OutboundEmail');
 const emailParser = require('../emailParser');
 const emailUtils = require('../emailUtils');
 const gmailOAuthService = require('../gmailOAuthService');
@@ -67,13 +66,13 @@ async function buildClient(account) {
  * into matching Conversations as assistant messages.
  *
  * @param {Object} account - MailAccount Mongoose document
- * @returns {Promise<{ captured, skipped }>}
+ * @returns {Promise<{ captured, reconciled, skipped }>}
  */
 async function pollSent(account) {
   const creds = account.getDecryptedCredentials();
   const imap = creds.imap || {};
 
-  const result = { captured: 0, skipped: 0 };
+  const result = { captured: 0, reconciled: 0, skipped: 0 };
 
   const client = await buildClient(account);
   try {
@@ -153,10 +152,14 @@ async function pollSent(account) {
 
           const email = await emailParser.parseRaw(msg.source);
 
-          // Skip messages already tracked via our API (we added the header).
           const headers = email.headers || {};
-          if (headers['x-llmcrafter-outbound-id']) {
-            result.skipped++;
+          const reconciled = await _reconcileTrackedOutbound(
+            account,
+            email,
+            headers['x-llmcrafter-outbound-id']
+          );
+          if (reconciled) {
+            result.reconciled++;
             if (uid > highestUid) highestUid = uid;
             continue;
           }
@@ -264,6 +267,84 @@ async function pollSent(account) {
   }
 
   return result;
+}
+
+/**
+ * Reconcile a draft created by LLM Crafter that the operator sent directly
+ * from their mail client. Match by our custom header, with Message-ID as a
+ * fallback in case the provider removed custom headers while sending.
+ */
+async function _reconcileTrackedOutbound(account, email, outboundIdHeader) {
+  const matches = [];
+  if (outboundIdHeader) {
+    matches.push({ _id: String(outboundIdHeader).trim() });
+  }
+  if (email.message_id) {
+    matches.push({ message_id: email.message_id });
+  }
+  if (!matches.length) {
+    return false;
+  }
+
+  const outbound = await OutboundEmail.findOne({
+    mail_account: account._id,
+    $or: matches,
+  });
+  if (!outbound) {
+    return false;
+  }
+
+  const sentAt = email.received_at || new Date();
+  const bodyText = emailUtils.stripQuotedHistory(email.body_text) || '';
+
+  await OutboundEmail.updateOne(
+    { _id: outbound._id },
+    {
+      $set: {
+        state: 'sent',
+        sent_at: sentAt,
+        provider_message_id: email.message_id || outbound.provider_message_id,
+        subject: email.subject || outbound.subject,
+        text: bodyText,
+        html: email.body_html || null,
+        to: email.to_addresses?.length ? email.to_addresses : outbound.to,
+        cc: email.cc_addresses || [],
+        last_error: null,
+        claimed_by: null,
+        claimed_at: null,
+        imap_draft_uid: null,
+      },
+    }
+  );
+
+  if (outbound.conversation) {
+    await Conversation.updateOne(
+      {
+        _id: outbound.conversation,
+        'messages.metadata.outbound_id': outbound._id,
+      },
+      {
+        $set: {
+          'messages.$.content': bodyText,
+          'messages.$.timestamp': sentAt,
+          'messages.$.metadata.outbound_state': 'sent',
+          'messages.$.channel_info.email.message_id': email.message_id,
+          'messages.$.channel_info.email.subject': email.subject,
+          'messages.$.channel_info.email.from_email': email.from_address,
+          'messages.$.channel_info.email.to_addresses': email.to_addresses || [],
+          'messages.$.channel_info.email.cc_addresses': email.cc_addresses || [],
+          'messages.$.channel_info.email.body_html': email.body_html || null,
+        },
+      }
+    );
+  }
+
+  console.log(
+    `[SentPoller] reconciled tracked draft account=${account._id}` +
+    ` outbound=${outbound._id} conv=${outbound.conversation || '(none)'}` +
+    ` message_id=${email.message_id || '(none)'}`
+  );
+  return true;
 }
 
 /**
