@@ -30,8 +30,8 @@ async function buildTransporter(account) {
       auth: {
         type: 'OAuth2',
         user: smtp.username || creds.imap?.username,
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        clientId: process.env.GMAIL_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GMAIL_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET,
         refreshToken: creds.oauth?.refresh_token,
         accessToken,
       },

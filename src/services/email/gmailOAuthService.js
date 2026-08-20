@@ -4,15 +4,21 @@
  * GmailOAuthService
  *
  * Manages the Google OAuth2 flow for connecting Gmail mailboxes to a
- * MailAccount. Uses the same GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET already
- * used by the user-authentication flow.
+ * MailAccount.
+ *
+ * Uses dedicated GMAIL_OAUTH_CLIENT_ID / GMAIL_OAUTH_CLIENT_SECRET env vars
+ * so the Gmail connection client can be kept separate from the user-login
+ * client (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET). Falls back to the login
+ * credentials if the dedicated vars are not set.
  *
  * Required Gmail scope: https://mail.google.com/
  * (Full IMAP + SMTP access via XOAUTH2)
  *
  * Required env vars:
- *   GOOGLE_CLIENT_ID
- *   GOOGLE_CLIENT_SECRET
+ *   GMAIL_OAUTH_CLIENT_ID      — preferred; dedicated client for mailbox connects
+ *   GMAIL_OAUTH_CLIENT_SECRET  — preferred; dedicated client for mailbox connects
+ *   GOOGLE_CLIENT_ID           — fallback (login client)
+ *   GOOGLE_CLIENT_SECRET       — fallback (login client)
  *   API_BASE_URL  — e.g. https://api.yourdomain.com  (used to build the
  *                   callback URL; falls back to http://localhost:{PORT})
  */
@@ -35,11 +41,12 @@ class GmailOAuthService {
    */
   buildClient() {
     const callbackUrl = this._callbackUrl();
-    return new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      callbackUrl
-    );
+    // Prefer dedicated Gmail OAuth client; fall back to the login client.
+    const clientId =
+      process.env.GMAIL_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+    const clientSecret =
+      process.env.GMAIL_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+    return new google.auth.OAuth2(clientId, clientSecret, callbackUrl);
   }
 
   /**
