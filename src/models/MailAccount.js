@@ -96,7 +96,7 @@ const mailAccountSchema = new mongoose.Schema(
         username: { type: String, default: null },
         password: { type: String, default: null }, // encrypted
       },
-      // OAuth (populated for gmail/graph providers — not used yet)
+      // OAuth credentials used by provider-native APIs.
       oauth: {
         access_token: { type: String, default: null }, // encrypted
         refresh_token: { type: String, default: null }, // encrypted
@@ -183,6 +183,12 @@ const mailAccountSchema = new mongoose.Schema(
       last_uid: { type: Number, default: 0 },
       // Same watermark for the SENT folder (operator-manual-reply capture).
       sent_last_uid: { type: Number, default: 0 },
+      // Gmail History API cursor and watch lifecycle. History IDs are strings
+      // because they can exceed JavaScript's safe integer range.
+      gmail_history_id: { type: String, default: null },
+      gmail_watch_expiration: { type: Date, default: null },
+      gmail_last_synced_at: { type: Date, default: null },
+      gmail_last_watch_error: { type: String, default: null },
       // IMAP UIDVALIDITY — if this changes the mailbox was reset and we
       // must drop our cached `last_uid` and reseed.
       uid_validity: { type: Number, default: null },

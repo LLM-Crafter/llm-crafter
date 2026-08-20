@@ -275,13 +275,21 @@ async function pollSent(account) {
  * headers and generate a new Message-ID, so fall back conservatively to one
  * outstanding draft with the same thread and subject.
  */
-async function _reconcileTrackedOutbound(account, email, outboundIdHeader) {
+async function _reconcileTrackedOutbound(
+  account,
+  email,
+  outboundIdHeader,
+  provider = {}
+) {
   const matches = [];
   if (outboundIdHeader) {
     matches.push({ _id: String(outboundIdHeader).trim() });
   }
   if (email.message_id) {
     matches.push({ message_id: email.message_id });
+  }
+  if (provider.messageId) {
+    matches.push({ provider_message_id: provider.messageId });
   }
 
   let outbound = matches.length
@@ -307,7 +315,11 @@ async function _reconcileTrackedOutbound(account, email, outboundIdHeader) {
       $set: {
         state: 'sent',
         sent_at: sentAt,
-        provider_message_id: email.message_id || outbound.provider_message_id,
+        provider_message_id:
+          provider.messageId || outbound.provider_message_id || email.message_id,
+        provider_thread_id:
+          provider.threadId || outbound.provider_thread_id,
+        provider_draft_id: null,
         subject: email.subject || outbound.subject,
         text: bodyText,
         html: email.body_html || null,
@@ -349,6 +361,59 @@ async function _reconcileTrackedOutbound(account, email, outboundIdHeader) {
     ` message_id=${email.message_id || '(none)'}`
   );
   return true;
+}
+
+async function processProviderSentMessage(account, raw, provider = {}) {
+  const email = await emailParser.parseRaw(raw);
+  const reconciled = await _reconcileTrackedOutbound(
+    account,
+    email,
+    email.headers?.['x-llmcrafter-outbound-id'],
+    provider
+  );
+  if (reconciled) return 'reconciled';
+
+  if (!email.in_reply_to && (!email.references || email.references.length === 0)) {
+    return 'skipped';
+  }
+
+  const threadRoot = emailUtils.getThreadRoot(email);
+  if (!threadRoot) return 'skipped';
+
+  const conversation = await Conversation.findOne({
+    channel: 'email',
+    'channel_metadata.email.thread_id': threadRoot,
+  });
+  if (!conversation) return 'skipped';
+
+  const alreadyPresent = conversation.messages.some(message =>
+    email.message_id &&
+    message.channel_info?.email?.message_id === email.message_id
+  );
+  if (alreadyPresent) return 'skipped';
+
+  await conversation.addMessage({
+    role: 'assistant',
+    content: emailUtils.stripQuotedHistory(email.body_text) || '',
+    timestamp: email.received_at || new Date(),
+    channel_info: {
+      channel: 'email',
+      email: {
+        message_id: email.message_id,
+        in_reply_to: email.in_reply_to,
+        subject: email.subject,
+        from_email: email.from_address,
+        from_name: email.from_name,
+        to_addresses: email.to_addresses || [],
+        cc_addresses: email.cc_addresses || [],
+        body_html: email.body_html || null,
+        provider_message_id: provider.messageId || null,
+        provider_thread_id: provider.threadId || null,
+        manual_send: true,
+      },
+    },
+  });
+  return 'captured';
 }
 
 async function _findDraftByThread(account, email) {
@@ -437,4 +502,4 @@ function _resolveSentFolder(mailboxes, imap, account) {
   return null;
 }
 
-module.exports = { pollSent };
+module.exports = { pollSent, processProviderSentMessage };

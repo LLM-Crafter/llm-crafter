@@ -22,10 +22,12 @@ const MailAccount = require('../models/MailAccount');
 const OutboundEmail = require('../models/OutboundEmail');
 const ProcessedEmail = require('../models/ProcessedEmail');
 const emailUtils = require('../services/email/emailUtils');
-const imapDraftTransport = require('../services/email/transports/imapDraftTransport');
+const draftService = require('../services/email/draftService');
 const gmailOAuthService = require('../services/email/gmailOAuthService');
+const gmailApiService = require('../services/email/gmailApiService');
 const lockService = require('../services/distributedLockService');
 const imapPoller = require('../services/email/pollers/imapPoller');
+const gmailPoller = require('../services/email/pollers/gmailPoller');
 const smtpTransport = require('../services/email/transports/smtpTransport');
 const { ImapFlow } = require('imapflow');
 
@@ -253,9 +255,8 @@ const resumeMailAccount = async (req, res) => {
 };
 
 /**
- * Verify IMAP + SMTP credentials by performing a real handshake against
- * both servers. Does NOT send a test email or read any messages — purely
- * authenticates and lists the configured mailbox.
+ * Verify provider credentials without sending or reading messages. Gmail
+ * uses the profile API; generic providers use IMAP and SMTP handshakes.
  */
 const testMailAccount = async (req, res) => {
   try {
@@ -263,6 +264,31 @@ const testMailAccount = async (req, res) => {
     if (!agent) return;
     const account = await getAccountOr404(req, res, agent._id);
     if (!account) return;
+
+    if (account.provider === 'gmail') {
+      try {
+        const profile = await gmailApiService.getProfile(account);
+        return res.json({
+          account_id: account._id,
+          ok: true,
+          results: {
+            gmail: {
+              ok: true,
+              email_address: profile.emailAddress,
+              history_id: profile.historyId,
+              messages_total: profile.messagesTotal,
+              threads_total: profile.threadsTotal,
+            },
+          },
+        });
+      } catch (e) {
+        return res.json({
+          account_id: account._id,
+          ok: false,
+          results: { gmail: { ok: false, error: e.message } },
+        });
+      }
+    }
 
     const results = { imap: null, smtp: null };
 
@@ -342,16 +368,18 @@ const pollMailAccount = async (req, res) => {
     const account = await getAccountOr404(req, res, agent._id);
     if (!account) return;
 
-    if (account.ingest_mode !== 'imap_poll') {
+    if (!['imap_poll', 'oauth_push'].includes(account.ingest_mode)) {
       return res.status(400).json({
-        error: 'Manual poll only supported for ingest_mode=imap_poll',
+        error: 'Manual poll is not supported for this ingest mode',
       });
     }
 
     // Run inside the per-account lock to avoid racing the scheduler.
     const lockKey = `imap_poll:${account._id}`;
     const result = await lockService.withLock(lockKey, 2 * 60_000, () =>
-      imapPoller.pollAccount(account)
+      account.provider === 'gmail'
+        ? gmailPoller.pollAccount(account)
+        : imapPoller.pollAccount(account)
     );
 
     if (result === null) {
@@ -575,20 +603,11 @@ const sendToThread = async (req, res) => {
 
     res.status(201).json(outbound);
 
-    // Fire-and-forget: push the draft to the IMAP Drafts folder so it
-    // appears in the user's email client. Non-fatal if it fails.
-    if (state === 'drafted' && account.ingest_mode === 'imap_poll') {
-      imapDraftTransport.appendDraft(account, outbound)
-        .then(uid => {
-          if (uid !== null) {
-            return OutboundEmail.updateOne(
-              { _id: outbound._id },
-              { $set: { imap_draft_uid: uid } }
-            );
-          }
-        })
+    // Fire-and-forget: create a native provider draft. Non-fatal if it fails.
+    if (state === 'drafted') {
+      draftService.create(account, outbound)
         .catch(err =>
-          console.error(`[MailAccount] IMAP draft append failed for ${outbound._id}:`, err.message)
+          console.error(`[MailAccount] remote draft create failed for ${outbound._id}:`, err.message)
         );
     }
   } catch (err) {
@@ -612,9 +631,13 @@ const sendToThread = async (req, res) => {
  */
 const getGmailAuthorizeUrl = async (req, res) => {
   try {
-    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    const clientId =
+      process.env.GMAIL_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+    const clientSecret =
+      process.env.GMAIL_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
       return res.status(501).json({
-        error: 'Google OAuth is not configured on this server (missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).',
+        error: 'Google OAuth is not configured on this server.',
       });
     }
 
@@ -700,7 +723,7 @@ const gmailOAuthCallback = async (req, res) => {
         agent: ctx.agentId,
         display_name: tokens.email,
         provider: 'gmail',
-        ingest_mode: 'imap_poll',
+        ingest_mode: 'oauth_push',
         send_profile: {
           from_email: tokens.email,
           from_name: '',
@@ -709,6 +732,9 @@ const gmailOAuthCallback = async (req, res) => {
         is_paused: false,
       });
     }
+
+    account.provider = 'gmail';
+    account.ingest_mode = 'oauth_push';
 
     // Store tokens (pre-save hook encrypts them).
     account.credentials = account.credentials || {};
@@ -738,6 +764,44 @@ const gmailOAuthCallback = async (req, res) => {
     };
 
     await account.save();
+
+    // Anchor incremental history immediately so existing mailbox contents are
+    // not replayed, then register this mailbox for Pub/Sub notifications.
+    try {
+      const profile = await gmailApiService.getProfile(account);
+      const stateUpdate = {
+        'state.gmail_history_id': String(profile.historyId),
+        'state.gmail_last_synced_at': new Date(),
+        'state.last_polled_at': new Date(),
+        'state.gmail_last_watch_error': null,
+      };
+      if (process.env.GMAIL_PUBSUB_TOPIC) {
+        const watch = await gmailApiService.watch(account);
+        stateUpdate['state.gmail_history_id'] = String(watch.historyId);
+        stateUpdate['state.gmail_watch_expiration'] = watch.expiration
+          ? new Date(Number(watch.expiration))
+          : null;
+      }
+      await MailAccount.updateOne(
+        { _id: account._id },
+        { $set: stateUpdate }
+      );
+    } catch (watchErr) {
+      await MailAccount.updateOne(
+        { _id: account._id },
+        {
+          $set: {
+            'state.gmail_last_watch_error': watchErr.message,
+            'state.last_error': watchErr.message,
+            'state.last_error_at': new Date(),
+          },
+        }
+      );
+      console.error(
+        `[Gmail OAuth] account connected but Gmail initialization failed ${account._id}:`,
+        watchErr.message
+      );
+    }
 
     return redirect('ok', {
       account_id: account._id,

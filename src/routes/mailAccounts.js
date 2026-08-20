@@ -17,7 +17,9 @@ const { body, param, query } = require('express-validator');
 const router = express.Router();
 
 const mailAccountController = require('../controllers/mailAccountController');
-const outboundController = require('../controllers/outboundEmailController');const auth = require('../middleware/auth');
+const outboundController = require('../controllers/outboundEmailController');
+const gmailWebhookController = require('../controllers/gmailWebhookController');
+const auth = require('../middleware/auth');
 const organizationAuth = require('../middleware/organizationAuth');
 const validate = require('../middleware/validate');
 
@@ -308,6 +310,13 @@ router.get(
 router.get(
   '/email/oauth/google/callback',
   mailAccountController.gmailOAuthCallback
+);
+
+// Google Pub/Sub push endpoint. Authentication is performed by validating
+// the Google-issued OIDC bearer token in the controller.
+router.post(
+  '/email/webhooks/google',
+  gmailWebhookController.handleGooglePush
 );
 
 module.exports = router;

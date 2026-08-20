@@ -214,4 +214,4 @@ async function removeDraft(account, outbound) {
   }
 }
 
-module.exports = { appendDraft, removeDraft };
+module.exports = { appendDraft, removeDraft, buildRaw };

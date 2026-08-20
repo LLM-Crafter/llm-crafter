@@ -26,6 +26,7 @@ const Conversation = require('../../../models/Conversation');
 const lockService = require('../../distributedLockService');
 const smtpTransport = require('../transports/smtpTransport');
 const imapDraftTransport = require('../transports/imapDraftTransport');
+const gmailApiService = require('../gmailApiService');
 // (require paths are relative to src/services/email/workers/)
 
 const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_OUTBOUND_POLL_MS, 10) || 2000;
@@ -141,19 +142,19 @@ class OutboundWorker {
       return;
     }
 
-    // Currently we only support SMTP. Provider-specific transports plug in
-    // here later (Gmail API drafts, Microsoft Graph createReply, etc.).
-    const { providerMessageId } = await smtpTransport.sendOutbound(
-      account,
-      outbound
-    );
+    const sendResult = account.provider === 'gmail'
+      ? await gmailApiService.sendOutbound(account, outbound)
+      : await smtpTransport.sendOutbound(account, outbound);
 
     await OutboundEmail.updateOne(
       { _id: outbound._id },
       {
         $set: {
           state: 'sent',
-          provider_message_id: providerMessageId,
+          provider_message_id: sendResult.providerMessageId,
+          provider_thread_id:
+            sendResult.providerThreadId || outbound.provider_thread_id,
+          provider_draft_id: null,
           sent_at: new Date(),
           last_error: null,
           claimed_by: null,
@@ -165,7 +166,7 @@ class OutboundWorker {
     // SMTP delivery has succeeded, so the server-side draft is no longer
     // needed. Cleanup is deliberately non-fatal: an IMAP failure must not
     // cause the worker to retry SMTP and send a duplicate email.
-    if (account.ingest_mode === 'imap_poll') {
+    if (account.provider !== 'gmail' && account.ingest_mode === 'imap_poll') {
       try {
         const removed = await imapDraftTransport.removeDraft(account, outbound);
         if (removed) {

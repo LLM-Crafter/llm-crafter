@@ -18,6 +18,7 @@ const Agent = require('../models/Agent');
 const MailAccount = require('../models/MailAccount');
 const OutboundEmail = require('../models/OutboundEmail');
 const Conversation = require('../models/Conversation');
+const draftService = require('../services/email/draftService');
 
 async function getAgentOr404(req, res) {
   const { orgId, projectId, agentId } = req.params;
@@ -137,6 +138,9 @@ const updateDraft = async (req, res) => {
       if (body[key] !== undefined) outbound[key] = body[key];
     }
 
+    if (account.provider === 'gmail') {
+      await draftService.update(account, outbound);
+    }
     await outbound.save();
 
     // Keep the conversation message in sync so the thread view shows the
@@ -170,6 +174,25 @@ const sendDraft = async (req, res) => {
     if (!account) return;
 
     const body = req.body || {};
+
+    // Synchronize send-time recipient overrides into the native Gmail draft
+    // before exposing it to the outbound worker.
+    if (account.provider === 'gmail') {
+      const draft = await OutboundEmail.findOne({
+        _id: req.params.outboundId,
+        mail_account: account._id,
+        state: 'drafted',
+      });
+      if (!draft) {
+        return res.status(409).json({
+          error:
+            'Draft not found or no longer in drafted state (may have been sent or cancelled).',
+        });
+      }
+      if (Array.isArray(body.cc)) draft.cc = body.cc;
+      if (Array.isArray(body.bcc)) draft.bcc = body.bcc;
+      await draftService.update(account, draft);
+    }
 
     // Build the atomic update. CC/BCC can be overridden at send-time so the
     // frontend can implement "Reply" (strip CC) vs "Reply All" (keep CC).
@@ -248,6 +271,15 @@ const cancelOutbound = async (req, res) => {
         error:
           'Cannot cancel — message is not in drafted or queued state (may already be sending/sent).',
       });
+    }
+
+    if (claimed.provider_draft_id || claimed.imap_draft_uid !== null) {
+      draftService.remove(account, claimed).catch(err =>
+        console.error(
+          `[Outbound] failed to remove cancelled remote draft ${claimed._id}:`,
+          err.message
+        )
+      );
     }
 
     res.json(claimed);

@@ -38,7 +38,7 @@ const OutboundEmail = require('../../models/OutboundEmail');
 const agentService = require('../agentService');
 const emailTriageService = require('./emailTriageService');
 const emailUtils = require('./emailUtils');
-const imapDraftTransport = require('./transports/imapDraftTransport');
+const draftService = require('./draftService');
 // (require paths are relative to src/services/email/)
 
 class EmailAgentService {
@@ -236,20 +236,12 @@ class EmailAgentService {
       }
     }
 
-    // If the outbound was saved as a draft, also push it to the IMAP Drafts
-    // folder so it appears in the user's email client.
-    if (outbound.state === 'drafted' && account.ingest_mode === 'imap_poll') {
-      imapDraftTransport.appendDraft(account, outbound)
-        .then(uid => {
-          if (uid !== null) {
-            return OutboundEmail.updateOne(
-              { _id: outbound._id },
-              { $set: { imap_draft_uid: uid } }
-            );
-          }
-        })
+    // Mirror drafts to the provider: native Gmail Drafts API for Gmail,
+    // IMAP APPEND for generic IMAP accounts.
+    if (outbound.state === 'drafted') {
+      draftService.create(account, outbound)
         .catch(err =>
-          console.error(`[EmailAgent] IMAP draft append failed for ${outbound._id}:`, err.message)
+          console.error(`[EmailAgent] remote draft create failed for ${outbound._id}:`, err.message)
         );
     }
 

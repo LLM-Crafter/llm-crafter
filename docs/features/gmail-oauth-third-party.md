@@ -36,8 +36,7 @@ Your frontend                 LLM Crafter API           Google
 Ask the operator of the LLM Crafter instance you are integrating with to
 confirm:
 
-- Gmail OAuth is enabled (`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are
-  configured on the server).
+- Gmail OAuth and Pub/Sub are enabled on the server.
 - Your redirect URL (e.g. `https://your-app.com/gmail-connected`) is either
   already allowed or does not need to be pre-registered — it is passed as a
   query parameter at runtime, not registered in Google Cloud Console.
@@ -190,8 +189,8 @@ Once `account_id` is in hand, use the standard mail account API endpoints:
 | Pause / resume polling | `PATCH /…/mail-accounts/:accountId` with `{ "is_paused": true }`                                        |
 | Disconnect (delete)    | `DELETE /…/mail-accounts/:accountId`                                                                    |
 
-The agent will start polling the connected Gmail inbox automatically on the
-next scheduler tick (within the configured `poll_interval`, default 5 minutes).
+The backend registers a Gmail watch during connection. Pub/Sub notifications
+trigger History API synchronization, while periodic polling remains a fallback.
 
 ---
 

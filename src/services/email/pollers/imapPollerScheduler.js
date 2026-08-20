@@ -21,6 +21,7 @@ const MailAccount = require('../../../models/MailAccount');
 const lockService = require('../../distributedLockService');
 const imapPoller = require('./imapPoller');
 const sentPoller = require('./sentPoller');
+const gmailPoller = require('./gmailPoller');
 
 // How often the scheduler wakes up to look for accounts due for polling.
 // Shorter than the per-account `poll_config.interval_seconds` so timing
@@ -91,8 +92,8 @@ class ImapPollerScheduler {
     try {
       const now = new Date();
       const accounts = await MailAccount.find({
-        provider: 'imap',
-        ingest_mode: 'imap_poll',
+        provider: { $in: ['imap', 'gmail'] },
+        ingest_mode: { $in: ['imap_poll', 'oauth_push'] },
         is_active: true,
         is_paused: false,
       })
@@ -113,6 +114,19 @@ class ImapPollerScheduler {
         await lockService
           .withLock(lockKey, POLL_LOCK_TTL_MS, async () => {
             try {
+              if (account.provider === 'gmail') {
+                const gmailRes = await gmailPoller.pollAccount(account);
+                if (gmailRes.enqueued > 0 || gmailRes.anchored || gmailRes.reset) {
+                  console.log(
+                    `[ImapPollerScheduler] gmail account=${account._id}` +
+                    ` enqueued=${gmailRes.enqueued}` +
+                    ` history_id=${gmailRes.history_id}` +
+                    ` anchored=${gmailRes.anchored} reset=${gmailRes.reset}`
+                  );
+                }
+                return;
+              }
+
               const res = await imapPoller.pollAccount(account);
               if (res.enqueued > 0) {
                 console.log(
