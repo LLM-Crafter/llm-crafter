@@ -271,8 +271,9 @@ async function pollSent(account) {
 
 /**
  * Reconcile a draft created by LLM Crafter that the operator sent directly
- * from their mail client. Match by our custom header, with Message-ID as a
- * fallback in case the provider removed custom headers while sending.
+ * from their mail client. Prefer exact identifiers. Gmail may strip custom
+ * headers and generate a new Message-ID, so fall back conservatively to one
+ * outstanding draft with the same thread and subject.
  */
 async function _reconcileTrackedOutbound(account, email, outboundIdHeader) {
   const matches = [];
@@ -282,14 +283,17 @@ async function _reconcileTrackedOutbound(account, email, outboundIdHeader) {
   if (email.message_id) {
     matches.push({ message_id: email.message_id });
   }
-  if (!matches.length) {
-    return false;
-  }
 
-  const outbound = await OutboundEmail.findOne({
-    mail_account: account._id,
-    $or: matches,
-  });
+  let outbound = matches.length
+    ? await OutboundEmail.findOne({
+      mail_account: account._id,
+      $or: matches,
+    })
+    : null;
+
+  if (!outbound) {
+    outbound = await _findDraftByThread(account, email);
+  }
   if (!outbound) {
     return false;
   }
@@ -345,6 +349,51 @@ async function _reconcileTrackedOutbound(account, email, outboundIdHeader) {
     ` message_id=${email.message_id || '(none)'}`
   );
   return true;
+}
+
+async function _findDraftByThread(account, email) {
+  const threadMessageIds = [
+    email.in_reply_to,
+    ...(email.references || []),
+  ].filter(Boolean);
+  if (!threadMessageIds.length) {
+    return null;
+  }
+
+  const candidates = await OutboundEmail.find({
+    mail_account: account._id,
+    state: 'drafted',
+    in_reply_to: { $in: threadMessageIds },
+  }).sort({ createdAt: -1 });
+
+  const normalizedSubject = _normalizeSubject(email.subject);
+  const subjectMatches = candidates.filter(
+    candidate => _normalizeSubject(candidate.subject) === normalizedSubject
+  );
+
+  if (subjectMatches.length === 1) {
+    console.log(
+      `[SentPoller] matched Gmail draft by thread account=${account._id}` +
+      ` outbound=${subjectMatches[0]._id}`
+    );
+    return subjectMatches[0];
+  }
+
+  if (subjectMatches.length > 1) {
+    console.warn(
+      `[SentPoller] ambiguous draft match account=${account._id}` +
+      ` subject="${email.subject}" candidates=${subjectMatches.length}`
+    );
+  }
+  return null;
+}
+
+function _normalizeSubject(subject) {
+  return String(subject || '')
+    .trim()
+    .replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '')
+    .trim()
+    .toLowerCase();
 }
 
 /**
