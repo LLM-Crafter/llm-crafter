@@ -10,7 +10,9 @@
  *     raw_base64: string,                   // raw RFC822 bytes
  *     envelope_message_id?: string,
  *     envelope_from?: string,
- *     envelope_subject?: string
+ *     envelope_subject?: string,
+ *     provider_message_id?: string,
+ *     provider_thread_id?: string
  *   }
  *
  * Flow per job:
@@ -40,6 +42,8 @@ async function handleIngestJob(payload, job) {
     envelope_message_id,
     envelope_from,
     envelope_subject,
+    provider_message_id,
+    provider_thread_id,
   } = payload;
 
   if (!mail_account_id || !external_id || !raw_base64) {
@@ -100,6 +104,10 @@ async function handleIngestJob(payload, job) {
     mailAccountId: mail_account_id,
     email,
     processedEmail,
+    providerMessageId:
+      provider_message_id || job.context?.provider_message_id || null,
+    providerThreadId:
+      provider_thread_id || job.context?.provider_thread_id || null,
   });
 
   console.log(

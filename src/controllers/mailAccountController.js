@@ -577,6 +577,7 @@ const sendToThread = async (req, res) => {
       message_id: messageId,
       in_reply_to: inReplyTo,
       references,
+      provider_thread_id: meta.provider_thread_id || null,
       state,
       reason: 'manual',
       metadata: { composed_by: req.user?._id || 'api' },

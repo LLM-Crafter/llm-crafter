@@ -70,8 +70,10 @@ const handleGooglePush = async (req, res) => {
       'send_profile.from_email': emailAddress
     }).select('_id');
 
+    let enqueued = 0;
+    let duplicates = 0;
     for (const account of accounts) {
-      await jobQueue.enqueue(
+      const job = await jobQueue.enqueue(
         QUEUE_NAME,
         {
           mail_account_id: account._id,
@@ -86,7 +88,18 @@ const handleGooglePush = async (req, res) => {
           }
         }
       );
+      if (job) {
+        enqueued++;
+      } else {
+        duplicates++;
+      }
     }
+
+    console.log(
+      `[GmailWebhook] accepted history_id=${historyId}` +
+      ` accounts=${accounts.length} enqueued=${enqueued}` +
+      ` duplicates=${duplicates}`
+    );
 
     return res.status(204).send();
   } catch (err) {

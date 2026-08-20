@@ -9,6 +9,12 @@ const QUEUE_NAME = 'email.gmail-sync';
 const LOCK_TTL_MS = 2 * 60_000;
 
 async function handleSyncJob(payload) {
+  console.log(
+    `[GmailSyncWorker] processing account=${payload.mail_account_id}` +
+    ` notification_history_id=${payload.notification_history_id || '(none)'}` +
+    ' source=pubsub'
+  );
+
   const account = await MailAccount.findOne({
     _id: payload.mail_account_id,
     provider: 'gmail',
@@ -27,6 +33,12 @@ async function handleSyncJob(payload) {
   if (result === null) {
     throw new Error(`Gmail account ${account._id} is already synchronizing`);
   }
+  console.log(
+    `[GmailSyncWorker] done account=${account._id}` +
+    ` notification_history_id=${payload.notification_history_id || '(none)'}` +
+    ` enqueued=${result.enqueued} captured=${result.captured}` +
+    ` reconciled=${result.reconciled} history_id=${result.history_id}`
+  );
   return result;
 }
 

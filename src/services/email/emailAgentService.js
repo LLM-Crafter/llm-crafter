@@ -49,9 +49,17 @@ class EmailAgentService {
    * @param {string} params.mailAccountId
    * @param {Object} params.email - normalized email (see emailParser)
    * @param {Object} [params.processedEmail] - the ProcessedEmail row (for logging)
+   * @param {string} [params.providerMessageId] - provider-native message ID
+   * @param {string} [params.providerThreadId] - provider-native thread ID
    * @returns {Promise<Object>} summary of what happened (for logging / dashboards)
    */
-  async processIncomingEmail({ mailAccountId, email, processedEmail = null }) {
+  async processIncomingEmail({
+    mailAccountId,
+    email,
+    processedEmail = null,
+    providerMessageId = null,
+    providerThreadId = null,
+  }) {
     const account = await MailAccount.findById(mailAccountId);
     if (!account) {
       throw new Error(`MailAccount ${mailAccountId} not found`);
@@ -95,7 +103,23 @@ class EmailAgentService {
       account,
       email,
       threadRoot,
+      providerMessageId,
+      providerThreadId,
     });
+
+    if (providerThreadId) {
+      await Conversation.updateOne(
+        { _id: conversation._id },
+        {
+          $set: {
+            'channel_metadata.email.provider_thread_id': providerThreadId,
+            'channel_metadata.email.provider_message_id': providerMessageId,
+          },
+        }
+      );
+      conversation.channel_metadata.email.provider_thread_id = providerThreadId;
+      conversation.channel_metadata.email.provider_message_id = providerMessageId;
+    }
 
     // ── 3. Append inbound message ────────────────────────────────────────
     // Cap body length before storage so a single large email cannot exceed
@@ -132,6 +156,8 @@ class EmailAgentService {
           to_addresses: email.to_addresses || [],
           cc_addresses: email.cc_addresses || [],
           body_html: email.body_html || null,
+          provider_message_id: providerMessageId,
+          provider_thread_id: providerThreadId,
         },
       },
     });
@@ -217,6 +243,7 @@ class EmailAgentService {
       replyBody: reasoning.content || '',
       decision,
       triage,
+      providerThreadId,
     });
 
     // Back-fill the outbound reference onto the assistant message so the
@@ -273,7 +300,14 @@ class EmailAgentService {
    * The thread root is stored on `channel_metadata.email.thread_id` so it
    * matches the existing schema (see Conversation.js).
    */
-  async _resolveConversation({ agent, account, email, threadRoot }) {
+  async _resolveConversation({
+    agent,
+    account,
+    email,
+    threadRoot,
+    providerMessageId,
+    providerThreadId,
+  }) {
     if (threadRoot) {
       // Try to find an existing conversation in this thread.
       const existing = await Conversation.findOne({
@@ -313,6 +347,8 @@ class EmailAgentService {
               subject: email.subject || '',
               thread_id: threadRoot || email.message_id || '',
               message_id: email.message_id || '',
+              provider_message_id: providerMessageId || '',
+              provider_thread_id: providerThreadId || '',
               mail_account: account._id,
             },
           },
@@ -395,7 +431,16 @@ class EmailAgentService {
    * Build and persist the OutboundEmail row in the correct initial state.
    * Does NOT send — the outbound worker picks up `queued` rows and sends.
    */
-  async _createOutbound({ account, agent, conversation, email, replyBody, decision, triage }) {
+  async _createOutbound({
+    account,
+    agent,
+    conversation,
+    email,
+    replyBody,
+    decision,
+    triage,
+    providerThreadId,
+  }) {
     const send = account.send_profile || {};
     const messageId = emailUtils.generateMessageId(send.from_email);
     const references = [
@@ -425,6 +470,7 @@ class EmailAgentService {
       message_id: messageId,
       in_reply_to: email.message_id || null,
       references,
+      provider_thread_id: providerThreadId || null,
       state: stateByAction[decision.action] || 'drafted',
       reason: decision.reason,
       confidence: decision.confidence ?? null,

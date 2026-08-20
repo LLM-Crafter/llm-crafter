@@ -39,14 +39,13 @@ class GmailApiService {
   async createDraft(account, outbound) {
     const gmail = await this.buildClient(account);
     const raw = toBase64Url(await buildRaw(outbound, account));
+    const threadId = await this.resolveThreadId(gmail, outbound);
     const { data } = await gmail.users.drafts.create({
       userId: 'me',
       requestBody: {
         message: {
           raw,
-          ...(outbound.provider_thread_id
-            ? { threadId: outbound.provider_thread_id }
-            : {})
+          ...(threadId ? { threadId } : {})
         }
       }
     });
@@ -63,15 +62,14 @@ class GmailApiService {
     }
     const gmail = await this.buildClient(account);
     const raw = toBase64Url(await buildRaw(outbound, account));
+    const threadId = await this.resolveThreadId(gmail, outbound);
     const { data } = await gmail.users.drafts.update({
       userId: 'me',
       id: outbound.provider_draft_id,
       requestBody: {
         message: {
           raw,
-          ...(outbound.provider_thread_id
-            ? { threadId: outbound.provider_thread_id }
-            : {})
+          ...(threadId ? { threadId } : {})
         }
       }
     });
@@ -99,13 +97,12 @@ class GmailApiService {
       }));
     } else {
       const raw = toBase64Url(await buildRaw(outbound, account));
+      const threadId = await this.resolveThreadId(gmail, outbound);
       ({ data } = await gmail.users.messages.send({
         userId: 'me',
         requestBody: {
           raw,
-          ...(outbound.provider_thread_id
-            ? { threadId: outbound.provider_thread_id }
-            : {})
+          ...(threadId ? { threadId } : {})
         }
       }));
     }
@@ -129,6 +126,23 @@ class GmailApiService {
       labelIds: data.labelIds || [],
       historyId: data.historyId || null
     };
+  }
+
+  async resolveThreadId(gmail, outbound) {
+    if (outbound.provider_thread_id) {
+      return outbound.provider_thread_id;
+    }
+    if (!outbound.in_reply_to) {
+      return null;
+    }
+
+    const rfcMessageId = String(outbound.in_reply_to).replace(/[<>]/g, '');
+    const { data } = await gmail.users.messages.list({
+      userId: 'me',
+      q: `rfc822msgid:${rfcMessageId}`,
+      maxResults: 1
+    });
+    return data.messages?.[0]?.threadId || null;
   }
 
   async listHistory(account, startHistoryId, pageToken) {

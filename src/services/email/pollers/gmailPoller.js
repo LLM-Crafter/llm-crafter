@@ -96,7 +96,9 @@ async function pollAccount(account) {
             {
               mail_account_id: account._id,
               external_id: externalId,
-              raw_base64: fetched.raw.toString('base64')
+              raw_base64: fetched.raw.toString('base64'),
+              provider_message_id: fetched.messageId,
+              provider_thread_id: fetched.threadId
             },
             {
               dedupKey: `${account._id}:${externalId}`,
