@@ -80,8 +80,9 @@ function renderHtml(bodyText, signatureHtml) {
   const escaped = String(bodyText || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const bodyHtml = `<div style="white-space: pre-wrap; font-family: sans-serif;">${escaped}</div>`;
+    .replace(/>/g, '&gt;')
+    .replace(/\r\n?|\n/g, '<br>');
+  const bodyHtml = `<div style="font-family: sans-serif;">${escaped}</div>`;
   if (signatureHtml) {
     return `${bodyHtml}<br/><br/>${signatureHtml}`;
   }
