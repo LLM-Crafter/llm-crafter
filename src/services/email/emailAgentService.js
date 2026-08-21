@@ -243,6 +243,7 @@ class EmailAgentService {
       replyBody: reasoning.content || '',
       decision,
       triage,
+      providerMessageId,
       providerThreadId,
     });
 
@@ -439,6 +440,7 @@ class EmailAgentService {
     replyBody,
     decision,
     triage,
+    providerMessageId,
     providerThreadId,
   }) {
     const send = account.send_profile || {};
@@ -471,6 +473,7 @@ class EmailAgentService {
       in_reply_to: email.message_id || null,
       references,
       provider_thread_id: providerThreadId || null,
+      provider_parent_message_id: providerMessageId || null,
       state: stateByAction[decision.action] || 'drafted',
       reason: decision.reason,
       confidence: decision.confidence ?? null,

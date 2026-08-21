@@ -22,6 +22,7 @@ const lockService = require('../../distributedLockService');
 const imapPoller = require('./imapPoller');
 const sentPoller = require('./sentPoller');
 const gmailPoller = require('./gmailPoller');
+const graphPoller = require('./graphPoller');
 
 // How often the scheduler wakes up to look for accounts due for polling.
 // Shorter than the per-account `poll_config.interval_seconds` so timing
@@ -92,7 +93,7 @@ class ImapPollerScheduler {
     try {
       const now = new Date();
       const accounts = await MailAccount.find({
-        provider: { $in: ['imap', 'gmail'] },
+        provider: { $in: ['imap', 'gmail', 'graph'] },
         ingest_mode: { $in: ['imap_poll', 'oauth_push'] },
         is_active: true,
         is_paused: false,
@@ -110,7 +111,9 @@ class ImapPollerScheduler {
         if (now.getTime() - lastPolledMs < intervalSec * 1000) continue;
 
         // Per-account lock — only one replica polls this mailbox at a time.
-        const lockKey = `imap_poll:${account._id}`;
+        const lockKey = account.provider === 'graph'
+          ? `graph_sync:${account._id}`
+          : `imap_poll:${account._id}`;
         await lockService
           .withLock(lockKey, POLL_LOCK_TTL_MS, async () => {
             try {
@@ -122,6 +125,25 @@ class ImapPollerScheduler {
                     ` enqueued=${gmailRes.enqueued}` +
                     ` history_id=${gmailRes.history_id}` +
                     ` anchored=${gmailRes.anchored} reset=${gmailRes.reset}`
+                  );
+                }
+                return;
+              }
+
+              if (account.provider === 'graph') {
+                const graphResult = await graphPoller.pollAccount(account);
+                if (
+                  graphResult.enqueued > 0 ||
+                  graphResult.captured > 0 ||
+                  graphResult.reconciled > 0 ||
+                  graphResult.anchored
+                ) {
+                  console.log(
+                    `[ImapPollerScheduler] graph account=${account._id}` +
+                    ` enqueued=${graphResult.enqueued}` +
+                    ` captured=${graphResult.captured}` +
+                    ` reconciled=${graphResult.reconciled}` +
+                    ` anchored=${graphResult.anchored}`
                   );
                 }
                 return;

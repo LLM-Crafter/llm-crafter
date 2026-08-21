@@ -65,6 +65,7 @@ const outboundEmailSchema = new mongoose.Schema(
     provider_message_id: { type: String, default: null },
     provider_draft_id: { type: String, default: null },
     provider_thread_id: { type: String, default: null },
+    provider_parent_message_id: { type: String, default: null },
     sent_at: { type: Date, default: null },
     // UID of the IMAP APPEND'd draft in the remote Drafts folder.
     // null until we successfully append; set so we never double-append on retry.

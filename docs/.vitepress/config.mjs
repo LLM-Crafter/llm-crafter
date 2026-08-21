@@ -42,7 +42,9 @@ export default defineConfig({
             { text: 'System Tools', link: '/features/system-tools' },
             { text: 'API Caller Tool', link: '/features/api-caller' },
             { text: 'Conversation Summarization', link: '/features/summarization' },
-            { text: 'Authentication', link: '/features/authentication' }
+            { text: 'Authentication', link: '/features/authentication' },
+            { text: 'Outlook Operator Setup', link: '/features/outlook-oauth-operator-setup' },
+            { text: 'Connect Outlook Integration', link: '/features/outlook-oauth-third-party' }
           ]
         },
         {

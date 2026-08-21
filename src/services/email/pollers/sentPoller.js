@@ -295,6 +295,7 @@ async function _reconcileTrackedOutbound(
   let outbound = matches.length
     ? await OutboundEmail.findOne({
       mail_account: account._id,
+      state: { $in: ['drafted', 'queued', 'sending'] },
       $or: matches,
     })
     : null;

@@ -189,6 +189,14 @@ const mailAccountSchema = new mongoose.Schema(
       gmail_watch_expiration: { type: Date, default: null },
       gmail_last_synced_at: { type: Date, default: null },
       gmail_last_watch_error: { type: String, default: null },
+      graph_inbox_delta_link: { type: String, default: null },
+      graph_sent_delta_link: { type: String, default: null },
+      graph_inbox_subscription_id: { type: String, default: null },
+      graph_inbox_subscription_expiration: { type: Date, default: null },
+      graph_sent_subscription_id: { type: String, default: null },
+      graph_sent_subscription_expiration: { type: Date, default: null },
+      graph_last_synced_at: { type: Date, default: null },
+      graph_last_subscription_error: { type: String, default: null },
       // IMAP UIDVALIDITY — if this changes the mailbox was reset and we
       // must drop our cached `last_uid` and reseed.
       uid_validity: { type: Number, default: null },

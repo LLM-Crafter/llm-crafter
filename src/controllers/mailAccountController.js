@@ -25,9 +25,13 @@ const emailUtils = require('../services/email/emailUtils');
 const draftService = require('../services/email/draftService');
 const gmailOAuthService = require('../services/email/gmailOAuthService');
 const gmailApiService = require('../services/email/gmailApiService');
+const microsoftOAuthService = require('../services/email/microsoftOAuthService');
+const microsoftGraphService = require('../services/email/microsoftGraphService');
+const microsoftSubscriptionScheduler = require('../services/email/microsoftSubscriptionScheduler');
 const lockService = require('../services/distributedLockService');
 const imapPoller = require('../services/email/pollers/imapPoller');
 const gmailPoller = require('../services/email/pollers/gmailPoller');
+const graphPoller = require('../services/email/pollers/graphPoller');
 const smtpTransport = require('../services/email/transports/smtpTransport');
 const { ImapFlow } = require('imapflow');
 
@@ -209,6 +213,20 @@ const deleteMailAccount = async (req, res) => {
     const account = await getAccountOr404(req, res, agent._id);
     if (!account) return;
 
+    if (account.provider === 'graph') {
+      const subscriptionIds = [
+        account.state?.graph_inbox_subscription_id,
+        account.state?.graph_sent_subscription_id
+      ].filter(Boolean);
+      for (const subscriptionId of subscriptionIds) {
+        await microsoftGraphService.deleteSubscription(account, subscriptionId)
+          .catch(err => console.error(
+            `[MailAccount] failed to remove Graph subscription ${subscriptionId}:`,
+            err.message
+          ));
+      }
+    }
+
     await account.deleteOne();
     res.status(204).end();
   } catch (err) {
@@ -286,6 +304,30 @@ const testMailAccount = async (req, res) => {
           account_id: account._id,
           ok: false,
           results: { gmail: { ok: false, error: e.message } },
+        });
+      }
+    }
+
+    if (account.provider === 'graph') {
+      try {
+        const profile = await microsoftGraphService.getProfile(account);
+        return res.json({
+          account_id: account._id,
+          ok: true,
+          results: {
+            microsoft: {
+              ok: true,
+              id: profile.id,
+              display_name: profile.displayName,
+              email_address: profile.mail || profile.userPrincipalName
+            }
+          }
+        });
+      } catch (e) {
+        return res.json({
+          account_id: account._id,
+          ok: false,
+          results: { microsoft: { ok: false, error: e.message } }
         });
       }
     }
@@ -375,12 +417,14 @@ const pollMailAccount = async (req, res) => {
     }
 
     // Run inside the per-account lock to avoid racing the scheduler.
-    const lockKey = `imap_poll:${account._id}`;
-    const result = await lockService.withLock(lockKey, 2 * 60_000, () =>
-      account.provider === 'gmail'
-        ? gmailPoller.pollAccount(account)
-        : imapPoller.pollAccount(account)
-    );
+    const lockKey = account.provider === 'graph'
+      ? `graph_sync:${account._id}`
+      : `imap_poll:${account._id}`;
+    const result = await lockService.withLock(lockKey, 2 * 60_000, () => {
+      if (account.provider === 'gmail') return gmailPoller.pollAccount(account);
+      if (account.provider === 'graph') return graphPoller.pollAccount(account);
+      return imapPoller.pollAccount(account);
+    });
 
     if (result === null) {
       return res.status(409).json({
@@ -578,6 +622,7 @@ const sendToThread = async (req, res) => {
       in_reply_to: inReplyTo,
       references,
       provider_thread_id: meta.provider_thread_id || null,
+      provider_parent_message_id: meta.provider_message_id || null,
       state,
       reason: 'manual',
       metadata: { composed_by: req.user?._id || 'api' },
@@ -815,6 +860,127 @@ const gmailOAuthCallback = async (req, res) => {
   }
 };
 
+const getMicrosoftAuthorizeUrl = async (req, res) => {
+  try {
+    if (!process.env.MICROSOFT_CLIENT_ID || !process.env.MICROSOFT_CLIENT_SECRET) {
+      return res.status(501).json({
+        error: 'Microsoft OAuth is not configured on this server.'
+      });
+    }
+    const agent = await getAgentOr404(req, res);
+    if (!agent) return;
+    const state = Buffer.from(JSON.stringify({
+      orgId: req.params.orgId,
+      projectId: req.params.projectId,
+      agentId: agent._id,
+      accountId: req.query.accountId || null,
+      redirectUrl: req.query.redirect_url || null
+    })).toString('base64url');
+    res.json({ url: microsoftOAuthService.getAuthorizationUrl(state) });
+  } catch (err) {
+    console.error('[Microsoft OAuth] authorize error:', err);
+    res.status(500).json({ error: 'Failed to build authorization URL' });
+  }
+};
+
+const microsoftOAuthCallback = async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const redirect = (status, extra = {}) => {
+    const base = extra._redirectUrl || `${frontendUrl}/email-accounts/connected`;
+    delete extra._redirectUrl;
+    return res.redirect(`${base}?${new URLSearchParams({ status, ...extra })}`);
+  };
+
+  try {
+    const { code, state, error, error_description: errorDescription } = req.query;
+    if (error) return redirect('denied', { error: errorDescription || error });
+    if (!code || !state) return redirect('error', { error: 'missing_params' });
+
+    let ctx;
+    try {
+      ctx = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+    } catch {
+      return redirect('error', { error: 'invalid_state' });
+    }
+
+    const tokens = await microsoftOAuthService.exchangeCode(code);
+    const email = String(
+      tokens.profile.mail || tokens.profile.userPrincipalName || ''
+    ).toLowerCase();
+    if (!email) throw new Error('Microsoft profile has no mailbox address');
+
+    let account = ctx.accountId
+      ? await MailAccount.findOne({ _id: ctx.accountId, agent: ctx.agentId })
+      : null;
+    if (ctx.accountId && !account) {
+      return redirect('error', { error: 'account_not_found' });
+    }
+    const existingRefreshToken = account
+      ? account.getDecryptedCredentials().oauth?.refresh_token
+      : null;
+    if (!account) {
+      account = new MailAccount({
+        organization: ctx.orgId,
+        project: ctx.projectId,
+        agent: ctx.agentId,
+        display_name: tokens.profile.displayName || email,
+        provider: 'graph',
+        ingest_mode: 'oauth_push',
+        send_profile: {
+          from_email: email,
+          from_name: tokens.profile.displayName || ''
+        },
+        is_active: true,
+        is_paused: false
+      });
+    }
+
+    account.provider = 'graph';
+    account.ingest_mode = 'oauth_push';
+    account.credentials = account.credentials || {};
+    account.credentials.oauth = {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token || existingRefreshToken,
+      expires_at: new Date(Date.now() + Number(tokens.expires_in || 3600) * 1000),
+      scope: tokens.scope,
+      token_type: tokens.token_type || 'Bearer'
+    };
+    await account.save();
+
+    try {
+      await graphPoller.pollAccount(account);
+      if (process.env.MICROSOFT_WEBHOOK_CLIENT_STATE) {
+        const refreshed = await MailAccount.findById(account._id);
+        await microsoftSubscriptionScheduler.ensureSubscriptions(refreshed);
+      }
+    } catch (initializationError) {
+      await MailAccount.updateOne(
+        { _id: account._id },
+        {
+          $set: {
+            'state.graph_last_subscription_error': initializationError.message,
+            'state.last_error': initializationError.message,
+            'state.last_error_at': new Date()
+          }
+        }
+      );
+      console.error(
+        `[Microsoft OAuth] account connected but initialization failed ${account._id}:`,
+        initializationError.message
+      );
+    }
+
+    return redirect('ok', {
+      account_id: account._id,
+      email,
+      ...(ctx.redirectUrl ? { _redirectUrl: ctx.redirectUrl } : {})
+    });
+  } catch (err) {
+    console.error('[Microsoft OAuth] callback error:', err);
+    return redirect('error', { error: encodeURIComponent(err.message) });
+  }
+};
+
 module.exports = {
   listMailAccounts,
   getMailAccount,
@@ -831,4 +997,6 @@ module.exports = {
   sendToThread,
   getGmailAuthorizeUrl,
   gmailOAuthCallback,
+  getMicrosoftAuthorizeUrl,
+  microsoftOAuthCallback,
 };

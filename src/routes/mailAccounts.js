@@ -19,6 +19,7 @@ const router = express.Router();
 const mailAccountController = require('../controllers/mailAccountController');
 const outboundController = require('../controllers/outboundEmailController');
 const gmailWebhookController = require('../controllers/gmailWebhookController');
+const microsoftWebhookController = require('../controllers/microsoftWebhookController');
 const auth = require('../middleware/auth');
 const organizationAuth = require('../middleware/organizationAuth');
 const validate = require('../middleware/validate');
@@ -317,6 +318,25 @@ router.get(
 router.post(
   '/email/webhooks/google',
   gmailWebhookController.handleGooglePush
+);
+
+router.get(
+  '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/oauth/microsoft/authorize',
+  auth,
+  organizationAuth.hasRole('admin'),
+  baseScope,
+  validate,
+  mailAccountController.getMicrosoftAuthorizeUrl
+);
+
+router.get(
+  '/email/oauth/microsoft/callback',
+  mailAccountController.microsoftOAuthCallback
+);
+
+router.post(
+  '/email/webhooks/microsoft',
+  microsoftWebhookController.handleMicrosoftPush
 );
 
 module.exports = router;

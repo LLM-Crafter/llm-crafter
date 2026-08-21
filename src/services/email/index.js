@@ -23,8 +23,10 @@
 const ingestWorker = require('./workers/ingestWorker');
 const outboundWorker = require('./workers/outboundWorker');
 const gmailSyncWorker = require('./workers/gmailSyncWorker');
+const graphSyncWorker = require('./workers/graphSyncWorker');
 const imapPollerScheduler = require('./pollers/imapPollerScheduler');
 const gmailWatchScheduler = require('./gmailWatchScheduler');
+const microsoftSubscriptionScheduler = require('./microsoftSubscriptionScheduler');
 
 function readBool(name, defaultValue) {
   const v = process.env[name];
@@ -63,12 +65,22 @@ function start() {
     });
   }
 
+  if (readBool('EMAIL_GRAPH_SYNC_WORKER_ENABLED', true)) {
+    graphSyncWorker.start({
+      concurrency: readInt('EMAIL_GRAPH_SYNC_CONCURRENCY', 2),
+    });
+  }
+
   if (readBool('EMAIL_IMAP_SCHEDULER_ENABLED', true)) {
     imapPollerScheduler.start();
   }
 
   if (readBool('EMAIL_GMAIL_WATCH_SCHEDULER_ENABLED', true)) {
     gmailWatchScheduler.start();
+  }
+
+  if (readBool('EMAIL_GRAPH_SUBSCRIPTION_SCHEDULER_ENABLED', true)) {
+    microsoftSubscriptionScheduler.start();
   }
 }
 

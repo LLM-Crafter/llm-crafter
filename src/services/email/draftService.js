@@ -2,12 +2,16 @@
 
 const OutboundEmail = require('../../models/OutboundEmail');
 const gmailApiService = require('./gmailApiService');
+const microsoftGraphService = require('./microsoftGraphService');
 const imapDraftTransport = require('./transports/imapDraftTransport');
 
 class DraftService {
   async create(account, outbound) {
-    if (account.provider === 'gmail') {
-      const ids = await gmailApiService.createDraft(account, outbound);
+    if (['gmail', 'graph'].includes(account.provider)) {
+      const providerService = account.provider === 'gmail'
+        ? gmailApiService
+        : microsoftGraphService;
+      const ids = await providerService.createDraft(account, outbound);
       await OutboundEmail.updateOne(
         { _id: outbound._id },
         {
@@ -39,10 +43,13 @@ class DraftService {
   }
 
   async update(account, outbound) {
-    if (account.provider !== 'gmail') {
+    if (!['gmail', 'graph'].includes(account.provider)) {
       return null;
     }
-    const ids = await gmailApiService.updateDraft(account, outbound);
+    const providerService = account.provider === 'gmail'
+      ? gmailApiService
+      : microsoftGraphService;
+    const ids = await providerService.updateDraft(account, outbound);
     await OutboundEmail.updateOne(
       { _id: outbound._id },
       {
@@ -62,6 +69,12 @@ class DraftService {
   async remove(account, outbound) {
     if (account.provider === 'gmail') {
       return gmailApiService.deleteDraft(account, outbound.provider_draft_id);
+    }
+    if (account.provider === 'graph') {
+      return microsoftGraphService.deleteDraft(
+        account,
+        outbound.provider_draft_id
+      );
     }
     if (account.ingest_mode === 'imap_poll') {
       return imapDraftTransport.removeDraft(account, outbound);

@@ -138,7 +138,7 @@ const updateDraft = async (req, res) => {
       if (body[key] !== undefined) outbound[key] = body[key];
     }
 
-    if (account.provider === 'gmail') {
+    if (['gmail', 'graph'].includes(account.provider)) {
       await draftService.update(account, outbound);
     }
     await outbound.save();
@@ -177,7 +177,7 @@ const sendDraft = async (req, res) => {
 
     // Synchronize send-time recipient overrides into the native Gmail draft
     // before exposing it to the outbound worker.
-    if (account.provider === 'gmail') {
+    if (['gmail', 'graph'].includes(account.provider)) {
       const draft = await OutboundEmail.findOne({
         _id: req.params.outboundId,
         mail_account: account._id,

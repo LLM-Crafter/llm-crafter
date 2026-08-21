@@ -27,6 +27,7 @@ const lockService = require('../../distributedLockService');
 const smtpTransport = require('../transports/smtpTransport');
 const imapDraftTransport = require('../transports/imapDraftTransport');
 const gmailApiService = require('../gmailApiService');
+const microsoftGraphService = require('../microsoftGraphService');
 // (require paths are relative to src/services/email/workers/)
 
 const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_OUTBOUND_POLL_MS, 10) || 2000;
@@ -142,9 +143,14 @@ class OutboundWorker {
       return;
     }
 
-    const sendResult = account.provider === 'gmail'
-      ? await gmailApiService.sendOutbound(account, outbound)
-      : await smtpTransport.sendOutbound(account, outbound);
+    let sendResult;
+    if (account.provider === 'gmail') {
+      sendResult = await gmailApiService.sendOutbound(account, outbound);
+    } else if (account.provider === 'graph') {
+      sendResult = await microsoftGraphService.sendOutbound(account, outbound);
+    } else {
+      sendResult = await smtpTransport.sendOutbound(account, outbound);
+    }
 
     await OutboundEmail.updateOne(
       { _id: outbound._id },
@@ -166,7 +172,10 @@ class OutboundWorker {
     // SMTP delivery has succeeded, so the server-side draft is no longer
     // needed. Cleanup is deliberately non-fatal: an IMAP failure must not
     // cause the worker to retry SMTP and send a duplicate email.
-    if (account.provider !== 'gmail' && account.ingest_mode === 'imap_poll') {
+    if (
+      !['gmail', 'graph'].includes(account.provider) &&
+      account.ingest_mode === 'imap_poll'
+    ) {
       try {
         const removed = await imapDraftTransport.removeDraft(account, outbound);
         if (removed) {
