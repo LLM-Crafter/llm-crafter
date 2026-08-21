@@ -906,8 +906,9 @@ const microsoftOAuthCallback = async (req, res) => {
     const tokens = await microsoftOAuthService.exchangeCode(code);
     const email = String(
       tokens.profile.mail || tokens.profile.userPrincipalName || ''
-    ).toLowerCase();
+    ).trim().toLowerCase();
     if (!email) throw new Error('Microsoft profile has no mailbox address');
+    const displayName = String(tokens.profile.displayName || '').trim() || email;
 
     let account = ctx.accountId
       ? await MailAccount.findOne({ _id: ctx.accountId, agent: ctx.agentId })
@@ -923,12 +924,12 @@ const microsoftOAuthCallback = async (req, res) => {
         organization: ctx.orgId,
         project: ctx.projectId,
         agent: ctx.agentId,
-        display_name: tokens.profile.displayName || email,
+        display_name: displayName,
         provider: 'graph',
         ingest_mode: 'oauth_push',
         send_profile: {
           from_email: email,
-          from_name: tokens.profile.displayName || ''
+          from_name: displayName
         },
         is_active: true,
         is_paused: false
@@ -937,6 +938,12 @@ const microsoftOAuthCallback = async (req, res) => {
 
     account.provider = 'graph';
     account.ingest_mode = 'oauth_push';
+    account.display_name = String(account.display_name || '').trim() || displayName;
+    account.send_profile = account.send_profile || {};
+    account.send_profile.from_email = email;
+    account.send_profile.from_name = String(
+      account.send_profile.from_name || ''
+    ).trim() || displayName;
     account.credentials = account.credentials || {};
     account.credentials.oauth = {
       access_token: tokens.access_token,
@@ -977,7 +984,7 @@ const microsoftOAuthCallback = async (req, res) => {
     });
   } catch (err) {
     console.error('[Microsoft OAuth] callback error:', err);
-    return redirect('error', { error: encodeURIComponent(err.message) });
+    return redirect('error', { error: err.message });
   }
 };
 
