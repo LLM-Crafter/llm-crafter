@@ -183,7 +183,7 @@ class AttachmentProcessingService {
     const response = await client.generateCompletion(
       model,
       `Summarize the attached document for a customer-support agent. Preserve names, dates, amounts, identifiers, decisions, requests, deadlines, and other actionable details. Be factual and do not add information.\n\nFilename: ${item.filename || 'document'}\n\nDocument text:\n${extractedText}`,
-      { max_tokens: 1000, temperature: 0 }
+      { max_tokens: 1000, temperature: 1 }
     );
     return {
       description: cleanText(response.content).slice(0, maxDescription),
@@ -212,7 +212,7 @@ class AttachmentProcessingService {
           image_url: { url: `data:${item.mime_type};base64,${buffer.toString('base64')}` }
         }
       ],
-      { max_tokens: 800, temperature: 0 }
+      { max_tokens: 800, temperature: 1 }
     );
     return {
       description: cleanText(response.content).slice(0, maxDescription),
