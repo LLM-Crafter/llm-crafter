@@ -3,6 +3,34 @@ const OpenAI = require('openai');
 // Price per 1K tokens (as of current OpenAI pricing)
 const PRICING = {
   openai: {
+    'gpt-5.6-sol': {
+      input: 0.004, // $4.00 per million tokens input
+      output: 0.02, // $20.00 per million tokens output
+    },
+    'gpt-5.6-terra': {
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.012, // $12.00 per million tokens output
+    },
+    'gpt-5.6-luna': {
+      input: 0.0002, // $0.20 per million tokens input
+      output: 0.0012, // $1.20 per million tokens output
+    },
+    'gpt-5.6-cyber': {
+      input: 0.0125, // $12.50 per million tokens input
+      output: 0.075, // $75.00 per million tokens output
+    },
+    'gpt-5.5': {
+      input: 0.005, // $5.00 per million tokens input
+      output: 0.03, // $30.00 per million tokens output
+    },
+    'gpt-5.5-pro': {
+      input: 0.03, // $30.00 per million tokens input
+      output: 0.18, // $180.00 per million tokens output
+    },
+    'gpt-5.5-cyber': {
+      input: 0.0125, // $12.50 per million tokens input
+      output: 0.075, // $75.00 per million tokens output
+    },
     'gpt-5.4': {
       input: 0.0025, // $2.50 per million tokens input
       output: 0.015, // $15.00 per million tokens output
@@ -15,7 +43,11 @@ const PRICING = {
       input: 0.0002, // $0.20 per million tokens input
       output: 0.00125, // $1.25 per million tokens output
     },
-    'gpt-5.3': {
+    'gpt-5.4-pro': {
+      input: 0.03, // $30.00 per million tokens input
+      output: 0.18, // $180.00 per million tokens output
+    },
+    'gpt-5.3-codex': {
       input: 0.00175, // $1.75 per million tokens input
       output: 0.014, // $14.00 per million tokens output
     },
@@ -27,35 +59,15 @@ const PRICING = {
       input: 0.021, // $21.00 per million tokens input
       output: 0.168, // $168.00 per million tokens output
     },
-    'gpt-5.2-chat-latest': {
-      input: 0.00175, // $1.75 per million tokens input
-      output: 0.014, // $14.00 per million tokens output
-    },
     'gpt-5.1': {
       input: 0.00125, // $1.25 per million tokens input
       output: 0.01, // $10.00 per million tokens output
     },
-    'gpt-5.1-chat-latest': {
-      input: 0.00125, // $1.25 per million tokens input
-      output: 0.01, // $10.00 per million tokens output
-    },
-    'gpt-5.1-codex': {
-      input: 0.00125, // $1.25 per million tokens input
-      output: 0.01, // $10.00 per million tokens output
-    },
-    'gpt-5.1-codex-max': {
-      input: 0.00125, // $1.25 per million tokens input
-      output: 0.01, // $10.00 per million tokens output
-    },
-    'gpt-5.1-codex-mini': {
-      input: 0.00025, // $0.25 per million tokens input
-      output: 0.002, // $2.00 per million tokens output
+    'gpt-5.1-pro': {
+      input: 0.015, // Not separately listed; estimated from gpt-5-pro/gpt-5.x-pro ratio
+      output: 0.12,
     },
     'gpt-5': {
-      input: 0.00125, // $1.25 per million tokens input
-      output: 0.01, // $10.00 per million tokens output
-    },
-    'gpt-5-codex': {
       input: 0.00125, // $1.25 per million tokens input
       output: 0.01, // $10.00 per million tokens output
     },
@@ -71,22 +83,6 @@ const PRICING = {
       input: 0.015, // $15.00 per million tokens input
       output: 0.12, // $120.00 per million tokens output
     },
-    'gpt-5-chat-latest': {
-      input: 0.00125,
-      output: 0.01,
-    },
-    'gpt-4o': {
-      input: 0.0025, // $2.50 per million tokens input
-      output: 0.01, // $10.00 per million tokens output
-    },
-    'gpt-4o-mini': {
-      input: 0.00015, // $0.15 per million tokens input
-      output: 0.0006, // $0.60 per million tokens output
-    },
-    'gpt-4-turbo': {
-      input: 0.01, // $10.00 per million tokens input
-      output: 0.03, // $30.00 per million tokens output
-    },
     'gpt-4.1': {
       input: 0.002, // $2.00 per million tokens input
       output: 0.008, // $8.00 per million tokens output
@@ -99,9 +95,33 @@ const PRICING = {
       input: 0.0001, // $0.10 per million tokens input
       output: 0.0004, // $0.40 per million tokens output
     },
-    'o4-mini': {
-      input: 0.0011, // $1.10 per million tokens input
-      output: 0.0044, // $4.40 per million tokens output
+    'gpt-4o': {
+      input: 0.0025, // $2.50 per million tokens input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'gpt-4o-mini': {
+      input: 0.00015, // $0.15 per million tokens input
+      output: 0.0006, // $0.60 per million tokens output
+    },
+    'gpt-4': {
+      input: 0.03, // $30.00 per million tokens input
+      output: 0.06, // $60.00 per million tokens output
+    },
+    'gpt-4-turbo': {
+      input: 0.01, // $10.00 per million tokens input
+      output: 0.03, // $30.00 per million tokens output
+    },
+    'gpt-3.5-turbo': {
+      input: 0.0005, // $0.50 per million tokens input
+      output: 0.0015, // $1.50 per million tokens output
+    },
+    o1: {
+      input: 0.015, // $15.00 per million tokens input
+      output: 0.06, // $60.00 per million tokens output
+    },
+    'o1-pro': {
+      input: 0.15, // $150.00 per million tokens input
+      output: 0.6, // $600.00 per million tokens output
     },
     o3: {
       input: 0.002, // $2.00 per million tokens input
@@ -111,33 +131,21 @@ const PRICING = {
       input: 0.02, // $20.00 per million tokens input
       output: 0.08, // $80.00 per million tokens output
     },
-    'o3-deep-research': {
-      input: 0.01, // $10.00 per million tokens input
-      output: 0.04, // $40.00 per million tokens output
-    },
     'o3-mini': {
       input: 0.0011, // $1.10 per million tokens input
       output: 0.0044, // $4.40 per million tokens output
     },
-    'o1-pro': {
-      input: 0.15, // $150.00 per million tokens input
-      output: 0.6, // $600.00 per million tokens output
-    },
-    'o4-mini-deep-research': {
-      input: 0.002, // $2.00 per million tokens input
-      output: 0.008, // $8.00 per million tokens output
-    },
-    o1: {
-      input: 0.015, // $15.00 per million tokens input
-      output: 0.06, // $60.00 per million tokens output
-    },
-    'o1-mini': {
+    'o4-mini': {
       input: 0.0011, // $1.10 per million tokens input
       output: 0.0044, // $4.40 per million tokens output
     },
-    'codex-mini-latest': {
-      input: 0.0015, // $1.50 per million tokens input
-      output: 0.006, // $6.00 per million tokens output
+    'gpt-5-search-api': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'chat-latest': {
+      input: 0.005, // $5.00 per million tokens input
+      output: 0.03, // $30.00 per million tokens output
     },
     'gpt-oss-120b': {
       input: 0, // Free/open-weight models with no pricing info available
@@ -147,77 +155,86 @@ const PRICING = {
       input: 0,
       output: 0,
     },
+    'text-embedding-3-large': {
+      input: 0.00013, // $0.13 per million tokens
+      output: 0,
+    },
+    'text-embedding-3-small': {
+      input: 0.00002, // $0.02 per million tokens
+      output: 0,
+    },
+    'text-embedding-ada-002': {
+      input: 0.0001, // $0.10 per million tokens
+      output: 0,
+    },
+    'davinci-002': {
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.002, // $2.00 per million tokens output
+    },
+    'babbage-002': {
+      input: 0.0004, // $0.40 per million tokens input
+      output: 0.0004, // $0.40 per million tokens output
+    },
+    'omni-moderation-latest': {
+      input: 0, // Free
+      output: 0,
+    },
   },
   anthropic: {
+    // Claude Fable 5 — $10 / MTok input, $50 / MTok output
+    'claude-fable-5': {
+      input: 0.01,
+      output: 0.05,
+    },
+    // Claude Mythos 5 (limited availability) — $10 / MTok input, $50 / MTok output
+    'claude-mythos-5': {
+      input: 0.01,
+      output: 0.05,
+    },
+    // Claude Opus 5 — $5 / MTok input, $25 / MTok output
+    'claude-opus-5': {
+      input: 0.005,
+      output: 0.025,
+    },
+    // Claude Opus 4.8 — $5 / MTok input, $25 / MTok output
+    'claude-opus-4-8': {
+      input: 0.005,
+      output: 0.025,
+    },
+    // Claude Opus 4.7 — $5 / MTok input, $25 / MTok output
+    'claude-opus-4-7': {
+      input: 0.005,
+      output: 0.025,
+    },
     // Claude Opus 4.6 — $5 / MTok input, $25 / MTok output
     'claude-opus-4-6': {
       input: 0.005,
       output: 0.025,
+    },
+    // Claude Opus 4.5 — $5 / MTok input, $25 / MTok output
+    'claude-opus-4-5-20251101': {
+      input: 0.005,
+      output: 0.025,
+    },
+    // Claude Sonnet 5 — $2 / MTok input, $10 / MTok output (standard pricing)
+    'claude-sonnet-5': {
+      input: 0.002,
+      output: 0.01,
     },
     // Claude Sonnet 4.6 — $3 / MTok input, $15 / MTok output
     'claude-sonnet-4-6': {
       input: 0.003,
       output: 0.015,
     },
+    // Claude Sonnet 4.5 — $3 / MTok input, $15 / MTok output
+    'claude-sonnet-4-5-20250929': {
+      input: 0.003,
+      output: 0.015,
+    },
     // Claude Haiku 4.5 — $1 / MTok input, $5 / MTok output
-    'claude-haiku-4-5': {
+    'claude-haiku-4-5-20251001': {
       input: 0.001,
       output: 0.005,
-    },
-    // Claude Sonnet 4.5 — $3 / MTok input, $15 / MTok output
-    'claude-sonnet-4-5': {
-      input: 0.003,
-      output: 0.015,
-    },
-    // Claude Sonnet 4.5 long (> 200K context)
-    'claude-sonnet-4-5-long': {
-      input: 0.006,
-      output: 0.0225,
-    },
-    // Claude Opus 4.1 — $15 / MTok input, $75 / MTok output
-    'claude-opus-4-1': {
-      input: 0.015,
-      output: 0.075,
-    },
-    // Claude Opus 4 — $15 / MTok input, $75 / MTok output
-    'claude-opus-4': {
-      input: 0.015,
-      output: 0.075,
-    },
-    // Claude Sonnet 4 — $3 / MTok input, $15 / MTok output
-    'claude-sonnet-4': {
-      input: 0.003,
-      output: 0.015,
-    },
-    // Claude 3.7 Sonnet (deprecated) — $3 / MTok input, $15 / MTok output
-    'claude-3-7-sonnet': {
-      input: 0.003,
-      output: 0.015,
-    },
-    // Claude 3.5 Sonnet — $3 / MTok input, $15 / MTok output
-    'claude-3-5-sonnet': {
-      input: 0.003,
-      output: 0.015,
-    },
-    // Claude 3.5 Haiku — $0.80 / MTok input, $4 / MTok output
-    'claude-3-5-haiku': {
-      input: 0.0008,
-      output: 0.004,
-    },
-    // Claude 3 Opus (deprecated) — $15 / MTok input, $75 / MTok output
-    'claude-3-opus': {
-      input: 0.015,
-      output: 0.075,
-    },
-    // Claude 3 Sonnet — $3 / MTok input, $15 / MTok output
-    'claude-3-sonnet': {
-      input: 0.003,
-      output: 0.015,
-    },
-    // Claude 3 Haiku — $0.25 / MTok input, $1.25 / MTok output
-    'claude-3-haiku': {
-      input: 0.00025,
-      output: 0.00125,
     },
   },
   deepseek: {
