@@ -281,22 +281,24 @@ async function _reconcileTrackedOutbound(
   outboundIdHeader,
   provider = {}
 ) {
-  const matches = [];
+  const exactMatches = [];
   if (outboundIdHeader) {
-    matches.push({ _id: String(outboundIdHeader).trim() });
+    exactMatches.push({ _id: String(outboundIdHeader).trim() });
   }
   if (email.message_id) {
-    matches.push({ message_id: email.message_id });
+    exactMatches.push({ message_id: email.message_id });
   }
   if (provider.messageId) {
-    matches.push({ provider_message_id: provider.messageId });
+    exactMatches.push({ provider_message_id: provider.messageId });
   }
 
-  let outbound = matches.length
+  // Provider notifications can arrive after the outbound worker has already
+  // persisted state=sent. Exact IDs remain safe in that state; restricting
+  // them to active states makes our own send look like an operator send.
+  let outbound = exactMatches.length
     ? await OutboundEmail.findOne({
       mail_account: account._id,
-      state: { $in: ['drafted', 'queued', 'sending'] },
-      $or: matches,
+      $or: exactMatches,
     })
     : null;
 
@@ -428,7 +430,7 @@ async function _findDraftByThread(account, email) {
 
   const candidates = await OutboundEmail.find({
     mail_account: account._id,
-    state: 'drafted',
+    state: { $in: ['drafted', 'queued', 'sending'] },
     in_reply_to: { $in: threadMessageIds },
   }).sort({ createdAt: -1 });
 
