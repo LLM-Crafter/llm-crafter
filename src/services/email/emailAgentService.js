@@ -188,11 +188,21 @@ class EmailAgentService {
       throw err;
     }
 
+    const send = account.send_profile || {};
+    const draftText = emailUtils.renderText(
+      reasoning.content || '',
+      send.signature_text
+    );
+    const draftHtml = emailUtils.renderHtml(
+      reasoning.content || '',
+      send.signature_html
+    );
+
     // Persist assistant message in the Conversation (same shape as chatbot flow).
     if (reasoning.content) {
       await conversation.addMessage({
         role: 'assistant',
-        content: reasoning.content,
+        content: draftText,
         thinking_process: reasoning.thinking_process,
         tools_used: reasoning.tools_used,
         token_usage: reasoning.token_usage,
@@ -206,6 +216,7 @@ class EmailAgentService {
             // CC addresses from the inbound message so the frontend can
             // offer a "Reply All" option that re-includes them.
             cc_addresses: email.cc_addresses || [],
+            body_html: draftHtml,
           },
         },
         metadata: {
@@ -240,7 +251,8 @@ class EmailAgentService {
       agent,
       conversation,
       email,
-      replyBody: reasoning.content || '',
+      draftText,
+      draftHtml,
       decision,
       triage,
       providerMessageId,
@@ -437,7 +449,8 @@ class EmailAgentService {
     agent,
     conversation,
     email,
-    replyBody,
+    draftText,
+    draftHtml,
     decision,
     triage,
     providerMessageId,
@@ -467,8 +480,8 @@ class EmailAgentService {
       from_name: send.from_name || null,
       reply_to: send.reply_to || null,
       subject: emailUtils.buildReplySubject(email.subject),
-      text: emailUtils.renderText(replyBody, send.signature_text),
-      html: emailUtils.renderHtml(replyBody, send.signature_html),
+      text: draftText,
+      html: draftHtml,
       message_id: messageId,
       in_reply_to: email.message_id || null,
       references,

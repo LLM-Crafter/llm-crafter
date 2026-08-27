@@ -254,6 +254,12 @@ every generated reply before it goes out. Promote to `auto_send` or
 The response redacts every encrypted field — IMAP/SMTP passwords, OAuth
 tokens, webhook secrets all come back as `"<encrypted>"`.
 
+The configured signatures are materialized when a draft is created. The
+complete editable body is stored in `OutboundEmail.text` with
+`signature_text` and in `OutboundEmail.html` with `signature_html`; sending
+does not append the signature again. Existing drafts therefore keep their
+own copy and can be edited independently of later `send_profile` changes.
+
 ### Step 3 — Verify the credentials
 
 `POST /…/mail-accounts/{accountId}/test`
@@ -336,6 +342,11 @@ This runs inside the same lock the scheduler uses, so it won't race.
 }
 ```
 
+The corresponding assistant entry in `conversation.messages` exposes the
+same complete draft. Use `content` for signed plain text and
+`channel_info.email.body_html` for signed HTML so the frontend can display
+and edit the signature before sending.
+
 ### Step 6 — Edit & send a draft
 
 Edit only the content (subject/text/html/cc/bcc — addressing & threading are locked):
@@ -349,6 +360,11 @@ Edit only the content (subject/text/html/cc/bcc — addressing & threading are l
   "cc": [{ "address": "manager@example.com" }]
 }
 ```
+
+For rich-text editors, submit both `text` and `html`. The draft record,
+provider-native draft, and matching conversation message are updated with
+those exact values; no account-level signature is appended during update or
+send.
 
 Approve & send:
 

@@ -633,7 +633,7 @@ const sendToThread = async (req, res) => {
     if (body.add_to_conversation !== false) {
       await conversation.addMessage({
         role: 'assistant',
-        content: textContent,
+        content: textFinal,
         timestamp: new Date(),
         channel_info: {
           channel: 'email',
@@ -641,9 +641,14 @@ const sendToThread = async (req, res) => {
             message_id: messageId,
             in_reply_to: inReplyTo,
             subject,
+            body_html: htmlFinal,
           },
         },
-        metadata: { outbound_id: outbound._id, manual: true },
+        metadata: {
+          outbound_id: outbound._id,
+          outbound_state: state,
+          manual: true,
+        },
       });
     }
 

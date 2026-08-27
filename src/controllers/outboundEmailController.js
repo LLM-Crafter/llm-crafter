@@ -143,15 +143,19 @@ const updateDraft = async (req, res) => {
     }
     await outbound.save();
 
-    // Keep the conversation message in sync so the thread view shows the
-    // edited body instead of the original AI-drafted content.
-    if (outbound.conversation && body.text !== undefined) {
+    // Keep both editable representations in sync with the thread view.
+    if (outbound.conversation) {
       await Conversation.updateOne(
         {
           _id: outbound.conversation,
           'messages.metadata.outbound_id': outbound._id,
         },
-        { $set: { 'messages.$.content': outbound.text } }
+        {
+          $set: {
+            'messages.$.content': outbound.text,
+            'messages.$.channel_info.email.body_html': outbound.html,
+          },
+        }
       ).catch(() => {});
     }
 
@@ -233,6 +237,7 @@ const sendDraft = async (req, res) => {
           $set: {
             'messages.$.metadata.outbound_state': 'queued',
             'messages.$.content': claimed.text,
+            'messages.$.channel_info.email.body_html': claimed.html,
             'messages.$.timestamp': new Date(),
           },
         }
