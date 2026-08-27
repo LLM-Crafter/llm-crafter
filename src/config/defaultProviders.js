@@ -4,89 +4,81 @@ const defaultProviders = [
   {
     name: 'openai',
     models: [
-      // GPT-5.4 series (latest)
-      'gpt-5.4', // Most capable model for complex reasoning and agentic tasks
+      // GPT-5.6 series (latest, Daybreak generation)
+      'gpt-5.6-sol', // Flagship model for complex reasoning and agentic tasks (daybreak-blue-latest alias)
+      'gpt-5.6-terra', // Balanced speed/intelligence tier
+      'gpt-5.6-luna', // Fastest, most cost-efficient tier
+      'gpt-5.6-cyber', // Specialized security/cyber-testing variant (daybreak-red-latest alias)
+
+      // GPT-5.5 series
+      'gpt-5.5', // Intelligent reasoning model for coding and agentic tasks
+      'gpt-5.5-pro', // Version of GPT-5.5 that produces smarter and more precise responses
+      'gpt-5.5-cyber', // Specialized security/cyber-testing variant
+
+      // GPT-5.4 series
+      'gpt-5.4',
       'gpt-5.4-mini', // Faster, cost-efficient version of GPT-5.4
       'gpt-5.4-nano', // Smallest, most cost-efficient version of GPT-5.4
+      'gpt-5.4-pro', // Version of GPT-5.4 that produces smarter and more precise responses
 
       // GPT-5.3 series
-      'gpt-5.3', // Intelligent reasoning model for coding and agentic tasks
+      'gpt-5.3-codex', // Optimized for agentic coding in Codex
 
-      // GPT-5.2 series (January 2026)
+      // GPT-5.2 series
       'gpt-5.2', // Best model for coding and agentic tasks across industries
       'gpt-5.2-pro', // Version of GPT-5.2 that produces smarter and more precise responses
-      'gpt-5.2-chat-latest', // GPT-5.2 model used in ChatGPT
 
       // GPT-5.1 series
-      'gpt-5.1', // Previous intelligent reasoning model
+      'gpt-5.1',
       'gpt-5.1-pro', // Version of GPT-5.1 with enhanced capabilities
-      'gpt-5.1-codex', // Optimized for agentic coding in Codex
-      'gpt-5.1-codex-max', // Most intelligent coding model for long-horizon, agentic coding tasks
-      'gpt-5.1-codex-mini', // Smaller, more cost-effective version of GPT-5.1-Codex
-      'gpt-5.1-chat-latest', // GPT-5.1 model used in ChatGPT
 
-      // GPT-5 series
-      'gpt-5', // Previous intelligent reasoning model for coding and agentic tasks
-      'gpt-5-mini', // Faster, cost-efficient version of GPT-5 for well-defined tasks
-      'gpt-5-nano', // Fastest, most cost-efficient version of GPT-5
-      'gpt-5-pro', // Version of GPT-5 that produces smarter and more precise responses
-      'gpt-5-codex', // Version of GPT-5 optimized for agentic coding in Codex
-      'gpt-5-chat-latest', // GPT-5 model used in ChatGPT
+      // GPT-5 series (deprecated, shutdown Dec 11, 2026 — replacement: gpt-5.6-sol/terra/luna)
+      'gpt-5',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'gpt-5-pro',
 
       // GPT-4.1 series
       'gpt-4.1', // Smartest non-reasoning model
       'gpt-4.1-mini', // Smaller, faster version of GPT-4.1
-      'gpt-4.1-nano', // Smallest, most cost-efficient version of GPT-4.1
+      'gpt-4.1-nano', // Deprecated, shutdown Oct 23, 2026 — replacement: gpt-5.6-luna
 
       // GPT-4o series
       'gpt-4o', // Fast, intelligent, flexible GPT model
       'gpt-4o-mini', // Fast, affordable small model for focused tasks
-      'gpt-4-turbo', // Older high-intelligence GPT model
-      'chatgpt-4o-latest', // GPT-4o model used in ChatGPT
 
-      // GPT-4o search models
-      'gpt-4o-search-preview', // GPT model for web search in Chat Completions
-      'gpt-4o-mini-search-preview', // Fast, affordable small model for web search
+      // Legacy GPT-4 / GPT-3.5 (deprecated, shutdown Oct 23, 2026 — replacement: gpt-5.6-sol/terra)
+      'gpt-4',
+      'gpt-4-turbo',
+      'gpt-3.5-turbo',
 
-      // Reasoning models (O-series)
-      'o4-mini', // Fast, cost-efficient reasoning model, succeeded by GPT-5 mini
-      'o4-mini-deep-research', // Deep research model
-      'o3', // Reasoning model for complex tasks, succeeded by GPT-5
-      'o3-pro', // Version of o3 with more compute for better responses
-      'o3-mini', // Small model alternative to o3
-      'o3-deep-research', // Most intelligent deep research model
-      'o1', // Previous full o-series reasoning model
-      'o1-mini', // Deprecated small model alternative to o1
-      'o1-preview', // Deprecated preview of first o-series reasoning model
+      // Reasoning models (O-series, deprecated — replacement: gpt-5.6-sol/terra)
+      'o1', // Shutdown Oct 23, 2026
+      'o1-pro', // Shutdown Oct 23, 2026
+      'o3', // Shutdown Dec 11, 2026
+      'o3-pro', // Shutdown Dec 11, 2026
+      'o3-mini', // Shutdown Oct 23, 2026
+      'o4-mini', // Shutdown Oct 23, 2026
 
-      // Legacy GPT-4 and GPT-3.5
-      'gpt-4', // Older high-intelligence GPT model
-      'gpt-4-turbo-preview', // Deprecated older fast GPT model
-      'gpt-4.5-preview', // Deprecated large model
-      'gpt-3.5-turbo', // Legacy GPT model for cheaper chat and non-chat tasks
-
-      // Embedding models
-      'text-embedding-3-large', // Latest large embedding model
-      'text-embedding-3-small', // Latest small embedding model
-      'text-embedding-ada-002', // Legacy embedding model
-      '3-large-256', // Embedding model variant
-      '3-large-1024', // Embedding model variant
-      '3-small-512', // Embedding model variant
-
-      // Moderation models
-      'omni-moderation-latest', // Identify potentially harmful content in text and images
-      'text-moderation-latest', // Latest text-only moderation model
-      'text-moderation-stable', // Deprecated previous generation text-only moderation model
+      // Specialized models
+      'gpt-5-search-api', // Optimized for web search
+      'chat-latest', // GPT model tuned for ChatGPT-style conversation
 
       // Open-weight models (Apache 2.0 license)
       'gpt-oss-120b', // Most powerful open-weight model, fits into an H100 GPU
       'gpt-oss-20b', // Medium-sized open-weight model for low latency
 
-      // Deprecated/Legacy base models
-      'davinci-002', // Deprecated replacement for the GPT-3 curie and davinci base models
-      'babbage-002', // Deprecated replacement for the GPT-3 ada and babbage base models
-      'computer-use-preview', // Preview model with computer control tool
-      'codex-mini-latest', // Deprecated fast reasoning model optimized for the Codex CLI
+      // Embedding models
+      'text-embedding-3-large', // Latest large embedding model
+      'text-embedding-3-small', // Latest small embedding model
+      'text-embedding-ada-002', // Legacy embedding model
+
+      // Legacy base models (deprecated, shutdown Sept 28, 2026 — replacement: gpt-5.6-terra)
+      'davinci-002',
+      'babbage-002',
+
+      // Moderation models
+      'omni-moderation-latest', // Identify potentially harmful content in text and images
     ],
   },
   {
