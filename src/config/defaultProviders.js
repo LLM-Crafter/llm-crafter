@@ -84,29 +84,28 @@ const defaultProviders = [
   {
     name: 'anthropic',
     models: [
-      // Claude 4.6 (latest)
-      'claude-opus-4-6', // Claude Opus 4.6 (most intelligent, agents & coding, 1M context, 128k output)
-      'claude-sonnet-4-6', // Claude Sonnet 4.6 (best speed/intelligence balance, 1M context, 64k output)
+      // Top-tier (latest)
+      'claude-fable-5', // Top-tier flagship model
+      'claude-mythos-5', // Limited availability research preview tier
 
-      // Claude 4.5
-      'claude-haiku-4-5-20251001', // Claude Haiku 4.5 (fastest, most affordable, 200k context)
-      'claude-sonnet-4-5-20250929', // Claude Sonnet 4.5 (previous mainstream)
-      'claude-sonnet-4-5-long', // Claude Sonnet 4.5 (long context, >200K tokens)
+      // Claude Opus 5
+      'claude-opus-5', // Most intelligent model for complex agents & coding, 1M context
 
-      // Claude 4.x legacy
-      'claude-opus-4-1-20250805', // Claude Opus 4.1 (previous top-tier)
-      'claude-opus-4-20250514', // Claude Opus 4 (original Claude 4 release)
-      'claude-sonnet-4-20250514', // Claude Sonnet 4 (legacy)
+      // Claude Opus 4.x (active)
+      'claude-opus-4-8',
+      'claude-opus-4-7',
+      'claude-opus-4-6',
+      'claude-opus-4-5-20251101',
 
-      // Claude 3.7 and 3.5 (legacy/active for select uses)
-      'claude-3-7-sonnet-20250219', // Claude 3.7 Sonnet (hybrid model; still deployed)
-      'claude-3-5-sonnet-20241022', // Claude 3.5 Sonnet (rapid reasoning/coding)
-      'claude-3-5-haiku-20241022', // Claude 3.5 Haiku (fastest, most affordable)
+      // Claude Sonnet 5
+      'claude-sonnet-5', // Best speed/intelligence balance, 1M context
 
-      // Claude 3 baseline (deprecated)
-      'claude-3-opus-20240229', // Claude 3 Opus (deprecated)
-      'claude-3-sonnet-20240229', // Claude 3 Sonnet (deprecated)
-      'claude-3-haiku-20240307', // Claude 3 Haiku (deprecated)
+      // Claude Sonnet 4.x (active)
+      'claude-sonnet-4-6',
+      'claude-sonnet-4-5-20250929',
+
+      // Claude Haiku 4.5 (active)
+      'claude-haiku-4-5-20251001', // Fastest, most affordable, 200k context
     ],
   },
   {
