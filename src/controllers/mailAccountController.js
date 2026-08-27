@@ -28,6 +28,7 @@ const gmailApiService = require('../services/email/gmailApiService');
 const microsoftOAuthService = require('../services/email/microsoftOAuthService');
 const microsoftGraphService = require('../services/email/microsoftGraphService');
 const microsoftSubscriptionScheduler = require('../services/email/microsoftSubscriptionScheduler');
+const mediaStorageService = require('../services/mediaStorageService');
 const lockService = require('../services/distributedLockService');
 const imapPoller = require('../services/email/pollers/imapPoller');
 const gmailPoller = require('../services/email/pollers/gmailPoller');
@@ -531,7 +532,19 @@ const getEmailThread = async (req, res) => {
       return res.status(404).json({ error: 'Thread not found' });
     }
 
-    res.json(conversation);
+    const response = conversation.toObject();
+    for (const message of response.messages || []) {
+      for (const media of message.channel_info?.media || []) {
+        if (media.stored && media.url && !media.url.startsWith('http')) {
+          const url = await mediaStorageService.getPresignedUrl(
+            agent.organization,
+            media.url
+          ).catch(() => null);
+          if (url) media.url = url;
+        }
+      }
+    }
+    res.json(response);
   } catch (err) {
     console.error('[MailAccount] getEmailThread error:', err);
     res.status(500).json({ error: 'Failed to fetch thread' });

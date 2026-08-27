@@ -46,6 +46,7 @@ Content-Type: application/json
       "image/webp",
       "image/gif",
       "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "audio/ogg",
       "audio/mpeg",
       "video/mp4"
@@ -257,6 +258,50 @@ Files are stored in the message's `channel_info.media` field:
 
 The `url` field is an **S3 key** — not a direct URL. Use the presigned URL endpoint to get a temporary viewable link (useful for operator dashboards).
 
+Attachment media also includes one-time interpretation fields:
+
+```json
+{
+  "file_id": "f47ac10b-...",
+  "description": "Invoice 2026-104 for EUR 42, due September 15.",
+  "interpretation_status": "completed",
+  "interpretation_model": "gpt-4.1-mini",
+  "interpreted_at": "2026-08-27T12:00:00.000Z"
+}
+```
+
+PDF and DOCX text is extracted locally and summarized by a model once. The
+summary is persisted as the attachment description, while bounded extracted
+text remains on the file record for audit or future reprocessing. Only the
+stored summary is added to agent context on later turns; the full document and
+binary are not resent to the model. Images can similarly be described once by
+a configured vision-capable model.
+
+Configure this on the agent:
+
+```json
+{
+  "config": {
+    "attachment_processing": {
+      "enabled": true,
+      "extract_documents": true,
+      "summarize_documents": true,
+      "document_model": "gpt-4.1-mini",
+      "interpret_images": true,
+      "image_model": "gpt-4.1-mini",
+      "max_extracted_chars": 20000,
+      "max_description_chars": 4000
+    }
+  }
+}
+```
+
+`document_model` and `image_model` must be available from the same provider/API
+key selected for the agent. When `document_model` is omitted, document summaries
+use the agent's normal `llm_settings.model`. Set `summarize_documents` to `false`
+to use a bounded text excerpt instead, or `interpret_images` to `false` to store
+images without invoking a model.
+
 ---
 
 ## Complete Flow Example
@@ -302,6 +347,6 @@ console.log(result.response);
 ## Notes
 
 - **Backward compatible**: The `files` field is optional. Existing clients that don't send it continue to work unchanged.
-- **Agent vision**: Currently, the AI agent does **not** process image content. Attachments are stored and visible to human operators. The agent receives a text hint like `[User sent image attachment]` that you can handle in your system prompt.
+- **Agent vision**: Image interpretation is opt-in and runs once when a file is attached. Later turns use the persisted description.
 - **Human operators**: When viewing conversations via the handoff API, operators see the full `channel_info.media` array with S3 keys. Generate presigned URLs to render images in your operator dashboard.
 - **WhatsApp/Telegram**: Media from these channels is handled automatically by the channel orchestrator — no client-side upload needed.

@@ -347,6 +347,19 @@ same complete draft. Use `content` for signed plain text and
 `channel_info.email.body_html` for signed HTML so the frontend can display
 and edit the signature before sending.
 
+Inbound email attachments are stored through the organization's S3-compatible
+media configuration and exposed in `conversation.messages[].channel_info.media`.
+PDF and DOCX files are text-extracted once; images are described once when the
+agent's `config.attachment_processing.interpret_images` setting is enabled.
+PDF and DOCX text is extracted locally and summarized once using the configured
+`document_model`, or the agent's normal model when no document model is set.
+The persisted summary, rather than the full extracted document, is reused in
+future conversation turns.
+Only the persisted description is fed to the agent on subsequent turns.
+Attachments that exceed the organization's size limit, use a disallowed MIME
+type, or arrive while media storage is disabled remain visible as failed media
+metadata but their binary cannot be retained.
+
 ### Step 6 — Edit & send a draft
 
 Edit only the content (subject/text/html/cc/bcc — addressing & threading are locked):

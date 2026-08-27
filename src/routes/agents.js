@@ -68,6 +68,16 @@ const createAgentValidation = [
     .optional()
     .isBoolean()
     .withMessage('Enable streaming must be a boolean'),
+  body('config.attachment_processing.enabled').optional().isBoolean(),
+  body('config.attachment_processing.extract_documents').optional().isBoolean(),
+  body('config.attachment_processing.summarize_documents').optional().isBoolean(),
+  body('config.attachment_processing.document_model').optional({ nullable: true }).isString(),
+  body('config.attachment_processing.interpret_images').optional().isBoolean(),
+  body('config.attachment_processing.image_model').optional({ nullable: true }).isString(),
+  body('config.attachment_processing.max_extracted_chars')
+    .optional().isInt({ min: 1000, max: 100000 }),
+  body('config.attachment_processing.max_description_chars')
+    .optional().isInt({ min: 250, max: 20000 }),
   // GDPR configuration validation
   body('gdpr')
     .optional()
@@ -141,6 +151,16 @@ const updateAgentValidation = [
     .optional()
     .isBoolean()
     .withMessage('Enable streaming must be a boolean'),
+  body('config.attachment_processing.enabled').optional().isBoolean(),
+  body('config.attachment_processing.extract_documents').optional().isBoolean(),
+  body('config.attachment_processing.summarize_documents').optional().isBoolean(),
+  body('config.attachment_processing.document_model').optional({ nullable: true }).isString(),
+  body('config.attachment_processing.interpret_images').optional().isBoolean(),
+  body('config.attachment_processing.image_model').optional({ nullable: true }).isString(),
+  body('config.attachment_processing.max_extracted_chars')
+    .optional().isInt({ min: 1000, max: 100000 }),
+  body('config.attachment_processing.max_description_chars')
+    .optional().isInt({ min: 250, max: 20000 }),
   // GDPR configuration validation
   body('gdpr')
     .optional()

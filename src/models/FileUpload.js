@@ -56,6 +56,26 @@ const fileUploadSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    conversation: {
+      type: String,
+      ref: 'Conversation',
+      default: null,
+    },
+    source: {
+      type: String,
+      enum: ['website', 'email', 'channel'],
+      default: 'website',
+    },
+    description: { type: String, default: null },
+    extracted_text: { type: String, default: null },
+    interpretation_status: {
+      type: String,
+      enum: ['pending', 'completed', 'unsupported', 'failed'],
+      default: 'pending',
+    },
+    interpretation_error: { type: String, default: null },
+    interpreted_at: { type: Date, default: null },
+    interpretation_model: { type: String, default: null },
     // Files expire after 24 hours if not attached to a message
     expires_at: {
       type: Date,

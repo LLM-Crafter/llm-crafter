@@ -85,11 +85,24 @@ const messageSchema = new mongoose.Schema({
     reply_to: String, // For threading/replies
     media: [
       {
+        file_id: String,
         type: { type: String }, // 'image', 'video', 'document', 'audio'
         url: String,
         mime_type: String,
         file_size: Number,
         filename: String,
+        content_disposition: String,
+        cid: String,
+        stored: { type: Boolean, default: false },
+        description: String,
+        interpretation_status: {
+          type: String,
+          enum: ['pending', 'completed', 'unsupported', 'failed'],
+          default: 'pending',
+        },
+        interpretation_error: String,
+        interpreted_at: Date,
+        interpretation_model: String,
       },
     ],
     // Email-specific fields — stored as Mixed so any shape is accepted.
@@ -487,8 +500,20 @@ conversationSchema.methods.decryptContent = function (content) {
 
 // Return a plain array of messages with content decrypted (does not mutate the document)
 conversationSchema.methods.getDecryptedMessages = function () {
+  const appendAttachmentContext = message => {
+    const media = message.channel_info?.media || [];
+    const descriptions = media
+      .filter(item => item.description)
+      .map(item => `[Attachment: ${item.filename || item.mime_type || 'file'}]\n${item.description}`);
+    if (descriptions.length > 0) {
+      message.content = `${message.content || ''}\n\n${descriptions.join('\n\n')}`.trim();
+    }
+    return message;
+  };
   if (!this.gdpr || !this.gdpr.encrypt_messages) {
-    return this.messages.map(m => (m.toObject ? m.toObject() : m));
+    return this.messages.map(m => appendAttachmentContext(
+      m.toObject ? m.toObject() : Object.assign({}, m)
+    ));
   }
   const encryptionUtil = require('../utils/encryption');
   return this.messages.map(m => {
@@ -500,7 +525,7 @@ conversationSchema.methods.getDecryptedMessages = function () {
         // Backwards compat
       }
     }
-    return obj;
+    return appendAttachmentContext(obj);
   });
 };
 

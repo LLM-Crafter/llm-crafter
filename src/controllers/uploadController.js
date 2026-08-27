@@ -210,6 +210,7 @@ function extFromMime(mimeType) {
     'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
     'image/gif': 'gif', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3',
     'video/mp4': 'mp4', 'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
   };
   return map[mimeType] || null;
 }

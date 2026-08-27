@@ -54,6 +54,7 @@
     "imapflow": "^1.4.1",
     "jsonwebtoken": "^9.0.2",
     "mailparser": "^3.9.10",
+    "mammoth": "^1.10.0",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
@@ -65,6 +66,7 @@
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
     "passport-local": "^1.0.0",
+    "pdf-parse": "^1.1.1",
     "pptxgenjs": "^4.0.1",
     "uuid": "^11.0.5",
     "weaviate-ts-client": "^2.2.0"

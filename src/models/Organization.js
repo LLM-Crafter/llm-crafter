@@ -57,7 +57,17 @@ const organizationSchema = new mongoose.Schema(
       },
       allowed_mime_types: {
         type: [String],
-        default: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'audio/ogg', 'audio/mpeg', 'video/mp4'],
+        default: [
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'image/gif',
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'audio/ogg',
+          'audio/mpeg',
+          'video/mp4',
+        ],
       },
     },
   },

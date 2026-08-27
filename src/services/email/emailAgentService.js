@@ -36,6 +36,7 @@ const MailAccount = require('../../models/MailAccount');
 const OutboundEmail = require('../../models/OutboundEmail');
 
 const agentService = require('../agentService');
+const attachmentProcessingService = require('../attachmentProcessingService');
 const emailTriageService = require('./emailTriageService');
 const emailUtils = require('./emailUtils');
 const draftService = require('./draftService');
@@ -121,6 +122,13 @@ class EmailAgentService {
       conversation.channel_metadata.email.provider_message_id = providerMessageId;
     }
 
+    const storedAttachments = await attachmentProcessingService.storeAndInterpret({
+      agent,
+      conversationId: conversation._id,
+      attachments: email.attachments || [],
+      source: 'email',
+    });
+
     // ── 3. Append inbound message ────────────────────────────────────────
     // Cap body length before storage so a single large email cannot exceed
     // the model's context window. The rough token estimator used by
@@ -146,6 +154,7 @@ class EmailAgentService {
       timestamp: email.received_at || new Date(),
       channel_info: {
         channel: 'email',
+        media: storedAttachments,
         email: {
           message_id: email.message_id,
           in_reply_to: email.in_reply_to,
@@ -173,6 +182,12 @@ class EmailAgentService {
         triage_topic: triage.topic,
         triage_intent: triage.intent,
         triage_confidence: triage.confidence,
+        attachments: storedAttachments.map(attachment => ({
+          filename: attachment.filename,
+          mime_type: attachment.mime_type,
+          description: attachment.description || null,
+          interpretation_status: attachment.interpretation_status,
+        })),
       },
     };
 

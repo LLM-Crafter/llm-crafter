@@ -14,6 +14,7 @@ const fs = require('fs');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const encryptionUtil = require('../utils/encryption');
+const attachmentProcessingService = require('../services/attachmentProcessingService');
 
 /**
  * Store uploaded files (from multer memoryStorage) for a task agent execution.
@@ -92,16 +93,20 @@ async function resolveFileAttachments(fileIds, agentId) {
     _id: { $in: fileIds },
     agent: agentId,
     stored: true,
-  }).lean();
-
-  return files.map(f => ({
-    type: f.type,
-    url: f.s3_key,
-    mime_type: f.mime_type,
-    file_size: f.file_size,
-    filename: f.original_name,
-    stored: true,
-  }));
+  });
+  const agent = await Agent.findById(agentId).populate({
+    path: 'api_key',
+    populate: { path: 'provider' },
+  });
+  if (!agent) return [];
+  await FileUpload.updateMany(
+    { _id: { $in: files.map(file => file._id) } },
+    { $set: { expires_at: null } }
+  );
+  return attachmentProcessingService.interpretStoredFiles(
+    agent,
+    files.map(file => ({ file_id: file._id }))
+  );
 }
 
 const createAgent = async (req, res) => {
@@ -135,6 +140,18 @@ const createAgent = async (req, res) => {
       return res
         .status(400)
         .json({ error: 'Invalid model for selected provider' });
+    }
+    const documentModel = req.body.config?.attachment_processing?.document_model;
+    if (documentModel && !apiKey.provider.models.includes(documentModel)) {
+      return res.status(400).json({
+        error: 'Invalid attachment document model for selected provider',
+      });
+    }
+    const imageModel = req.body.config?.attachment_processing?.image_model;
+    if (imageModel && !apiKey.provider.models.includes(imageModel)) {
+      return res.status(400).json({
+        error: 'Invalid attachment image model for selected provider',
+      });
     }
 
     // Get available tools
@@ -365,10 +382,15 @@ const updateAgent = async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
-    // Validate API key if being updated
-    if (req.body.api_key) {
+    // Validate models against the selected (or existing) provider.
+    if (
+      req.body.api_key ||
+      req.body.llm_settings?.model ||
+      req.body.config?.attachment_processing?.document_model ||
+      req.body.config?.attachment_processing?.image_model
+    ) {
       const apiKey = await ApiKey.findOne({
-        _id: req.body.api_key,
+        _id: req.body.api_key || agent.api_key,
         project: req.params.projectId,
       }).populate('provider');
 
@@ -388,7 +410,23 @@ const updateAgent = async (req, res) => {
           .json({ error: 'Invalid model for selected provider' });
       }
 
-      agent.api_key = apiKey._id;
+      const documentModel = req.body.config?.attachment_processing?.document_model;
+      if (documentModel && !apiKey.provider.models.includes(documentModel)) {
+        return res.status(400).json({
+          error: 'Invalid attachment document model for selected provider',
+        });
+      }
+
+      const imageModel = req.body.config?.attachment_processing?.image_model;
+      if (imageModel && !apiKey.provider.models.includes(imageModel)) {
+        return res.status(400).json({
+          error: 'Invalid attachment image model for selected provider',
+        });
+      }
+
+      if (req.body.api_key) {
+        agent.api_key = apiKey._id;
+      }
     }
 
     // Update tools if provided

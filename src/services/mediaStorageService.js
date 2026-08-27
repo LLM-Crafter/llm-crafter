@@ -105,8 +105,57 @@ class MediaStorageService {
       'audio/mpeg': 'mp3',
       'video/mp4': 'mp4',
       'application/pdf': 'pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
     };
     return map[mimeType] || null;
+  }
+
+  async storeBuffer({ orgId, agentId, conversationId, buffer, filename, mimeType }) {
+    const org = await Organization.findById(orgId).select('media_storage').lean();
+    const mediaStorage = org?.media_storage;
+    if (!mediaStorage?.enabled || !mediaStorage?.credentials?.bucket) {
+      throw new Error('Media storage is not configured for this organization');
+    }
+    const allowedTypes = mediaStorage.allowed_mime_types || [];
+    if (allowedTypes.length > 0 && !this._isMimeAllowed(mimeType, allowedTypes)) {
+      throw new Error(`MIME type ${mimeType} is not allowed`);
+    }
+    const maxSizeBytes = (mediaStorage.max_file_size_mb || 10) * 1024 * 1024;
+    if (buffer.length > maxSizeBytes) {
+      throw new Error(`File exceeds the ${mediaStorage.max_file_size_mb || 10} MB limit`);
+    }
+    const storedName = `${uuidv4()}-${path.basename(filename || `attachment.${this._mimeToExtension(mimeType) || 'bin'}`)}`;
+    const key = this._buildKey(
+      mediaStorage,
+      orgId,
+      agentId,
+      conversationId,
+      storedName
+    );
+    await this._getClient(mediaStorage).send(new PutObjectCommand({
+      Bucket: mediaStorage.credentials.bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType,
+    }));
+    return { key, storedName };
+  }
+
+  async getBuffer(orgId, s3Key) {
+    const org = await Organization.findById(orgId).select('media_storage').lean();
+    const mediaStorage = org?.media_storage;
+    if (!mediaStorage?.enabled || !mediaStorage?.credentials?.bucket) {
+      throw new Error('Media storage is not configured for this organization');
+    }
+    const response = await this._getClient(mediaStorage).send(new GetObjectCommand({
+      Bucket: mediaStorage.credentials.bucket,
+      Key: s3Key,
+    }));
+    const chunks = [];
+    for await (const chunk of response.Body) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 
   /**

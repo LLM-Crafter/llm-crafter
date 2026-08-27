@@ -83,6 +83,8 @@ async function parseRaw(raw) {
       contentType: a.contentType,
       size: a.size,
       content: a.content, // Buffer
+      contentDisposition: a.contentDisposition || null,
+      cid: a.cid || null,
     })),
     headers: normaliseHeaders(parsed.headers),
   };

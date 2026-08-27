@@ -224,6 +224,16 @@ const agentSchema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      attachment_processing: {
+        enabled: { type: Boolean, default: true },
+        extract_documents: { type: Boolean, default: true },
+        summarize_documents: { type: Boolean, default: true },
+        document_model: { type: String, default: null },
+        interpret_images: { type: Boolean, default: false },
+        image_model: { type: String, default: null },
+        max_extracted_chars: { type: Number, default: 20_000, min: 1000, max: 100_000 },
+        max_description_chars: { type: Number, default: 4_000, min: 250, max: 20_000 },
+      },
       // ISO 639-1 language codes to generate translations for.
       // When set, conversation titles and summaries are translated into each
       // listed language and stored alongside the primary (English) value.
