@@ -278,6 +278,22 @@ const cancelOutbound = async (req, res) => {
       });
     }
 
+    if (claimed.conversation) {
+      await Conversation.updateOne(
+        { _id: claimed.conversation },
+        {
+          $pull: {
+            messages: { 'metadata.outbound_id': claimed._id },
+          },
+        }
+      ).catch(err =>
+        console.error(
+          `[Outbound] failed to remove cancelled draft ${claimed._id} from conversation:`,
+          err.message
+        )
+      );
+    }
+
     if (claimed.provider_draft_id || claimed.imap_draft_uid !== null) {
       draftService.remove(account, claimed).catch(err =>
         console.error(
