@@ -317,6 +317,26 @@ const conversationSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Third-party annotations attached by external integrations so 3rd-party
+    // frontends can filter/sort conversations server-side (e.g. a CRM tagging a
+    // lead priority). Stored using the attribute pattern so MongoDB can index a
+    // key set that is not known ahead of time. Exposed in API responses as the
+    // nested `external_metadata` map (see toJSON transform below).
+    //
+    // NOTE: this is deliberately NOT sent to the LLM — unlike dynamic_context
+    // it is a filtering/reporting aid only.
+    external_attributes: [
+      {
+        _id: false,
+        ns: { type: String, required: true }, // integration namespace
+        key: { type: String, required: true },
+        s: { type: String, default: undefined }, // string value
+        n: { type: Number, default: undefined }, // numeric value
+        b: { type: Boolean, default: undefined }, // boolean value
+        updated_by: { type: String, default: null }, // API key id (or null)
+        updated_at: { type: Date, default: Date.now },
+      },
+    ],
     summary: {
       type: String,
       trim: true,
@@ -392,6 +412,14 @@ const conversationSchema = new mongoose.Schema(
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
     toJSON: {
       transform(doc, ret) {
+        // Expose third-party annotations as a nested map and hide the internal
+        // attribute-pattern array from API consumers.
+        if (Array.isArray(ret.external_attributes)) {
+          const { attributesToMap } = require('../utils/externalAttributes');
+          ret.external_metadata = attributesToMap(ret.external_attributes);
+          delete ret.external_attributes;
+        }
+
         // Auto-decrypt message content when serialising (e.g. res.json)
         if (ret.gdpr && ret.gdpr.encrypt_messages && Array.isArray(ret.messages)) {
           const encryptionUtil = require('../utils/encryption');
@@ -420,6 +448,20 @@ conversationSchema.index({ agent: 1, channel: 1, status: 1 }); // New index for 
 conversationSchema.index({ channel: 1, 'metadata.last_activity': 1 }); // New index for channel analytics
 conversationSchema.index({ archived: 1 });
 conversationSchema.index({ agent: 1, archived: 1 });
+// Support server-side filtering of conversations by third-party annotations.
+// Compound with `agent` so the org/project scoping stays part of the index scan.
+conversationSchema.index({
+  agent: 1,
+  'external_attributes.ns': 1,
+  'external_attributes.key': 1,
+  'external_attributes.s': 1,
+});
+conversationSchema.index({
+  agent: 1,
+  'external_attributes.ns': 1,
+  'external_attributes.key': 1,
+  'external_attributes.n': 1,
+});
 
 // Update last activity on message addition and check for summarization needs
 // Also auto-unarchive the conversation when a new message arrives
@@ -482,6 +524,22 @@ conversationSchema.methods.addMessage = function (messageData) {
 // Method to get recent messages (for context management)
 conversationSchema.methods.getRecentMessages = function (limit = 10) {
   return this.messages.slice(-limit);
+};
+
+// Merge a `{ key: value }` patch into external_attributes for a single
+// namespace and persist. `null` values delete a key; pass { replace: true }
+// to also drop keys in the namespace that are absent from `values`.
+// Returns a summary: { namespace, updated, removed, key_count }.
+conversationSchema.methods.setExternalMetadata = async function (
+  namespace,
+  values,
+  apiKeyId = null,
+  options = {}
+) {
+  const { applyNamespacePatch } = require('../utils/externalAttributes');
+  const result = applyNamespacePatch(this, namespace, values, apiKeyId, options);
+  await this.save();
+  return result;
 };
 
 // Decrypt a single content string if encryption is enabled (backwards-compatible)

@@ -7,8 +7,14 @@ const Project = require('../models/Project');
  */
 const createApiKey = async (req, res) => {
   try {
-    const { name, scopes, restrictions, expires_at, allowed_projects } =
-      req.body;
+    const {
+      name,
+      scopes,
+      restrictions,
+      expires_at,
+      allowed_projects,
+      integration_slug,
+    } = req.body;
 
     // Verify organization membership
     const organization = await Organization.findById(req.params.orgId);
@@ -47,6 +53,8 @@ const createApiKey = async (req, res) => {
       'agents:chat',
       'projects:read',
       'statistics:read',
+      'handoffs:manage',
+      'conversations:annotate',
     ];
 
     const invalidScopes = scopes.filter(scope => !validScopes.includes(scope));
@@ -103,6 +111,7 @@ const createApiKey = async (req, res) => {
       expires_at: expirationDate,
       created_by: req.user._id,
       allowed_projects: allowed_projects || [],
+      integration_slug: integration_slug || undefined,
     });
 
     await userApiKey.save();
@@ -194,8 +203,14 @@ const getApiKey = async (req, res) => {
  */
 const updateApiKey = async (req, res) => {
   try {
-    const { name, scopes, restrictions, expires_at, allowed_projects } =
-      req.body;
+    const {
+      name,
+      scopes,
+      restrictions,
+      expires_at,
+      allowed_projects,
+      integration_slug,
+    } = req.body;
 
     const apiKey = await UserApiKey.findOne({
       _id: req.params.keyId,
@@ -216,6 +231,8 @@ const updateApiKey = async (req, res) => {
         'agents:chat',
         'projects:read',
         'statistics:read',
+        'handoffs:manage',
+        'conversations:annotate',
       ];
 
       const invalidScopes = scopes.filter(
@@ -254,6 +271,9 @@ const updateApiKey = async (req, res) => {
     }
     if (restrictions !== undefined) {
       apiKey.restrictions = restrictions;
+    }
+    if (integration_slug !== undefined) {
+      apiKey.integration_slug = integration_slug || undefined;
     }
 
     if (expires_at !== undefined) {

@@ -26,6 +26,8 @@ const createApiKeyValidation = [
         'agents:chat',
         'projects:read',
         'statistics:read',
+        'handoffs:manage',
+        'conversations:annotate',
       ];
       const invalidScopes = scopes.filter(
         scope => !validScopes.includes(scope)
@@ -63,6 +65,12 @@ const createApiKeyValidation = [
     .optional()
     .isArray()
     .withMessage('Allowed projects must be an array'),
+  body('integration_slug')
+    .optional({ nullable: true })
+    .matches(/^[a-z0-9][a-z0-9_-]{0,63}$/)
+    .withMessage(
+      'integration_slug must be lowercase alphanumeric with "-"/"_" (max 64 chars)'
+    ),
 ];
 
 const updateApiKeyValidation = [
@@ -85,6 +93,8 @@ const updateApiKeyValidation = [
         'agents:chat',
         'projects:read',
         'statistics:read',
+        'handoffs:manage',
+        'conversations:annotate',
       ];
       const invalidScopes = scopes.filter(
         scope => !validScopes.includes(scope)
@@ -134,6 +144,12 @@ const updateApiKeyValidation = [
     .optional()
     .isArray()
     .withMessage('Allowed projects must be an array'),
+  body('integration_slug')
+    .optional({ nullable: true })
+    .matches(/^[a-z0-9][a-z0-9_-]{0,63}$/)
+    .withMessage(
+      'integration_slug must be lowercase alphanumeric with "-"/"_" (max 64 chars)'
+    ),
 ];
 
 // ===== API KEY MANAGEMENT ROUTES =====

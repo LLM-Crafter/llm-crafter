@@ -41,9 +41,20 @@ const userApiKeySchema = new mongoose.Schema(
           'projects:read', // Read project info
           'statistics:read', // Read usage statistics
           'handoffs:manage', // Manage external operators and handoff actions
+          'conversations:annotate', // Attach third-party metadata to conversations
         ],
       },
     ],
+
+    // Stable namespace this key's annotations are written under. Keeps one
+    // integration's `external_metadata` keys from colliding with another's.
+    // Falls back to a slug of `name` when unset.
+    integration_slug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      match: /^[a-z0-9][a-z0-9_-]{0,63}$/,
+    },
 
     // Security restrictions
     restrictions: {

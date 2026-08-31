@@ -82,6 +82,12 @@ Agent Execution (Secure)
 | `agents:chat`     | Direct agent chat (bypasses session system) |
 | `projects:read`   | Read project information                    |
 | `statistics:read` | Read usage statistics                       |
+| `handoffs:manage` | Manage external operators and handoff actions |
+| `conversations:annotate` | Attach third-party metadata to conversations (see [Conversation Metadata](./conversation-metadata.md)) |
+
+For keys with `conversations:annotate`, you may also set `integration_slug`
+(lowercase; `a-z`, `0-9`, `_`, `-`; max 64 chars) to fix the namespace the
+integration's metadata is stored under. Defaults to a slug of the key name.
 
 ### Security Restrictions
 

@@ -1,6 +1,12 @@
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const ExternalOperator = require('../models/ExternalOperator');
+const {
+  resolveNamespace,
+  attributesToMap,
+  parseAttributeFilters,
+  ExternalAttributeError,
+} = require('../utils/externalAttributes');
 const Agent = require('../models/Agent');
 const channelOrchestrator = require('../services/channelOrchestrator');
 const mediaStorageService = require('../services/mediaStorageService');
@@ -539,19 +545,37 @@ const getMyConversations = async (req, res) => {
  */
 const getOrganizationConversations = async (req, res) => {
   try {
-    const { orgId } = req.params;
+    const { orgId, projectId } = req.params;
     const { page = 1, limit = 20, status, channel, archived, conversationIds } = req.query;
     const skip = (page - 1) * limit;
 
     // Get Agent model to query agents by organization
     const Agent = require('../models/Agent');
 
-    // Find all agents belonging to this organization
-    const agents = await Agent.find({ organization: orgId }).select('_id');
+    // Find all agents belonging to this organization (and project, when the
+    // route is project-scoped — e.g. the API-key variant under /external).
+    const agentQuery = { organization: orgId };
+    if (projectId) {
+      agentQuery.project = projectId;
+    }
+    const agents = await Agent.find(agentQuery).select('_id');
     const agentIds = agents.map(agent => agent._id);
 
     // Build filter for conversations
     const filter = { agent: { $in: agentIds } };
+
+    // Third-party annotation filters: ?meta.<namespace>.<key>=value
+    // (see docs/api/conversation-metadata.md)
+    const { clauses: metaClauses, errors: metaErrors } =
+      parseAttributeFilters(req.query);
+    if (metaErrors.length > 0) {
+      return res
+        .status(400)
+        .json({ error: 'Invalid metadata filter', details: metaErrors });
+    }
+    if (metaClauses.length > 0) {
+      filter.$and = [...(filter.$and || []), ...metaClauses];
+    }
 
     // Filter by specific conversation IDs if provided
     if (conversationIds) {
@@ -601,6 +625,98 @@ const getOrganizationConversations = async (req, res) => {
     res
       .status(500)
       .json({ error: 'Failed to fetch organization conversations' });
+  }
+};
+
+/**
+ * Attach / update / remove third-party metadata on a conversation.
+ *
+ * Used by external integrations (CRMs, ticketing systems, …) to annotate
+ * conversations with their own key/value data so 3rd-party frontends can
+ * filter server-side via getOrganizationConversations.
+ *
+ * Route params: :orgId, :conversationId, and optionally :projectId
+ * Auth:  API key with `conversations:annotate` scope, or an org member (JWT).
+ *
+ * Body:
+ *   values     {Object}  required — { "<key>": <string|number|boolean|null> }
+ *                                    null deletes the key
+ *   replace    {Boolean} optional — also drop keys in the namespace that are
+ *                                    absent from `values` (full namespace sync)
+ *   namespace  {String}  optional — only honoured for JWT callers; API keys
+ *                                    always write into their own namespace
+ *
+ * The namespace scopes writes so integrations never clobber each other's keys.
+ */
+const updateConversationMetadata = async (req, res) => {
+  try {
+    const { orgId, projectId, conversationId } = req.params;
+    const { values, replace = false, namespace: bodyNamespace } = req.body || {};
+
+    if (
+      values === undefined ||
+      values === null ||
+      typeof values !== 'object' ||
+      Array.isArray(values)
+    ) {
+      return res
+        .status(400)
+        .json({ error: '`values` must be an object of key/value pairs' });
+    }
+
+    const conversation = await Conversation.findById(conversationId).populate(
+      'agent',
+      'organization project'
+    );
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // Verify the conversation belongs to the org (and project, when scoped).
+    const agent = conversation.agent;
+    if (!agent || String(agent.organization) !== String(orgId)) {
+      return res
+        .status(404)
+        .json({ error: 'Conversation not found in this organization' });
+    }
+    if (projectId && String(agent.project) !== String(projectId)) {
+      return res
+        .status(404)
+        .json({ error: 'Conversation not found in this project' });
+    }
+
+    let namespace;
+    try {
+      namespace = resolveNamespace(req, bodyNamespace);
+    } catch (err) {
+      return res.status(422).json({ error: err.message });
+    }
+
+    let changed;
+    try {
+      changed = await conversation.setExternalMetadata(
+        namespace,
+        values,
+        req.apiKey ? req.apiKey._id : null,
+        { replace: Boolean(replace) }
+      );
+    } catch (err) {
+      if (err instanceof ExternalAttributeError) {
+        return res.status(err.statusCode || 422).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    res.json({
+      success: true,
+      conversation_id: conversation._id,
+      namespace,
+      changed,
+      external_metadata: attributesToMap(conversation.external_attributes),
+    });
+  } catch (error) {
+    console.error('Error updating conversation metadata:', error);
+    res.status(500).json({ error: 'Failed to update conversation metadata' });
   }
 };
 
@@ -959,6 +1075,7 @@ module.exports = {
   refuseHandoff,
   getMyConversations,
   getOrganizationConversations,
+  updateConversationMetadata,
   archiveConversation,
   streamConversation,
   getConversationDetails,

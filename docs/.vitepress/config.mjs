@@ -56,7 +56,8 @@ export default defineConfig({
             { text: 'Projects', link: '/api/projects' },
             { text: 'Agents', link: '/api/agents' },
             { text: 'Tools', link: '/api/tools' },
-            { text: 'Providers', link: '/api/providers' }
+            { text: 'Providers', link: '/api/providers' },
+            { text: 'Conversation Metadata', link: '/api/conversation-metadata' }
           ]
         },
         {

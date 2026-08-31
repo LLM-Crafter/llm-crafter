@@ -478,6 +478,26 @@ Returns Server-Sent Events. Events:
 
 ---
 
+### 2.x List / annotate conversations with third-party metadata
+
+```
+GET   /api/v1/external/organizations/:orgId/projects/:projectId/conversations
+PATCH /api/v1/external/organizations/:orgId/projects/:projectId/conversations/:conversationId/metadata
+```
+
+The `GET` accepts `?meta.<namespace>.<key>=value` filters (operators: `ne`,
+`in`, `nin`, `gt`, `gte`, `lt`, `lte`, `exists`) so a 3rd-party frontend can
+fetch only the conversations it cares about (e.g. `meta.acme-crm.lead_priority=hot`)
+instead of loading everything and filtering client-side.
+
+The `PATCH` (scope `conversations:annotate`) attaches the integration's own
+key/value data: `{ "values": { "lead_priority": "hot", "lead_score": 82 } }`.
+Data is namespaced per API key and surfaced on every conversation object as
+`external_metadata`. Full reference:
+**[Conversation Metadata](./api/conversation-metadata.md)**.
+
+---
+
 ## 3. Agent Configuration — `require_online_operator`
 
 New boolean field in the agent's `config.handoff_config`:

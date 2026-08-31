@@ -305,6 +305,26 @@ router.get(
   handoffController.getMyConversations
 );
 
+// List conversations for a project.
+// Supports third-party annotation filters: ?meta.<namespace>.<key>=value
+// (see docs/api/conversation-metadata.md)
+router.get(
+  '/organizations/:orgId/projects/:projectId/conversations',
+  generalLimiter,
+  apiKeyAuth(['handoffs:manage', 'conversations:annotate']),
+  validateProjectAccess,
+  handoffController.getOrganizationConversations
+);
+
+// Attach / update / remove third-party metadata on a conversation
+router.patch(
+  '/organizations/:orgId/projects/:projectId/conversations/:conversationId/metadata',
+  generalLimiter,
+  apiKeyAuth(['conversations:annotate']),
+  validateProjectAccess,
+  handoffController.updateConversationMetadata
+);
+
 // Get conversation details
 router.get(
   '/organizations/:orgId/projects/:projectId/conversations/:conversationId',

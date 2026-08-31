@@ -22,10 +22,18 @@ router.get(
 router.get('/my-conversations', handoffController.getMyConversations);
 
 // Get all conversations for an organization (requires org member auth)
+// Supports third-party annotation filters: ?meta.<namespace>.<key>=value
 router.get(
   '/organizations/:orgId/conversations',
   orgAuth.isMember,
   handoffController.getOrganizationConversations
+);
+
+// Attach / update / remove third-party metadata on a conversation
+router.patch(
+  '/organizations/:orgId/conversations/:conversationId/metadata',
+  orgAuth.isMember,
+  handoffController.updateConversationMetadata
 );
 
 // Get conversation details
