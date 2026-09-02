@@ -2206,6 +2206,32 @@ class AgentService {
     };
   }
 
+  getToolResultForPrompt(toolName, result) {
+    if (toolName !== 'api_caller' || !result || typeof result !== 'object') {
+      return result;
+    }
+
+    const promptResult = {
+      endpoint_name: result.endpoint_name,
+      url: result.url,
+      method: result.method,
+      status_code: result.status_code,
+      success: result.success,
+    };
+
+    if (result._summarized && result.summary !== undefined) {
+      promptResult.summary = result.summary;
+      promptResult._summarized = true;
+      promptResult._original_length = result._original_length;
+    } else if (result.body !== undefined) {
+      promptResult.body = result.body;
+    } else if (result.data !== undefined) {
+      promptResult.data = result.data;
+    }
+
+    return promptResult;
+  }
+
   /**
    * Build reasoning prompt for the agent (optimized for caching)
    * Static content (tools, format) is now in system prompt and gets cached.
@@ -2238,7 +2264,8 @@ class AgentService {
       prompt += `\n\n## Tools Used So Far\n`;
       prompt += toolsUsed.map(tool => {
         if (tool.success) {
-          return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+          const result = this.getToolResultForPrompt(tool.tool_name, tool.result);
+          return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(result)}`;
         } else {
           return `- ${tool.tool_name}: FAILED - ${tool.error}`;
         }
@@ -2303,7 +2330,8 @@ Your response:`;
       prompt += `## Tools Used So Far\n`;
       prompt += toolsUsed.map(tool => {
         if (tool.success) {
-          return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(tool.result)}`;
+          const result = this.getToolResultForPrompt(tool.tool_name, tool.result);
+          return `- ${tool.tool_name}: SUCCESS - ${JSON.stringify(result)}`;
         } else {
           return `- ${tool.tool_name}: FAILED - ${tool.error}`;
         }
@@ -3352,7 +3380,8 @@ Your response:`;
       prompt += `## Tool Results Already Collected This Turn\n`;
       prompt += previousResults.map(tr => {
         const status = tr.success ? 'SUCCESS' : 'FAILED';
-        const detail = tr.success ? JSON.stringify(tr.result) : tr.error;
+        const result = this.getToolResultForPrompt(tr.tool_name, tr.result);
+        const detail = tr.success ? JSON.stringify(result) : tr.error;
         return `- ${tr.tool_name} [${status}]: ${detail}`;
       }).join('\n');
       prompt += `\n\n`;
@@ -3429,7 +3458,8 @@ Your response:`;
       prompt += `## Tool Results (use these to inform your reply)\n`;
       prompt += toolResults.map(tr => {
         if (tr.success) {
-          return `- ${tr.tool_name}: ${JSON.stringify(tr.result)}`;
+          const result = this.getToolResultForPrompt(tr.tool_name, tr.result);
+          return `- ${tr.tool_name}: ${JSON.stringify(result)}`;
         }
         return `- ${tr.tool_name} (FAILED): ${tr.error}`;
       }).join('\n');
@@ -3485,7 +3515,10 @@ Your response:`;
     if (toolResults.length > 0) {
       prompt += `## Tool Results\n`;
       prompt += toolResults.map(tr => {
-        if (tr.success) return `- ${tr.tool_name}: ${JSON.stringify(tr.result)}`;
+        if (tr.success) {
+          const result = this.getToolResultForPrompt(tr.tool_name, tr.result);
+          return `- ${tr.tool_name}: ${JSON.stringify(result)}`;
+        }
         return `- ${tr.tool_name} (FAILED): ${tr.error}`;
       }).join('\n');
       prompt += `\n\n`;
