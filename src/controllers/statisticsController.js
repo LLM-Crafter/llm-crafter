@@ -3,6 +3,7 @@ const AgentExecution = require('../models/AgentExecution');
 const Conversation = require('../models/Conversation');
 const Agent = require('../models/Agent');
 const Project = require('../models/Project');
+const Organization = require('../models/Organization');
 
 /**
  * Get time range filter based on period
@@ -36,6 +37,47 @@ const getTimeFilter = period => {
   }
 
   return startDate;
+};
+
+/**
+ * Truncate a date to the start of its UTC day
+ */
+const startOfUTCDay = date => {
+  const d = new Date(date);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
+
+/**
+ * Truncate a date to the Monday of its UTC week
+ */
+const startOfUTCWeek = date => {
+  const d = startOfUTCDay(date);
+  const dayOfWeek = d.getUTCDay(); // 0 (Sun) - 6 (Sat)
+  const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  d.setUTCDate(d.getUTCDate() - diffToMonday);
+  return d;
+};
+
+const formatBucketDate = date => new Date(date).toISOString().slice(0, 10);
+
+/**
+ * Build the ordered list of bucket keys (YYYY-MM-DD) spanning [startDate, now],
+ * so response series stay continuous even for buckets without activity.
+ */
+const buildBucketSeries = (startDate, granularity) => {
+  const alignedStart =
+    granularity === 'week' ? startOfUTCWeek(startDate) : startOfUTCDay(startDate);
+  const end =
+    granularity === 'week' ? startOfUTCWeek(new Date()) : startOfUTCDay(new Date());
+  const stepDays = granularity === 'week' ? 7 : 1;
+
+  const buckets = [];
+  const cursor = new Date(alignedStart);
+  while (cursor <= end) {
+    buckets.push(formatBucketDate(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + stepDays);
+  }
+  return buckets;
 };
 
 /**
@@ -683,7 +725,135 @@ const getAgentStats = async (req, res) => {
   }
 };
 
+/**
+ * Get conversation count + cost, bucketed per day or per week, for every
+ * organization the requesting user belongs to (for cross-org graphs).
+ */
+const getOrganizationsOverview = async (req, res) => {
+  try {
+    const { granularity = 'day', days = '30' } = req.query;
+
+    if (!['day', 'week'].includes(granularity)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid granularity. Use 'day' or 'week'" });
+    }
+
+    const daysNum = parseInt(days, 10);
+    if (!Number.isInteger(daysNum) || daysNum < 1 || daysNum > 365) {
+      return res
+        .status(400)
+        .json({ error: 'Invalid days. Use an integer between 1 and 365' });
+    }
+
+    const organizations = await Organization.find({
+      'members.user': req.user._id,
+    }).select('_id name');
+
+    if (organizations.length === 0) {
+      return res.json({ granularity, days: daysNum, timeRange: null, organizations: [] });
+    }
+
+    const orgIds = organizations.map(org => org._id);
+    const rawStartDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000);
+    const startDate =
+      granularity === 'week' ? startOfUTCWeek(rawStartDate) : startOfUTCDay(rawStartDate);
+
+    const agents = await Agent.find({ organization: { $in: orgIds } }).select(
+      '_id organization'
+    );
+    const agentOrgMap = new Map(agents.map(a => [a._id, a.organization]));
+    const agentIds = agents.map(a => a._id);
+
+    const bucketSeries = buildBucketSeries(rawStartDate, granularity);
+
+    const orgBuckets = new Map();
+    organizations.forEach(org => {
+      const buckets = new Map();
+      bucketSeries.forEach(key => buckets.set(key, { conversations: 0, cost: 0 }));
+      orgBuckets.set(org._id, buckets);
+    });
+
+    if (agentIds.length > 0) {
+      const dateExpr = {
+        $dateTrunc: {
+          date: '$created_at',
+          unit: granularity,
+          timezone: 'UTC',
+          ...(granularity === 'week' && { startOfWeek: 'monday' }),
+        },
+      };
+
+      const results = await Conversation.aggregate([
+        {
+          $match: {
+            agent: { $in: agentIds },
+            created_at: { $gte: startDate },
+          },
+        },
+        {
+          $group: {
+            _id: { agent: '$agent', bucket: dateExpr },
+            conversationCount: { $sum: 1 },
+            totalCost: { $sum: { $ifNull: ['$metadata.total_cost', 0] } },
+          },
+        },
+      ]);
+
+      results.forEach(row => {
+        const orgId = agentOrgMap.get(row._id.agent);
+        const buckets = orgId && orgBuckets.get(orgId);
+        if (!buckets) return;
+
+        const bucketKey = formatBucketDate(row._id.bucket);
+        const entry = buckets.get(bucketKey) || { conversations: 0, cost: 0 };
+        entry.conversations += row.conversationCount;
+        entry.cost += row.totalCost;
+        buckets.set(bucketKey, entry);
+      });
+    }
+
+    const organizationsResponse = organizations.map(org => {
+      const buckets = orgBuckets.get(org._id);
+      const series = Array.from(buckets.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, stats]) => ({
+          date,
+          conversations: stats.conversations,
+          cost: Math.round(stats.cost * 1e6) / 1e6,
+        }));
+
+      const totals = series.reduce(
+        (acc, point) => ({
+          conversations: acc.conversations + point.conversations,
+          cost: acc.cost + point.cost,
+        }),
+        { conversations: 0, cost: 0 }
+      );
+
+      return {
+        organization: { id: org._id, name: org.name },
+        series,
+        totals: { ...totals, cost: Math.round(totals.cost * 1e6) / 1e6 },
+      };
+    });
+
+    res.json({
+      granularity,
+      days: daysNum,
+      timeRange: { start: startDate, end: new Date() },
+      organizations: organizationsResponse,
+    });
+  } catch (error) {
+    console.error('Error fetching organizations overview statistics:', error);
+    res
+      .status(500)
+      .json({ error: 'Failed to fetch organizations overview statistics' });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getAgentStats,
+  getOrganizationsOverview,
 };
