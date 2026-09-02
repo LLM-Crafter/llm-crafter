@@ -766,11 +766,16 @@ const getOrganizationsOverview = async (req, res) => {
     const agentIds = agents.map(a => a._id);
 
     const bucketSeries = buildBucketSeries(rawStartDate, granularity);
+    const channelNames = Conversation.schema.path('channel').enumValues;
+    const emptyChannels = () =>
+      Object.fromEntries(channelNames.map(c => [c, { conversations: 0, cost: 0 }]));
 
     const orgBuckets = new Map();
     organizations.forEach(org => {
       const buckets = new Map();
-      bucketSeries.forEach(key => buckets.set(key, { conversations: 0, cost: 0 }));
+      bucketSeries.forEach(key =>
+        buckets.set(key, { conversations: 0, cost: 0, channels: emptyChannels() })
+      );
       orgBuckets.set(org._id, buckets);
     });
 
@@ -793,7 +798,7 @@ const getOrganizationsOverview = async (req, res) => {
         },
         {
           $group: {
-            _id: { agent: '$agent', bucket: dateExpr },
+            _id: { agent: '$agent', bucket: dateExpr, channel: '$channel' },
             conversationCount: { $sum: 1 },
             totalCost: { $sum: { $ifNull: ['$metadata.total_cost', 0] } },
           },
@@ -806,9 +811,14 @@ const getOrganizationsOverview = async (req, res) => {
         if (!buckets) return;
 
         const bucketKey = formatBucketDate(row._id.bucket);
-        const entry = buckets.get(bucketKey) || { conversations: 0, cost: 0 };
+        const channel = row._id.channel || 'website';
+        const entry =
+          buckets.get(bucketKey) || { conversations: 0, cost: 0, channels: emptyChannels() };
         entry.conversations += row.conversationCount;
         entry.cost += row.totalCost;
+        if (!entry.channels[channel]) entry.channels[channel] = { conversations: 0, cost: 0 };
+        entry.channels[channel].conversations += row.conversationCount;
+        entry.channels[channel].cost += row.totalCost;
         buckets.set(bucketKey, entry);
       });
     }
@@ -821,20 +831,36 @@ const getOrganizationsOverview = async (req, res) => {
           date,
           conversations: stats.conversations,
           cost: Math.round(stats.cost * 1e6) / 1e6,
+          channels: Object.fromEntries(
+            Object.entries(stats.channels).map(([channel, s]) => [
+              channel,
+              { conversations: s.conversations, cost: Math.round(s.cost * 1e6) / 1e6 },
+            ])
+          ),
         }));
 
       const totals = series.reduce(
-        (acc, point) => ({
-          conversations: acc.conversations + point.conversations,
-          cost: acc.cost + point.cost,
-        }),
-        { conversations: 0, cost: 0 }
+        (acc, point) => {
+          acc.conversations += point.conversations;
+          acc.cost += point.cost;
+          Object.entries(point.channels).forEach(([channel, s]) => {
+            acc.channels[channel] = acc.channels[channel] || { conversations: 0, cost: 0 };
+            acc.channels[channel].conversations += s.conversations;
+            acc.channels[channel].cost += s.cost;
+          });
+          return acc;
+        },
+        { conversations: 0, cost: 0, channels: {} }
       );
+      totals.cost = Math.round(totals.cost * 1e6) / 1e6;
+      Object.values(totals.channels).forEach(s => {
+        s.cost = Math.round(s.cost * 1e6) / 1e6;
+      });
 
       return {
         organization: { id: org._id, name: org.name },
         series,
-        totals: { ...totals, cost: Math.round(totals.cost * 1e6) / 1e6 },
+        totals,
       };
     });
 
