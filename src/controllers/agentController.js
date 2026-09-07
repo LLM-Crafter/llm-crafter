@@ -16,6 +16,50 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const encryptionUtil = require('../utils/encryption');
 const attachmentProcessingService = require('../services/attachmentProcessingService');
 
+const PROCEDURE_STEP_TYPES = ['collect', 'ask', 'request_document', 'answer', 'tool_action', 'escalate'];
+const PROCEDURE_RESPONSE_POLICIES = ['collect_before_answer', 'answer_while_collecting'];
+
+/**
+ * Validate a `procedures` array from a create/update request body.
+ * Assigns stable ids where missing (mutates entries in place).
+ * Returns an error message string, or null when valid.
+ */
+function validateProcedures(procedures) {
+  if (!Array.isArray(procedures)) return 'procedures must be an array';
+
+  const seenIds = new Set();
+  for (let i = 0; i < procedures.length; i++) {
+    const p = procedures[i];
+    if (!p.name) return `procedures[${i}]: name is required`;
+    if (!p.id) p.id = uuidv4();
+    if (seenIds.has(p.id)) return `procedures[${i}]: duplicate procedure id`;
+    seenIds.add(p.id);
+
+    if (p.response_policy && !PROCEDURE_RESPONSE_POLICIES.includes(p.response_policy)) {
+      return `procedures[${i}]: response_policy must be one of ${PROCEDURE_RESPONSE_POLICIES.join(', ')}`;
+    }
+    if (!Array.isArray(p.steps) || p.steps.length === 0) {
+      return `procedures[${i}]: steps must be a non-empty array`;
+    }
+
+    const seenStepIds = new Set();
+    for (let j = 0; j < p.steps.length; j++) {
+      const s = p.steps[j];
+      if (!s.id) s.id = uuidv4();
+      if (seenStepIds.has(s.id)) return `procedures[${i}].steps[${j}]: duplicate step id`;
+      seenStepIds.add(s.id);
+      if (!s.name) return `procedures[${i}].steps[${j}]: name is required`;
+      if (!PROCEDURE_STEP_TYPES.includes(s.type)) {
+        return `procedures[${i}].steps[${j}]: type must be one of ${PROCEDURE_STEP_TYPES.join(', ')}`;
+      }
+      if (['collect', 'ask'].includes(s.type) && !s.field_key) {
+        return `procedures[${i}].steps[${j}]: field_key is required for '${s.type}' steps`;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Store uploaded files (from multer memoryStorage) for a task agent execution.
  * If the org has S3 configured, uploads there and returns presigned URLs.
@@ -294,6 +338,16 @@ const createAgent = async (req, res) => {
       messageTransformers = transformers;
     }
 
+    // Validate procedures if provided
+    let procedures;
+    if (req.body.procedures) {
+      const procedureError = validateProcedures(req.body.procedures);
+      if (procedureError) {
+        return res.status(400).json({ error: procedureError });
+      }
+      procedures = req.body.procedures;
+    }
+
     const agent = new Agent({
       name: req.body.name,
       description: req.body.description,
@@ -308,6 +362,7 @@ const createAgent = async (req, res) => {
       question_suggestions: questionSuggestions,
       gdpr: gdprConfig,
       message_transformers: messageTransformers || [],
+      procedures: procedures || [],
     });
 
     await agent.save();
@@ -592,6 +647,15 @@ const updateAgent = async (req, res) => {
         }
       }
       agent.message_transformers = transformers;
+    }
+
+    // Update procedures if provided
+    if (req.body.procedures !== undefined) {
+      const procedureError = validateProcedures(req.body.procedures);
+      if (procedureError) {
+        return res.status(400).json({ error: procedureError });
+      }
+      agent.procedures = req.body.procedures;
     }
 
     // Increment version on update

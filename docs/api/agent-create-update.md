@@ -138,6 +138,19 @@ Automatically generate follow-up question suggestions after each AI reply.
 
 ---
 
+### `procedures`
+
+Deterministic multi-step flows (e.g. a refund request) the chatbot follows once a matching situation is detected. `PUT` replaces the entire array. See [Procedures](/features/procedures) for the full schema, matching/enforcement behavior, and an example.
+
+| Field                          | Type   | Required | Default                 | Description                                                 |
+| ------------------------------ | ------ | -------- | ----------------------- | ----------------------------------------------------------- |
+| `procedures[].name`            | string | yes      | —                       | Shown in the prompt directive and step status               |
+| `procedures[].trigger`         | object | no       | `{}`                    | `description` (semantic match text) + `examples` (string[]) |
+| `procedures[].response_policy` | string | no       | `collect_before_answer` | `collect_before_answer` \| `answer_while_collecting`        |
+| `procedures[].steps`           | array  | yes      | —                       | Non-empty. See step fields in the linked doc.               |
+
+---
+
 ## Full example
 
 ```json
@@ -192,12 +205,13 @@ Automatically generate follow-up question suggestions after each AI reply.
 
 ## Error responses
 
-| Status | Error                                                               | Cause                                                            |
-| ------ | ------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `400`  | `Agent name already exists in this project`                         | Duplicate `name`                                                 |
-| `400`  | `Invalid model for selected provider`                               | `llm_settings.model` not in the provider's model list            |
-| `400`  | `Invalid tools: <names>`                                            | Tool name(s) not recognised                                      |
-| `400`  | `API key and model are required when enabling question suggestions` | `question_suggestions.enabled: true` without `api_key` / `model` |
-| `400`  | `gdpr.retention_days must be a positive integer or null`            | Invalid retention value                                          |
-| `404`  | `API key not found in this project`                                 | `api_key` does not belong to the project                         |
-| `500`  | `Failed to create agent` / `Failed to update agent`                 | Unexpected server error                                          |
+| Status | Error                                                               | Cause                                                                                |
+| ------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `400`  | `Agent name already exists in this project`                         | Duplicate `name`                                                                     |
+| `400`  | `Invalid model for selected provider`                               | `llm_settings.model` not in the provider's model list                                |
+| `400`  | `Invalid tools: <names>`                                            | Tool name(s) not recognised                                                          |
+| `400`  | `API key and model are required when enabling question suggestions` | `question_suggestions.enabled: true` without `api_key` / `model`                     |
+| `400`  | `gdpr.retention_days must be a positive integer or null`            | Invalid retention value                                                              |
+| `400`  | `procedures[i]: ...` / `procedures[i].steps[j]: ...`                | Invalid procedure or step — see [Procedures](/features/procedures#validation-errors) |
+| `404`  | `API key not found in this project`                                 | `api_key` does not belong to the project                                             |
+| `500`  | `Failed to create agent` / `Failed to update agent`                 | Unexpected server error                                                              |

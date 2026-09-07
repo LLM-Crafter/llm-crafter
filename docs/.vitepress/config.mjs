@@ -41,6 +41,7 @@ export default defineConfig({
             { text: 'Agent Types', link: '/features/agent-types' },
             { text: 'System Tools', link: '/features/system-tools' },
             { text: 'API Caller Tool', link: '/features/api-caller' },
+            { text: 'Procedures', link: '/features/procedures' },
             { text: 'Conversation Summarization', link: '/features/summarization' },
             { text: 'Authentication', link: '/features/authentication' },
             { text: 'Outlook Operator Setup', link: '/features/outlook-oauth-operator-setup' },

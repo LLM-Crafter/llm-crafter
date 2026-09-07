@@ -408,6 +408,61 @@ const agentSchema = new mongoose.Schema(
         enabled: { type: Boolean, default: true },
       },
     ],
+    // Configurable procedures — deterministic multi-step flows (e.g. a refund
+    // request) a chatbot should follow when a matching situation is detected.
+    // Definitions are pinned onto the conversation (procedure_snapshot) when a
+    // run starts, so editing a procedure never changes an already-running one.
+    procedures: [
+      {
+        id: { type: String, required: true, default: uuidv4 },
+        name: { type: String, required: true, trim: true },
+        description: { type: String, default: '' },
+        enabled: { type: Boolean, default: true },
+        trigger: {
+          // Semantic "when to use this procedure" description matched by meaning, not keywords
+          description: { type: String, default: '' },
+          examples: [String], // Example trigger phrases shown in the UI
+        },
+        response_policy: {
+          type: String,
+          enum: ['collect_before_answer', 'answer_while_collecting'],
+          default: 'collect_before_answer',
+        },
+        steps: [
+          {
+            id: { type: String, required: true, default: uuidv4 },
+            type: {
+              type: String,
+              enum: ['collect', 'ask', 'request_document', 'answer', 'tool_action', 'escalate'],
+              required: true,
+            },
+            name: { type: String, required: true, trim: true },
+            description: { type: String, default: '' },
+            required: { type: Boolean, default: true },
+            // For collect/ask steps: key values are stored under in collected_fields
+            field_key: { type: String, default: null },
+            field_type: {
+              type: String,
+              enum: ['string', 'number', 'boolean'],
+              default: 'string',
+            },
+            // Step only applies when a previously collected field has a given value
+            // (e.g. only request a photo when reason === "damage")
+            condition: {
+              field_key: { type: String, default: null },
+              equals: { type: mongoose.Schema.Types.Mixed, default: null },
+            },
+            // Optional server-side validation for collect/ask steps (e.g. an
+            // api_caller lookup to confirm an order number exists)
+            validation_tool: { type: String, default: null },
+            validation_parameters: { type: mongoose.Schema.Types.Mixed, default: {} },
+            // For tool_action/escalate steps: the agent tool this step represents.
+            // That tool is blocked until all preceding required steps are complete.
+            gated_tool: { type: String, default: null },
+          },
+        ],
+      },
+    ],
     // GDPR configuration
     gdpr: {
       // Encrypt message content at rest using AES-256 (see src/utils/encryption.js)

@@ -38,6 +38,7 @@ const createAgentValidation = [
     .isInt({ min: 1 })
     .withMessage('Max tokens must be a positive integer'),
   body('tools').optional().isArray().withMessage('Tools must be an array'),
+  body('procedures').optional().isArray().withMessage('procedures must be an array'),
   // Question suggestions validation
   body('question_suggestions')
     .optional()
@@ -120,6 +121,7 @@ const updateAgentValidation = [
     .isInt({ min: 1 })
     .withMessage('Max tokens must be a positive integer'),
   body('tools').optional().isArray().withMessage('Tools must be an array'),
+  body('procedures').optional().isArray().withMessage('procedures must be an array'),
   body('is_active').optional().isBoolean(),
   // Question suggestions validation
   body('question_suggestions')

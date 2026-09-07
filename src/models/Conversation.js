@@ -317,6 +317,35 @@ const conversationSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Active procedure run state (see Agent.procedures). Only one procedure
+    // can be active per conversation at a time. procedure_snapshot pins the
+    // definition at run start so later edits don't change an in-flight run.
+    procedure_state: {
+      procedure_id: { type: String, default: null },
+      procedure_snapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+      status: {
+        type: String,
+        enum: ['active', 'completed', 'cancelled'],
+        default: null,
+      },
+      started_at: { type: Date, default: null },
+      completed_at: { type: Date, default: null },
+      // Map of field_key -> { value, validated, validation_error, updated_at }
+      collected_fields: { type: mongoose.Schema.Types.Mixed, default: {} },
+      step_status: [
+        {
+          _id: false,
+          step_id: { type: String, required: true },
+          status: {
+            type: String,
+            enum: ['pending', 'completed', 'skipped', 'failed'],
+            default: 'pending',
+          },
+          attempts: { type: Number, default: 0 },
+          completed_at: { type: Date, default: null },
+        },
+      ],
+    },
     // Third-party annotations attached by external integrations so 3rd-party
     // frontends can filter/sort conversations server-side (e.g. a CRM tagging a
     // lead priority). Stored using the attribute pattern so MongoDB can index a

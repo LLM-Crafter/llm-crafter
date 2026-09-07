@@ -423,7 +423,35 @@ class OpenAIService {
     return supportedModels.includes(model);
   }
 
-  mapParameters(parameters) {
+  /**
+   * Reasoning-style models (o1/o3 family, "-pro" variants, and the gpt-5.6
+   * family) only accept the default temperature (1) and reject any other
+   * value with a 400 error.
+   */
+  isFixedTemperatureModel(model) {
+    if (this.provider !== 'openai' || !model) {
+      return false;
+    }
+    return (
+      /^o\d(-|$)/i.test(model) ||
+      /-pro$/i.test(model) ||
+      /^gpt-5\.6(-|$)/i.test(model)
+    );
+  }
+
+  /**
+   * Detects the "Unsupported value: 'temperature' ... Only the default (1)
+   * value is supported" style error so we can transparently retry without it.
+   */
+  isTemperatureUnsupportedError(error) {
+    const msg = error?.message || '';
+    return (
+      /temperature/i.test(msg) &&
+      (/does not support/i.test(msg) || /only the default/i.test(msg) || /unsupported_value/i.test(msg))
+    );
+  }
+
+  mapParameters(parameters, model) {
     const mappedParams = { ...parameters };
 
     if ('max_tokens' in mappedParams) {
@@ -445,6 +473,10 @@ class OpenAIService {
       delete mappedParams.top_p;
     }
 
+    if (this.isFixedTemperatureModel(model)) {
+      delete mappedParams.temperature;
+    }
+
     return mappedParams;
   }
 
@@ -456,7 +488,7 @@ class OpenAIService {
     responseFormat = null,
     extraOptions = {}
   ) {
-    const mappedParams = this.mapParameters(parameters);
+    const mappedParams = this.mapParameters(parameters, model);
 
     // Build messages array
     const messages = [];
@@ -489,8 +521,18 @@ class OpenAIService {
     }
 
     try {
-      const completion =
-        await this.client.chat.completions.create(completionOptions);
+      let completion;
+      try {
+        completion = await this.client.chat.completions.create(completionOptions);
+      } catch (err) {
+        // Fallback for models unknown to isFixedTemperatureModel that still reject a custom temperature.
+        if (this.isTemperatureUnsupportedError(err) && 'temperature' in completionOptions) {
+          delete completionOptions.temperature;
+          completion = await this.client.chat.completions.create(completionOptions);
+        } else {
+          throw err;
+        }
+      }
 
       if (!completion.choices || completion.choices.length === 0) {
         throw new Error('No completion choices returned');
@@ -533,7 +575,7 @@ class OpenAIService {
     responseFormat = null,
     extraOptions = {}
   ) {
-    const mappedParams = this.mapParameters(parameters);
+    const mappedParams = this.mapParameters(parameters, model);
 
     // Build messages array
     const messages = [];
@@ -561,7 +603,18 @@ class OpenAIService {
     }
 
     try {
-      const stream = await this.client.chat.completions.create(streamOptions);
+      let stream;
+      try {
+        stream = await this.client.chat.completions.create(streamOptions);
+      } catch (err) {
+        // Fallback for models unknown to isFixedTemperatureModel that still reject a custom temperature.
+        if (this.isTemperatureUnsupportedError(err) && 'temperature' in streamOptions) {
+          delete streamOptions.temperature;
+          stream = await this.client.chat.completions.create(streamOptions);
+        } else {
+          throw err;
+        }
+      }
 
       let fullContent = '';
       let promptTokens = 0;

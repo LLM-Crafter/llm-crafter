@@ -7,6 +7,7 @@ const APIKey = require('../models/ApiKey');
 const summarizationService = require('./summarizationService');
 const suggestionService = require('./suggestionService');
 const languageDetectionService = require('./languageDetectionService');
+const procedureService = require('./procedureService');
 const { systemTools: systemToolDefinitions } = require('../config/systemTools');
 const hookService = require('./hookService');
 
@@ -221,6 +222,9 @@ class AgentService {
       conversation.current_turn_language = detectedLanguage;
       await conversation.save();
     }
+
+    // Match/advance configured procedures for this turn (no-op when the agent has none)
+    await procedureService.processTurn(agent, conversation, userMessage, dynamicContext);
 
     // Execute agent reasoning — route through small agent graph if enabled
     const useGraph = agent.config?.enable_small_agent_graph === true;
@@ -488,6 +492,9 @@ class AgentService {
       conversation.current_turn_language = detectedLanguage;
       await conversation.save();
     }
+
+    // Match/advance configured procedures for this turn (no-op when the agent has none)
+    await procedureService.processTurn(agent, conversation, userMessage, dynamicContext);
 
     // Execute agent reasoning with streaming — route through small agent graph if enabled
     const useGraph = agent.config?.enable_small_agent_graph === true;
@@ -857,6 +864,24 @@ class AgentService {
           continue;
         }
 
+        // Guard: block tools gated by an unfinished procedure step
+        const procedureGate = procedureService.checkToolAllowed(conversation, parsedResponse.tool_name);
+        if (!procedureGate.allowed) {
+          thinkingProcess.push({
+            step: 'procedure_tool_blocked',
+            tool_name: parsedResponse.tool_name,
+            reasoning: procedureGate.reason,
+          });
+          context.conversation_history = [
+            ...context.conversation_history,
+            {
+              role: 'system',
+              content: `${procedureGate.reason} Ask the user for the missing information instead.`,
+            },
+          ];
+          continue;
+        }
+
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
@@ -873,6 +898,8 @@ class AgentService {
             conversation._id
           )
         );
+
+        procedureService.recordToolResult(conversation, parsedResponse.tool_name, toolResult);
 
         // Handle tool result properly - check for success/failure
         const toolResultForAgent = {
@@ -1270,6 +1297,24 @@ class AgentService {
           continue;
         }
 
+        // Guard: block tools gated by an unfinished procedure step
+        const procedureGate = procedureService.checkToolAllowed(conversation, parsedResponse.tool_name);
+        if (!procedureGate.allowed) {
+          thinkingProcess.push({
+            step: 'procedure_tool_blocked',
+            tool_name: parsedResponse.tool_name,
+            reasoning: procedureGate.reason,
+          });
+          context.conversation_history = [
+            ...context.conversation_history,
+            {
+              role: 'system',
+              content: `${procedureGate.reason} Ask the user for the missing information instead.`,
+            },
+          ];
+          continue;
+        }
+
         // Execute tool
         thinkingProcess.push({
           step: 'tool_execution',
@@ -1286,6 +1331,8 @@ class AgentService {
             conversation._id
           )
         );
+
+        procedureService.recordToolResult(conversation, parsedResponse.tool_name, toolResult);
 
         // Handle tool result properly - check for success/failure
         const toolResultForAgent = {
@@ -2203,6 +2250,7 @@ class AgentService {
       agent_config: agent.config,
       has_summary: !!conversation.conversation_summary,
       summary_version: conversation.metadata.summary_version || 0,
+      procedure_directive: procedureService.getPromptDirective(conversation),
     };
   }
 
@@ -2254,6 +2302,10 @@ class AgentService {
     
     prompt += `## Conversation History\n`;
     prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    
+    if (context.procedure_directive) {
+      prompt += `\n\n${context.procedure_directive}`;
+    }
     
     if (thinkingProcess.length > 0) {
       prompt += `\n\n## Previous Thinking Process\n`;
@@ -3375,6 +3427,10 @@ Your response:`;
     prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
     prompt += `\n\n`;
 
+    if (context.procedure_directive) {
+      prompt += `${context.procedure_directive}\n\n`;
+    }
+
     // Include tool results from earlier rounds so the planner can unblock dependent tools
     if (previousResults.length > 0) {
       prompt += `## Tool Results Already Collected This Turn\n`;
@@ -3450,6 +3506,10 @@ Your response:`;
     prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
     prompt += `\n\n`;
 
+    if (context.procedure_directive) {
+      prompt += `${context.procedure_directive}\n\n`;
+    }
+
     if (funnelState) {
       prompt += `## Current Funnel State\n${funnelState}\n\n`;
     }
@@ -3511,6 +3571,10 @@ Your response:`;
     const recent = context.conversation_history.filter(msg => !msg.is_summarized).slice(-6);
     prompt += recent.map(msg => `${msg.role}: ${msg.content}`).join('\n');
     prompt += `\n\n`;
+
+    if (context.procedure_directive) {
+      prompt += `${context.procedure_directive}\n\n`;
+    }
 
     if (toolResults.length > 0) {
       prompt += `## Tool Results\n`;
@@ -3687,6 +3751,27 @@ Your response:`;
           });
           continue;
         }
+
+        const procedureGate = procedureService.checkToolAllowed(conversation, planned.tool_name);
+        if (!procedureGate.allowed) {
+          thinkingProcess.push({
+            step: 'procedure_tool_blocked',
+            round: roundNumber,
+            tool_name: planned.tool_name,
+            reasoning: procedureGate.reason,
+          });
+          const blockedEntry = {
+            tool_name: planned.tool_name,
+            parameters: planned.tool_parameters,
+            execution_time_ms: 0,
+            success: false,
+            error: procedureGate.reason,
+          };
+          toolsUsed.push(blockedEntry);
+          accumulatedResults.push(blockedEntry);
+          continue;
+        }
+
         validPlanned.push(planned);
       }
 
@@ -3735,6 +3820,8 @@ Your response:`;
             reasoning: `Tool ${planned.tool_name} failed: ${entry.error}`,
           });
         }
+
+        procedureService.recordToolResult(conversation, planned.tool_name, toolResult);
 
         toolsUsed.push(entry);
         accumulatedResults.push(entry);
