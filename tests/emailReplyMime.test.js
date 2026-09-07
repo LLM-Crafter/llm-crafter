@@ -23,6 +23,8 @@ const outbound = {
   attachments: [],
   reply_context: {
     text: 'Please tell me more about the product.',
+    html: '<p>Please tell me <strong>more</strong> about the ' +
+      '<a href="https://example.com/product">product</a>.</p>',
     from_email: 'notifications@lead-platform.example',
     from_name: 'Lead Platform',
     received_at: new Date('2026-09-07T12:00:00.000Z'),
@@ -41,6 +43,8 @@ describe('provider reply bodies', () => {
     expect(parsed.text).toContain('Thanks for your interest.');
     expect(parsed.text).toContain('> Please tell me more about the product.');
     expect(parsed.html).toContain('<blockquote');
+    expect(parsed.html).toContain('<strong>more</strong>');
+    expect(parsed.html).toContain('href="https://example.com/product"');
     expect(parsed.inReplyTo).toBe('<initial@lead-platform.example>');
     expect(parsed.references).toContain('<initial@lead-platform.example>');
   });
@@ -51,8 +55,7 @@ describe('provider reply bodies', () => {
     expect(patch.body.contentType).toBe('HTML');
     expect(patch.body.content).toContain('Thanks for your interest.');
     expect(patch.body.content).toContain('<blockquote');
-    expect(patch.body.content).toContain(
-      'Please tell me more about the product.'
-    );
+    expect(patch.body.content).toContain('<strong>more</strong>');
+    expect(patch.body.content).toContain('href="https://example.com/product"');
   });
 });

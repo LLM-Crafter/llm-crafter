@@ -8,6 +8,7 @@
  */
 
 const crypto = require('crypto');
+const sanitizeHtml = require('sanitize-html');
 
 /**
  * Pull the root thread identifier out of an inbound email. Used as the
@@ -120,19 +121,23 @@ function renderReplyContent(outbound) {
   const text = outbound.text || '';
   const html = outbound.html || renderHtml(text);
   const context = outbound.reply_context;
-  if (!context?.text) {
+  if (!context?.text && !context?.html) {
     return { text, html };
   }
 
   const attribution = replyAttribution(context);
-  const quotedText = String(context.text)
+  const quotedText = String(context.text || '')
     .split(/\r?\n/)
     .map(line => `> ${line}`)
     .join('\n');
-  const quotedHtml = escapeHtml(context.text).replace(/\r\n?|\n/g, '<br>');
+  const quotedHtml = context.html
+    ? sanitizeHtml(context.html)
+    : escapeHtml(context.text).replace(/\r\n?|\n/g, '<br>');
 
   return {
-    text: `${text}\n\n${attribution}\n${quotedText}`,
+    text: quotedText
+      ? `${text}\n\n${attribution}\n${quotedText}`
+      : `${text}\n\n${attribution}`,
     html: `${html}<br><br><div>${escapeHtml(attribution)}</div>` +
       `<blockquote style="margin: 0 0 0 0.8ex; border-left: 1px solid #ccc; padding-left: 1ex;">${quotedHtml}</blockquote>`,
   };

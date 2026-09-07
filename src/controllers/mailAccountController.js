@@ -628,6 +628,7 @@ const sendToThread = async (req, res) => {
     const replyContext = repliedToMessage
       ? {
         text: repliedToMessage.content || '',
+        html: repliedToMessage.channel_info?.email?.body_html || null,
         from_email: repliedToMessage.channel_info?.email?.from_email || null,
         from_name: repliedToMessage.channel_info?.email?.from_name || null,
         received_at: repliedToMessage.timestamp || null,

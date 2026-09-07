@@ -382,7 +382,9 @@ editable reply content in the draft record and matching conversation message;
 no account-level signature is appended during update or send. The triggering
 inbound email is stored separately in `reply_context`. Provider-native drafts
 and delivered messages render that original message as quoted history below
-the editable reply, so editing a draft cannot duplicate or remove the history.
+the editable reply, preserving its sanitized HTML formatting and links when
+available and falling back to plain text otherwise. Editing a draft cannot
+duplicate or remove the history.
 
 Approve & send:
 

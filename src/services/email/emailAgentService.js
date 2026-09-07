@@ -501,6 +501,7 @@ class EmailAgentService {
       html: draftHtml,
       reply_context: {
         text: bodyText,
+        html: email.body_html || null,
         from_email: email.from_address || null,
         from_name: email.from_name || null,
         received_at: email.received_at || null,

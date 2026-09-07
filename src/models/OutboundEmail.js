@@ -36,6 +36,7 @@ const outboundEmailSchema = new mongoose.Schema(
     reply_context: {
       _id: false,
       text: { type: String, default: null },
+      html: { type: String, default: null },
       from_email: { type: String, default: null },
       from_name: { type: String, default: null },
       received_at: { type: Date, default: null },

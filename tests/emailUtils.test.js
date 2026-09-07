@@ -38,6 +38,25 @@ describe('renderReplyContent', () => {
     expect(result.html).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
   });
 
+  test('preserves safe inbound HTML and removes active content', () => {
+    const result = emailUtils.renderReplyContent({
+      text: 'Reply',
+      html: '<p>Reply</p>',
+      reply_context: {
+        text: 'Important link',
+        html: '<p onclick="alert(1)"><strong>Important</strong> ' +
+          '<a href="https://example.com">link</a><script>alert(1)</script></p>',
+        from_email: 'lead@example.com',
+      },
+    });
+
+    expect(result.html).toContain('<strong>Important</strong>');
+    expect(result.html).toContain('<a href="https://example.com">link</a>');
+    expect(result.html).not.toContain('<script>');
+    expect(result.html).not.toContain('onclick');
+    expect(result.text).toContain('> Important link');
+  });
+
   test('leaves messages without reply context unchanged', () => {
     expect(emailUtils.renderReplyContent({
       text: 'New message',
