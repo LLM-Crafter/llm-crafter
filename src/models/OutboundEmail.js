@@ -33,6 +33,13 @@ const outboundEmailSchema = new mongoose.Schema(
     subject: { type: String, default: '' },
     text: { type: String, default: '' },
     html: { type: String, default: null },
+    reply_context: {
+      _id: false,
+      text: { type: String, default: null },
+      from_email: { type: String, default: null },
+      from_name: { type: String, default: null },
+      received_at: { type: Date, default: null },
+    },
     attachments: [
       {
         _id: false,

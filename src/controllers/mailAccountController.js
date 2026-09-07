@@ -619,6 +619,20 @@ const sendToThread = async (req, res) => {
 
     const messageId = emailUtils.generateMessageId(send.from_email);
     const state = body.send === true ? 'queued' : 'drafted';
+    const inboundMessages = conversation.messages.filter(message =>
+      message.role === 'user' && message.channel_info?.channel === 'email'
+    );
+    const repliedToMessage = inboundMessages.find(message =>
+      message.channel_info?.email?.message_id === inReplyTo
+    ) || inboundMessages[0];
+    const replyContext = repliedToMessage
+      ? {
+        text: repliedToMessage.content || '',
+        from_email: repliedToMessage.channel_info?.email?.from_email || null,
+        from_name: repliedToMessage.channel_info?.email?.from_name || null,
+        received_at: repliedToMessage.timestamp || null,
+      }
+      : undefined;
     const attachments = await outboundAttachmentService.resolve(
       body.attachment_file_ids || [],
       {
@@ -641,6 +655,7 @@ const sendToThread = async (req, res) => {
       subject,
       text: textFinal,
       html: htmlFinal,
+      reply_context: replyContext,
       attachments,
       message_id: messageId,
       in_reply_to: inReplyTo,

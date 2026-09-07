@@ -20,6 +20,7 @@ const { ImapFlow } = require('imapflow');
 const nodemailer = require('nodemailer');
 const gmailOAuthService = require('../gmailOAuthService');
 const outboundAttachmentService = require('../outboundAttachmentService');
+const emailUtils = require('../emailUtils');
 
 /**
  * Build a minimal RFC822 raw message buffer from an OutboundEmail document.
@@ -38,6 +39,7 @@ async function buildRaw(outbound, account) {
     account.organization,
     outbound.attachments
   );
+  const content = emailUtils.renderReplyContent(outbound);
   const info = await mail.sendMail({
     messageId: outbound.message_id,
     from: fromHeader,
@@ -46,8 +48,8 @@ async function buildRaw(outbound, account) {
     bcc: outbound.bcc?.length ? outbound.bcc : undefined,
     replyTo: outbound.reply_to || send.reply_to || undefined,
     subject: outbound.subject || '(no subject)',
-    text: outbound.text || '',
-    html: outbound.html || undefined,
+    text: content.text,
+    html: content.html || undefined,
     inReplyTo: outbound.in_reply_to || undefined,
     references: outbound.references?.length ? outbound.references : undefined,
     attachments,

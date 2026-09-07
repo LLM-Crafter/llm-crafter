@@ -14,6 +14,7 @@
 const nodemailer = require('nodemailer');
 const gmailOAuthService = require('../gmailOAuthService');
 const outboundAttachmentService = require('../outboundAttachmentService');
+const emailUtils = require('../emailUtils');
 
 /**
  * Build a nodemailer transporter for the given account.
@@ -69,6 +70,7 @@ async function sendOutbound(account, outbound) {
     account.organization,
     outbound.attachments
   );
+  const content = emailUtils.renderReplyContent(outbound);
 
   const fromHeader = outbound.from_name
     ? `${outbound.from_name} <${outbound.from_email}>`
@@ -83,8 +85,8 @@ async function sendOutbound(account, outbound) {
     bcc: outbound.bcc?.length ? outbound.bcc : undefined,
     replyTo: outbound.reply_to || undefined,
     subject: outbound.subject || '(no subject)',
-    text: outbound.text || '',
-    html: outbound.html || undefined,
+    text: content.text,
+    html: content.html || undefined,
     inReplyTo: outbound.in_reply_to || undefined,
     references: outbound.references?.length ? outbound.references : undefined,
     attachments,

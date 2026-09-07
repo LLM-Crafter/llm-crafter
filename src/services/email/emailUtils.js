@@ -96,6 +96,48 @@ function renderText(bodyText, signatureText) {
   return `${body}\n\n${String(signatureText).trim()}`;
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function replyAttribution(replyContext) {
+  const sender = replyContext.from_name
+    ? `${replyContext.from_name} <${replyContext.from_email || 'unknown sender'}>`
+    : replyContext.from_email || 'the sender';
+  const receivedAt = replyContext.received_at
+    ? new Date(replyContext.received_at).toUTCString()
+    : null;
+  return receivedAt
+    ? `On ${receivedAt}, ${sender} wrote:`
+    : `${sender} wrote:`;
+}
+
+function renderReplyContent(outbound) {
+  const text = outbound.text || '';
+  const html = outbound.html || renderHtml(text);
+  const context = outbound.reply_context;
+  if (!context?.text) {
+    return { text, html };
+  }
+
+  const attribution = replyAttribution(context);
+  const quotedText = String(context.text)
+    .split(/\r?\n/)
+    .map(line => `> ${line}`)
+    .join('\n');
+  const quotedHtml = escapeHtml(context.text).replace(/\r\n?|\n/g, '<br>');
+
+  return {
+    text: `${text}\n\n${attribution}\n${quotedText}`,
+    html: `${html}<br><br><div>${escapeHtml(attribution)}</div>` +
+      `<blockquote style="margin: 0 0 0 0.8ex; border-left: 1px solid #ccc; padding-left: 1ex;">${quotedHtml}</blockquote>`,
+  };
+}
+
 module.exports = {
   getThreadRoot,
   buildReplySubject,
@@ -103,4 +145,5 @@ module.exports = {
   generateMessageId,
   renderHtml,
   renderText,
+  renderReplyContent,
 };

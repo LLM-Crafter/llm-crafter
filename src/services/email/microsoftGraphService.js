@@ -4,6 +4,7 @@ const axios = require('axios');
 
 const microsoftOAuthService = require('./microsoftOAuthService');
 const outboundAttachmentService = require('./outboundAttachmentService');
+const emailUtils = require('./emailUtils');
 
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
 const DIRECT_ATTACHMENT_LIMIT = 3 * 1024 * 1024;
@@ -278,11 +279,12 @@ class MicrosoftGraphService {
   }
 
   _draftPatch(outbound, includeSubject) {
+    const content = emailUtils.renderReplyContent(outbound);
     return {
       ...(includeSubject ? { subject: outbound.subject } : {}),
       body: {
-        contentType: outbound.html ? 'HTML' : 'Text',
-        content: outbound.html || outbound.text || ''
+        contentType: 'HTML',
+        content: content.html
       },
       toRecipients: (outbound.to || []).map(recipient),
       ccRecipients: (outbound.cc || []).map(recipient),
