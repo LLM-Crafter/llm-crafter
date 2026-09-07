@@ -23,6 +23,8 @@ const OutboundEmail = require('../models/OutboundEmail');
 const ProcessedEmail = require('../models/ProcessedEmail');
 const emailUtils = require('../services/email/emailUtils');
 const draftService = require('../services/email/draftService');
+const outboundAttachmentService = require('../services/email/outboundAttachmentService');
+const { uploadFiles } = require('./uploadController');
 const gmailOAuthService = require('../services/email/gmailOAuthService');
 const gmailApiService = require('../services/email/gmailApiService');
 const microsoftOAuthService = require('../services/email/microsoftOAuthService');
@@ -617,6 +619,14 @@ const sendToThread = async (req, res) => {
 
     const messageId = emailUtils.generateMessageId(send.from_email);
     const state = body.send === true ? 'queued' : 'drafted';
+    const attachments = await outboundAttachmentService.resolve(
+      body.attachment_file_ids || [],
+      {
+        organizationId: account.organization,
+        agentId: agent._id,
+        conversationId: conversation._id,
+      }
+    );
 
     const outbound = await OutboundEmail.create({
       mail_account: account._id,
@@ -631,6 +641,7 @@ const sendToThread = async (req, res) => {
       subject,
       text: textFinal,
       html: htmlFinal,
+      attachments,
       message_id: messageId,
       in_reply_to: inReplyTo,
       references,
@@ -650,6 +661,7 @@ const sendToThread = async (req, res) => {
         timestamp: new Date(),
         channel_info: {
           channel: 'email',
+          media: outboundAttachmentService.toConversationMedia(attachments),
           email: {
             message_id: messageId,
             in_reply_to: inReplyTo,
@@ -677,6 +689,22 @@ const sendToThread = async (req, res) => {
   } catch (err) {
     console.error('[MailAccount] sendToThread error:', err);
     res.status(400).json({ error: 'Failed to compose email', detail: err.message });
+  }
+};
+
+const uploadAttachments = async (req, res) => {
+  try {
+    const agent = await getAgentOr404(req, res);
+    if (!agent) return;
+    const account = await getAccountOr404(req, res, agent._id);
+    if (!account) return;
+
+    req.organization = account.organization;
+    req.agent = agent._id;
+    return uploadFiles(req, res);
+  } catch (err) {
+    console.error('[MailAccount] attachment upload error:', err);
+    return res.status(500).json({ error: 'Failed to upload email attachment' });
   }
 };
 
@@ -1020,6 +1048,7 @@ module.exports = {
   listEmailThreads,
   getEmailThread,
   sendToThread,
+  uploadAttachments,
   getGmailAuthorizeUrl,
   gmailOAuthCallback,
   getMicrosoftAuthorizeUrl,

@@ -19,6 +19,7 @@ const MailAccount = require('../models/MailAccount');
 const OutboundEmail = require('../models/OutboundEmail');
 const Conversation = require('../models/Conversation');
 const draftService = require('../services/email/draftService');
+const outboundAttachmentService = require('../services/email/outboundAttachmentService');
 
 async function getAgentOr404(req, res) {
   const { orgId, projectId, agentId } = req.params;
@@ -137,6 +138,16 @@ const updateDraft = async (req, res) => {
     for (const key of editable) {
       if (body[key] !== undefined) outbound[key] = body[key];
     }
+    if (Array.isArray(body.attachment_file_ids)) {
+      outbound.attachments = await outboundAttachmentService.resolve(
+        body.attachment_file_ids,
+        {
+          organizationId: account.organization,
+          agentId: agent._id,
+          conversationId: outbound.conversation,
+        }
+      );
+    }
 
     if (['gmail', 'graph'].includes(account.provider)) {
       await draftService.update(account, outbound);
@@ -154,6 +165,9 @@ const updateDraft = async (req, res) => {
           $set: {
             'messages.$.content': outbound.text,
             'messages.$.channel_info.email.body_html': outbound.html,
+            'messages.$.channel_info.media': outboundAttachmentService.toConversationMedia(
+              outbound.attachments
+            ),
           },
         }
       ).catch(() => {});
@@ -181,8 +195,9 @@ const sendDraft = async (req, res) => {
 
     // Synchronize send-time recipient overrides into the native Gmail draft
     // before exposing it to the outbound worker.
-    if (['gmail', 'graph'].includes(account.provider)) {
-      const draft = await OutboundEmail.findOne({
+    let draft = null;
+    if (['gmail', 'graph'].includes(account.provider) || Array.isArray(body.attachment_file_ids)) {
+      draft = await OutboundEmail.findOne({
         _id: req.params.outboundId,
         mail_account: account._id,
         state: 'drafted',
@@ -195,7 +210,19 @@ const sendDraft = async (req, res) => {
       }
       if (Array.isArray(body.cc)) draft.cc = body.cc;
       if (Array.isArray(body.bcc)) draft.bcc = body.bcc;
-      await draftService.update(account, draft);
+      if (Array.isArray(body.attachment_file_ids)) {
+        draft.attachments = await outboundAttachmentService.resolve(
+          body.attachment_file_ids,
+          {
+            organizationId: account.organization,
+            agentId: agent._id,
+            conversationId: draft.conversation,
+          }
+        );
+      }
+      if (['gmail', 'graph'].includes(account.provider)) {
+        await draftService.update(account, draft);
+      }
     }
 
     // Build the atomic update. CC/BCC can be overridden at send-time so the
@@ -207,6 +234,9 @@ const sendDraft = async (req, res) => {
     };
     if (Array.isArray(body.cc)) setFields.cc = body.cc;
     if (Array.isArray(body.bcc)) setFields.bcc = body.bcc;
+    if (Array.isArray(body.attachment_file_ids)) {
+      setFields.attachments = draft.attachments;
+    }
 
     const claimed = await OutboundEmail.findOneAndUpdate(
       {
@@ -238,6 +268,9 @@ const sendDraft = async (req, res) => {
             'messages.$.metadata.outbound_state': 'queued',
             'messages.$.content': claimed.text,
             'messages.$.channel_info.email.body_html': claimed.html,
+            'messages.$.channel_info.media': outboundAttachmentService.toConversationMedia(
+              claimed.attachments
+            ),
             'messages.$.timestamp': new Date(),
           },
         }

@@ -57,6 +57,7 @@ export default defineConfig({
             { text: 'Agents', link: '/api/agents' },
             { text: 'Tools', link: '/api/tools' },
             { text: 'Providers', link: '/api/providers' },
+            { text: 'Email Attachments', link: '/api/email-attachments' },
             { text: 'Conversation Metadata', link: '/api/conversation-metadata' }
           ]
         },

@@ -33,6 +33,16 @@ const outboundEmailSchema = new mongoose.Schema(
     subject: { type: String, default: '' },
     text: { type: String, default: '' },
     html: { type: String, default: null },
+    attachments: [
+      {
+        _id: false,
+        file_id: { type: String, ref: 'FileUpload', required: true },
+        s3_key: { type: String, required: true },
+        filename: { type: String, required: true },
+        mime_type: { type: String, required: true },
+        file_size: { type: Number, required: true },
+      },
+    ],
 
     // Threading headers
     message_id: { type: String, required: true, unique: true }, // self-stamped

@@ -77,7 +77,7 @@ const uploadFiles = async (req, res) => {
 
     const orgId = req.organization?._id || req.organization;
     const agentId = req.agent?._id || req.agent;
-    const uploadedBy = req.sessionToken?._id || req.apiKey?._id || 'anonymous';
+    const uploadedBy = req.user?._id || req.sessionToken?._id || req.apiKey?._id || 'anonymous';
 
     // Load org media storage config
     const org = await Organization.findById(orgId).select('media_storage').lean();

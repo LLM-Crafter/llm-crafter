@@ -19,6 +19,7 @@
 const { ImapFlow } = require('imapflow');
 const nodemailer = require('nodemailer');
 const gmailOAuthService = require('../gmailOAuthService');
+const outboundAttachmentService = require('../outboundAttachmentService');
 
 /**
  * Build a minimal RFC822 raw message buffer from an OutboundEmail document.
@@ -33,6 +34,10 @@ async function buildRaw(outbound, account) {
 
   // nodemailer can compile a message to a buffer without sending it.
   const mail = nodemailer.createTransport({ streamTransport: true, newline: 'unix' });
+  const attachments = await outboundAttachmentService.materialize(
+    account.organization,
+    outbound.attachments
+  );
   const info = await mail.sendMail({
     messageId: outbound.message_id,
     from: fromHeader,
@@ -45,6 +50,7 @@ async function buildRaw(outbound, account) {
     html: outbound.html || undefined,
     inReplyTo: outbound.in_reply_to || undefined,
     references: outbound.references?.length ? outbound.references : undefined,
+    attachments,
     headers: {
       'X-LLMCrafter-Agent': String(outbound.agent),
       'X-LLMCrafter-Outbound-Id': String(outbound._id),

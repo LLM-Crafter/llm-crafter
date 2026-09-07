@@ -3,8 +3,11 @@
 const axios = require('axios');
 
 const microsoftOAuthService = require('./microsoftOAuthService');
+const outboundAttachmentService = require('./outboundAttachmentService');
 
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0';
+const DIRECT_ATTACHMENT_LIMIT = 3 * 1024 * 1024;
+const UPLOAD_CHUNK_SIZE = 10 * 320 * 1024;
 
 function recipient(address) {
   return { emailAddress: { address } };
@@ -92,6 +95,7 @@ class MicrosoftGraphService {
       url: `/me/messages/${encodeURIComponent(draft.id)}`,
       data: this._draftPatch(outbound, !outbound.provider_parent_message_id)
     });
+    await this._syncAttachments(account, draft.id, outbound);
     return {
       draftId: draft.id,
       messageId: draft.id,
@@ -108,10 +112,11 @@ class MicrosoftGraphService {
       url: `/me/messages/${encodeURIComponent(outbound.provider_draft_id)}`,
       data: this._draftPatch(outbound, false)
     });
+    await this._syncAttachments(account, outbound.provider_draft_id, outbound);
     return {
       draftId: outbound.provider_draft_id,
-      messageId: data.id || outbound.provider_message_id,
-      threadId: data.conversationId || outbound.provider_thread_id || null
+      messageId: data?.id || outbound.provider_message_id,
+      threadId: data?.conversationId || outbound.provider_thread_id || null
     };
   }
 
@@ -207,6 +212,69 @@ class MicrosoftGraphService {
       url: `/subscriptions/${encodeURIComponent(subscriptionId)}`
     });
     return true;
+  }
+
+  async _syncAttachments(account, draftId, outbound) {
+    const { data } = await this.request(account, {
+      method: 'get',
+      url: `/me/messages/${encodeURIComponent(draftId)}/attachments`,
+      params: { $select: 'id' }
+    });
+    for (const attachment of data.value || []) {
+      await this.request(account, {
+        method: 'delete',
+        url: `/me/messages/${encodeURIComponent(draftId)}/attachments/${encodeURIComponent(attachment.id)}`
+      });
+    }
+
+    const materialized = await outboundAttachmentService.materialize(
+      account.organization,
+      outbound.attachments
+    );
+    for (const attachment of materialized) {
+      if (attachment.content.length <= DIRECT_ATTACHMENT_LIMIT) {
+        await this.request(account, {
+          method: 'post',
+          url: `/me/messages/${encodeURIComponent(draftId)}/attachments`,
+          data: {
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: attachment.filename,
+            contentType: attachment.contentType,
+            contentBytes: attachment.content.toString('base64')
+          }
+        });
+      } else {
+        await this._uploadLargeAttachment(account, draftId, attachment);
+      }
+    }
+  }
+
+  async _uploadLargeAttachment(account, draftId, attachment) {
+    const { data } = await this.request(account, {
+      method: 'post',
+      url: `/me/messages/${encodeURIComponent(draftId)}/attachments/createUploadSession`,
+      data: {
+        AttachmentItem: {
+          attachmentType: 'file',
+          name: attachment.filename,
+          size: attachment.content.length,
+          contentType: attachment.contentType
+        }
+      }
+    });
+
+    for (let start = 0; start < attachment.content.length; start += UPLOAD_CHUNK_SIZE) {
+      const end = Math.min(start + UPLOAD_CHUNK_SIZE, attachment.content.length);
+      const chunk = attachment.content.subarray(start, end);
+      await axios.put(data.uploadUrl, chunk, {
+        headers: {
+          'Content-Length': chunk.length,
+          'Content-Range': `bytes ${start}-${end - 1}/${attachment.content.length}`,
+          'Content-Type': 'application/octet-stream'
+        },
+        maxBodyLength: Infinity
+      });
+    }
   }
 
   _draftPatch(outbound, includeSubject) {

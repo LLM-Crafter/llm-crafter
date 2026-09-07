@@ -362,6 +362,9 @@ metadata but their binary cannot be retained.
 
 ### Step 6 — Edit & send a draft
 
+For file upload requests and complete manual-email and draft examples, see
+[Outbound Email Attachments](/api/email-attachments).
+
 Edit only the content (subject/text/html/cc/bcc — addressing & threading are locked):
 
 `PUT /…/mail-accounts/{accountId}/outbound/{outboundId}`
@@ -582,6 +585,7 @@ All endpoints are mounted under `/api/v1` and require `Authorization: Bearer <jw
 | ------ | ------------------------------------------------------------------------------ | ------ |
 | `GET`  | `/…/mail-accounts/{accountId}/outbound?state=&since=&limit=`                   | viewer |
 | `GET`  | `/…/mail-accounts/{accountId}/outbound/{outboundId}`                           | viewer |
+| `POST` | `/…/mail-accounts/{accountId}/attachments`                                     | member |
 | `PUT`  | `/…/mail-accounts/{accountId}/outbound/{outboundId}` (only when state=drafted) | member |
 | `POST` | `/…/mail-accounts/{accountId}/outbound/{outboundId}/send`                      | member |
 | `POST` | `/…/mail-accounts/{accountId}/outbound/{outboundId}/cancel`                    | member |

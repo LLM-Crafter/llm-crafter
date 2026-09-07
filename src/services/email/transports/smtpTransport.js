@@ -13,6 +13,7 @@
 
 const nodemailer = require('nodemailer');
 const gmailOAuthService = require('../gmailOAuthService');
+const outboundAttachmentService = require('../outboundAttachmentService');
 
 /**
  * Build a nodemailer transporter for the given account.
@@ -64,6 +65,10 @@ async function buildTransporter(account) {
  */
 async function sendOutbound(account, outbound) {
   const transporter = await buildTransporter(account);
+  const attachments = await outboundAttachmentService.materialize(
+    account.organization,
+    outbound.attachments
+  );
 
   const fromHeader = outbound.from_name
     ? `${outbound.from_name} <${outbound.from_email}>`
@@ -82,6 +87,7 @@ async function sendOutbound(account, outbound) {
     html: outbound.html || undefined,
     inReplyTo: outbound.in_reply_to || undefined,
     references: outbound.references?.length ? outbound.references : undefined,
+    attachments,
     headers: {
       // Loop-protection header — our own inbound triage will reject mail
       // bearing this header so we never reply to ourselves.

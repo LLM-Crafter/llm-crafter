@@ -20,6 +20,7 @@ const mailAccountController = require('../controllers/mailAccountController');
 const outboundController = require('../controllers/outboundEmailController');
 const gmailWebhookController = require('../controllers/gmailWebhookController');
 const microsoftWebhookController = require('../controllers/microsoftWebhookController');
+const { uploadMiddleware } = require('../controllers/uploadController');
 const auth = require('../middleware/auth');
 const organizationAuth = require('../middleware/organizationAuth');
 const validate = require('../middleware/validate');
@@ -215,6 +216,8 @@ router.put(
   body('html').optional().isString(),
   body('cc').optional().isArray(),
   body('bcc').optional().isArray(),
+  body('attachment_file_ids').optional().isArray({ max: 5 }),
+  body('attachment_file_ids.*').isString().notEmpty(),
   validate,
   outboundController.updateDraft
 );
@@ -226,6 +229,8 @@ router.post(
   outboundIdParam,
   body('cc').optional().isArray(),
   body('bcc').optional().isArray(),
+  body('attachment_file_ids').optional().isArray({ max: 5 }),
+  body('attachment_file_ids.*').isString().notEmpty(),
   validate,
   outboundController.sendDraft
 );
@@ -285,10 +290,22 @@ router.post(
   body('to').optional().isArray(),
   body('cc').optional().isArray(),
   body('bcc').optional().isArray(),
+  body('attachment_file_ids').optional().isArray({ max: 5 }),
+  body('attachment_file_ids.*').isString().notEmpty(),
   body('send').optional().isBoolean(),
   body('add_to_conversation').optional().isBoolean(),
   validate,
   mailAccountController.sendToThread
+);
+
+router.post(
+  '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/:accountId/attachments',
+  auth,
+  organizationAuth.hasRole('member'),
+  accountIdParam,
+  validate,
+  uploadMiddleware,
+  mailAccountController.uploadAttachments
 );
 
 // ─── Gmail OAuth ────────────────────────────────────────────────────────
