@@ -3663,6 +3663,10 @@ Your response:`;
     const plannerResponseFormat = openai.supportsStructuredOutputs(plannerModel)
       ? this.getGraphPlannerSchema()
       : null;
+    // Reasoning-style models (o1/o3, gpt-5.6 family) spend hidden reasoning
+    // tokens out of the same completion budget, so a small cap can leave 0
+    // tokens for the actual JSON output. Give them a lot more headroom.
+    const plannerMaxTokens = openai.isFixedTemperatureModel(plannerModel) ? 2000 : 600;
 
     // Valid tool name set for hallucination detection
     const validToolNames = new Set(agent.tools.map(t => t.name));
@@ -3688,7 +3692,7 @@ Your response:`;
       const plannerLLM = await openai.generateCompletion(
         plannerModel,
         plannerUserPrompt,
-        { ...agent.llm_settings.parameters, temperature: 0.2, max_tokens: 600 },
+        { ...agent.llm_settings.parameters, temperature: 0.2, max_tokens: plannerMaxTokens },
         plannerSystemPrompt,
         plannerResponseFormat,
         { prompt_cache_key: `agent_graph_planner_${agent._id}` }
