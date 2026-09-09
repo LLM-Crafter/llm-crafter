@@ -103,6 +103,9 @@ class HookService {
     if (hook.type === 'webhook') {
       return this._executeWebhook(hook, agent, conversation, message, messageRole);
     }
+    if (hook.type === 'regenerate_title') {
+      return this._executeRegenerateTitleHook(hook, agent, conversation);
+    }
     return this._executeLLMHook(hook, agent, conversation, message, messageRole);
   }
 
@@ -168,6 +171,54 @@ class HookService {
     }
 
     return { webhook: true, status: response.status };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Title regeneration hooks
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Regenerate the conversation title using the same AI title generation logic
+   * configured on the agent (agentService.generateAIConversationTitle).
+   * Lazily required to avoid a circular dependency (agentService requires hookService).
+   */
+  async _executeRegenerateTitleHook(hook, agent, conversation) {
+    const agentService = require('./agentService');
+
+    const titleResult = await agentService.generateAIConversationTitle(
+      conversation,
+      agent,
+      hook.model
+    );
+
+    const emptyUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cost: 0 };
+    if (!titleResult) {
+      return { tools_used: [], token_usage: emptyUsage, llm_response: 'No title regenerated (not enough context yet)' };
+    }
+
+    conversation.title = titleResult.title;
+    if (titleResult.titleTranslations.length > 0) {
+      conversation.title_translations = titleResult.titleTranslations;
+    }
+
+    const titleCost = (titleResult.titleUsage?.cost || 0) + (titleResult.titleTranslationUsage?.cost || 0);
+    const titleTokens = (titleResult.titleUsage?.total_tokens || 0) + (titleResult.titleTranslationUsage?.total_tokens || 0);
+    if (titleCost > 0) {
+      conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + titleCost;
+      conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + titleTokens;
+    }
+    await conversation.save();
+
+    return {
+      tools_used: [],
+      token_usage: {
+        prompt_tokens: titleResult.titleUsage?.prompt_tokens || 0,
+        completion_tokens: titleResult.titleUsage?.completion_tokens || 0,
+        total_tokens: titleTokens,
+        cost: titleCost,
+      },
+      llm_response: `Title regenerated: "${titleResult.title}"`,
+    };
   }
 
   // ---------------------------------------------------------------------------

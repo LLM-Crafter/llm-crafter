@@ -416,7 +416,7 @@ const conversationSchema = new mongoose.Schema(
         hook_name: { type: String, required: true },
         triggered_at: { type: Date, default: Date.now },
         trigger: { type: String },
-        type: { type: String, enum: ['llm', 'webhook'] },
+        type: { type: String, enum: ['llm', 'webhook', 'regenerate_title'] },
         success: { type: Boolean, default: true },
         tools_used: [
           {

@@ -2879,7 +2879,7 @@ const configureHooks = async (req, res) => {
       'new_conversation',
       'inactivity',
     ];
-    const validTypes = ['llm', 'webhook'];
+    const validTypes = ['llm', 'webhook', 'regenerate_title'];
 
     for (const hook of hooks) {
       if (!hook.name || typeof hook.name !== 'string') {

@@ -730,8 +730,8 @@ const hooksValidation = [
     .isString()
     .withMessage('Each hook must have a name'),
   body('hooks.*.type')
-    .isIn(['llm', 'webhook'])
-    .withMessage('Hook type must be llm or webhook'),
+    .isIn(['llm', 'webhook', 'regenerate_title'])
+    .withMessage('Hook type must be llm, webhook, or regenerate_title'),
   body('hooks.*.trigger')
     .isIn(['every_message', 'user_message_only', 'human_controlled_only', 'new_conversation', 'inactivity'])
     .withMessage('Invalid trigger'),

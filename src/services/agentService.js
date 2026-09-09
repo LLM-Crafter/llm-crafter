@@ -2671,7 +2671,7 @@ Your response:`;
    * Generate AI-powered conversation title based on conversation history
    * Uses a cost-effective model and generates concise titles (max 10 words)
    */
-  async generateAIConversationTitle(conversation, agent) {
+  async generateAIConversationTitle(conversation, agent, modelOverride = null) {
     try {
       // Get the conversation messages for context, decrypted
       // Use more messages on regeneration for better context
@@ -2693,8 +2693,8 @@ Your response:`;
         agent.api_key.provider.name
       );
 
-      // Use a cost-effective model
-      const model = 'gpt-5.4-nano';
+      // Use a cost-effective model unless the caller overrides it (e.g. hook config)
+      const model = modelOverride || 'gpt-5.4-nano';
 
       const customTitlePrompt = agent.config?.title_generation_prompt;
       const prompt = customTitlePrompt

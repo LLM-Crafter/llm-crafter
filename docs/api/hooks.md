@@ -57,7 +57,7 @@ GET /api/organizations/:orgId/projects/:projectId/agents/:agentId/hooks
 | Field                  | Type    | Required     | Description                                                                                                            |
 | ---------------------- | ------- | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | `name`                 | string  | Yes          | Unique identifier for the hook                                                                                         |
-| `type`                 | string  | Yes          | `"llm"` or `"webhook"`                                                                                                 |
+| `type`                 | string  | Yes          | `"llm"`, `"webhook"`, or `"regenerate_title"`                                                                          |
 | `trigger`              | string  | Yes          | When the hook fires (see Triggers below)                                                                               |
 | `enabled`              | boolean | No           | Default `true`. Set `false` to disable without removing                                                                |
 | `prompt`               | string  | LLM only     | System prompt for the background LLM call                                                                              |
@@ -91,6 +91,22 @@ The LLM hook runs in the background and does **not** produce any user-facing res
 ### Webhook Hook (`type: "webhook"`)
 
 Sends an HTTP POST to the configured `webhook_url` with the message content and conversation context. No LLM call is involved.
+
+### Regenerate Title Hook (`type: "regenerate_title"`)
+
+Regenerates the conversation title using the same AI title-generation logic the agent normally uses after every 2nd/5th message (including `title_generation_prompt` and `required_languages` translations, when configured). No `prompt` is required. An optional `model` overrides the default cost-effective model used for title generation.
+
+This is commonly paired with the `inactivity` trigger, e.g. refresh the title after 10 minutes of silence:
+
+```json
+{
+  "name": "refresh_title_after_inactivity",
+  "type": "regenerate_title",
+  "trigger": "inactivity",
+  "inactivity_seconds": 600,
+  "inactivity_condition": "any"
+}
+```
 
 ---
 

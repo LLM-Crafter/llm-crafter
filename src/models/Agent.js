@@ -124,9 +124,10 @@ const agentSchema = new mongoose.Schema(
         },
         // 'llm' — runs a cheap LLM call with prompt + agent tools
         // 'webhook' — POSTs message content + operator info to a URL
+        // 'regenerate_title' — regenerates the conversation title using the agent's title generation logic
         type: {
           type: String,
-          enum: ['llm', 'webhook'],
+          enum: ['llm', 'webhook', 'regenerate_title'],
           required: true,
         },
         // When the hook fires
