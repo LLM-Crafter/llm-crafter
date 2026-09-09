@@ -2694,7 +2694,7 @@ Your response:`;
       );
 
       // Use a cost-effective model unless the caller overrides it (e.g. hook config)
-      const model = modelOverride || 'gpt-5.4-nano';
+      const model = modelOverride || 'gpt-5.6-luna';
 
       const customTitlePrompt = agent.config?.title_generation_prompt;
       const prompt = customTitlePrompt
@@ -2706,7 +2706,7 @@ Your response:`;
       const response = await openai.generateCompletion(
         model,
         prompt,
-        { temperature: 0.7, max_tokens: 30 },
+        { temperature: 1, max_tokens: 60 },
         systemPrompt
       );
 
