@@ -3978,7 +3978,12 @@ Your response:`;
 
       // The critic may return a corrected_response as long as the original reply,
       // plus JSON overhead (approved, issues, reasoning). Derive from agent config.
-      const criticMaxTokens = (agent.llm_settings.parameters?.max_tokens || 1000) + 200;
+      // Reasoning-style models spend hidden reasoning tokens from the same budget,
+      // so give them a lot more headroom to avoid empty/truncated JSON output.
+      const criticBaseTokens = (agent.llm_settings.parameters?.max_tokens || 1000) + 200;
+      const criticMaxTokens = openai.isFixedTemperatureModel(criticModel)
+        ? criticBaseTokens + 1500
+        : criticBaseTokens;
 
       const criticLLM = await openai.generateCompletion(
         criticModel,
@@ -4186,6 +4191,9 @@ Your response:`;
       // Incremental streaming state for corrected_response string value
       let correctedValueOffset = -1; // index in criticBuffer after opening `"` of the value
       let correctedSentRawLength = 0; // raw (pre-unescape) chars already sent to the client
+      // Exact text already forwarded to the client — used as the source of truth if
+      // the full critic JSON later fails to parse (e.g. bad chars in an unrelated field).
+      let streamedCorrectedText = '';
 
       const onCriticChunk = (chunk) => {
         criticBuffer += chunk;
@@ -4251,6 +4259,7 @@ Your response:`;
                 .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
                   String.fromCharCode(parseInt(hex, 16))
                 );
+              streamedCorrectedText += unescaped;
               if (streamCallback) streamCallback(unescaped);
             }
           }
@@ -4259,7 +4268,12 @@ Your response:`;
 
       // The critic may return a corrected_response as long as the original reply,
       // plus JSON overhead (approved, issues, reasoning). Derive from agent config.
-      const criticMaxTokens = (agent.llm_settings.parameters?.max_tokens || 1000) + 200;
+      // Reasoning-style models spend hidden reasoning tokens from the same budget,
+      // so give them a lot more headroom to avoid empty/truncated JSON output.
+      const criticBaseTokens = (agent.llm_settings.parameters?.max_tokens || 1000) + 200;
+      const criticMaxTokens = openai.isFixedTemperatureModel(criticModel)
+        ? criticBaseTokens + 1500
+        : criticBaseTokens;
 
       const criticLLM = await openai.generateStreamingCompletion(
         criticModel,
@@ -4275,9 +4289,11 @@ Your response:`;
 
       // Parse the full critic response for accurate logging and return value
       let criticOutput;
+      let criticParseFailed = false;
       try {
         criticOutput = JSON.parse(criticLLM.content);
       } catch {
+        criticParseFailed = true;
         console.warn('[Graph Critic] Failed to parse critic JSON, approving by default.');
         criticOutput = { approved: true, reasoning: 'Critic output was not valid JSON; approved by default.' };
       }
@@ -4295,18 +4311,33 @@ Your response:`;
         `flushed_to_client=${clientFlushed}`
       );
 
-      if (!criticOutput.approved && criticOutput.corrected_response) {
-        // Use the canonical parsed value as the authoritative finalResponse
+      // The client may already have received corrected_response text character-by-
+      // character before the full critic JSON was validated below. If the overall
+      // JSON fails to parse (e.g. a bad char in an unrelated field like "reasoning")
+      // the persisted message must still match what the customer actually saw —
+      // never silently fall back to the pre-critic draft in that case.
+      if (streamedCorrectedText) {
+        finalResponse = (!criticParseFailed && criticOutput.corrected_response)
+          ? criticOutput.corrected_response
+          : streamedCorrectedText;
+        thinkingProcess.push({
+          step: 'critic_correction_applied',
+          reasoning: criticParseFailed
+            ? 'Critic JSON failed to fully parse, but corrected_response text had already been streamed to the client; using the streamed text to keep the saved message consistent with what the customer saw.'
+            : 'Critic rejected the draft; corrected response was streamed incrementally to the client.',
+        });
+      } else if (!criticOutput.approved && criticOutput.corrected_response) {
         finalResponse = criticOutput.corrected_response;
         thinkingProcess.push({
           step: 'critic_correction_applied',
-          reasoning: 'Critic rejected the draft; corrected response was streamed incrementally to the client.',
+          reasoning: 'Critic provided a corrected response which replaced the original.',
         });
       }
 
-      // Safety net: if we never flushed (e.g. malformed critic JSON, missing
-      // corrected_response, or non-structured-output model), flush now.
-      if (!clientFlushed && streamCallback) {
+      // Safety net: only needed if NOTHING has reached the client yet — if any
+      // corrected_response text was already streamed, sending finalResponse here
+      // too would duplicate/garble what the client already rendered.
+      if (!clientFlushed && !streamedCorrectedText && streamCallback) {
         streamCallback(finalResponse);
       }
 
