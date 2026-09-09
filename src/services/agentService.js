@@ -2703,17 +2703,27 @@ Your response:`;
 
       const systemPrompt = 'You are a helpful assistant that generates concise, descriptive conversation titles. Keep titles under 10 words and make them clear and informative.';
 
+      // Reasoning-style models (e.g. gpt-5.6 family) spend hidden reasoning tokens
+      // out of the same completion budget, so a small cap can leave 0 tokens for
+      // the actual title text.
+      const maxTokens = openai.isFixedTemperatureModel(model) ? 1000 : 60;
+
       const response = await openai.generateCompletion(
         model,
         prompt,
-        { temperature: 1, max_tokens: 60 },
+        { temperature: 1, max_tokens: maxTokens },
         systemPrompt
       );
 
       // Clean up the title (remove quotes if present)
       let title = response.content.trim();
       title = title.replace(/^["']|["']$/g, '');
-      
+
+      if (!title) {
+        console.warn('[Title] LLM returned an empty title, skipping title update');
+        return null;
+      }
+
       // Ensure title is not too long (max 10 words)
       const words = title.split(' ');
       if (words.length > 10) {
