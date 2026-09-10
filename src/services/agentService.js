@@ -2736,7 +2736,8 @@ Your response:`;
       let titleTranslationUsage = null;
       if (requiredLanguages.length > 0) {
         const translationResult = await summarizationService.generateTranslations(title, requiredLanguages, agent);
-        titleTranslations = translationResult.translations;
+        // Drop any empty translations — the schema requires non-empty text
+        titleTranslations = translationResult.translations.filter(t => t.text && t.text.trim());
         titleTranslationUsage = translationResult.usage;
       }
 

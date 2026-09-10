@@ -26,6 +26,10 @@ class ProcedureService {
       return;
     }
 
+    // Accumulates cost/tokens across this turn's matching + extraction LLM calls
+    // so they can be folded into conversation.metadata like title/summarization costs.
+    const usage = { total_tokens: 0, cost: 0 };
+
     let state = conversation.procedure_state;
     let procedureDef = null;
 
@@ -35,20 +39,42 @@ class ProcedureService {
       const candidates = agent.procedures.filter(p => p.enabled !== false);
       if (candidates.length === 0) return;
 
-      const matchedId = await this.matchProcedure(agent, conversation, userMessage, candidates);
-      if (!matchedId) return;
+      const matchedId = await this.matchProcedure(agent, conversation, userMessage, candidates, usage);
+      if (!matchedId) {
+        await this.persistUsage(conversation, usage);
+        return;
+      }
 
       procedureDef = candidates.find(p => p.id === matchedId);
-      if (!procedureDef) return;
+      if (!procedureDef) {
+        await this.persistUsage(conversation, usage);
+        return;
+      }
 
       state = this.startRun(conversation, procedureDef);
     }
 
-    await this.extractAndValidateFields(agent, conversation, procedureDef, userMessage);
+    await this.extractAndValidateFields(agent, conversation, procedureDef, userMessage, usage);
     this.checkDocumentSteps(conversation, procedureDef);
     this.recomputeCompletion(conversation, procedureDef);
 
     conversation.markModified('procedure_state');
+    await this.persistUsage(conversation, usage);
+  }
+
+  /** Add accumulated LLM usage from a response into a running total. */
+  _accumulateUsage(total, respUsage) {
+    if (!respUsage) return;
+    total.total_tokens += respUsage.total_tokens || 0;
+    total.cost += respUsage.cost || 0;
+  }
+
+  /** Fold this turn's procedure LLM cost/tokens into conversation metadata and save. */
+  async persistUsage(conversation, usage) {
+    if (usage.cost > 0 || usage.total_tokens > 0) {
+      conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + usage.cost;
+      conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + usage.total_tokens;
+    }
     await conversation.save();
   }
 
@@ -56,7 +82,7 @@ class ProcedureService {
    * Ask the LLM which configured procedure (if any) matches the user's
    * latest message, based on the procedure's semantic trigger description.
    */
-  async matchProcedure(agent, conversation, userMessage, procedures) {
+  async matchProcedure(agent, conversation, userMessage, procedures, usage = null) {
     const openai = new OpenAIService(
       agent.api_key.getDecryptedKey(),
       agent.api_key.provider.name
@@ -75,6 +101,13 @@ class ProcedureService {
       '',
       'Available procedures:',
       catalogue,
+      '',
+      // Always spell out the required JSON shape — response_format/schema enforcement is only
+      // applied when the model is on the structured-outputs allow-list (see
+      // OpenAIService#supportsStructuredOutputs). Every other model (non-OpenAI providers,
+      // reasoning models, etc.) relies entirely on this instruction to produce parseable JSON.
+      'Respond with JSON only, in the exact shape: {"procedure_id": "<id-or-null>", "reasoning": "<why>"}',
+      'Do not include any text before or after the JSON object.',
     ].join('\n');
 
     const recent = conversation
@@ -104,24 +137,50 @@ class ProcedureService {
     };
 
     const supportsStructured = openai.supportsStructuredOutputs(agent.llm_settings.model);
+    // Reasoning-style models spend hidden reasoning tokens from the same completion
+    // budget, so a small cap can leave 0 tokens for the actual JSON output.
+    const maxTokens = openai.isFixedTemperatureModel(agent.llm_settings.model) ? 1000 : 200;
 
     try {
       const resp = await openai.generateCompletion(
         agent.llm_settings.model,
         userPrompt,
-        { ...agent.llm_settings.parameters, temperature: 0, max_tokens: 200 },
+        { ...agent.llm_settings.parameters, temperature: 0, max_tokens: maxTokens },
         systemPrompt,
         supportsStructured ? schema : null,
         { prompt_cache_key: `agent_procedure_match_${agent._id}` }
       );
-      const parsed = JSON.parse(resp.content);
+      this._accumulateUsage(usage || {}, resp.usage);
+      const parsed = this.parseJsonResponse(resp.content);
       if (parsed?.procedure_id && procedures.some(p => p.id === parsed.procedure_id)) {
         return parsed.procedure_id;
+      }
+      if (parsed && parsed.procedure_id !== null && parsed.procedure_id !== undefined) {
+        console.warn(`[Procedure] match LLM returned unknown procedure_id "${parsed.procedure_id}"`);
       }
     } catch (e) {
       console.warn('[Procedure] match LLM call failed:', e.message);
     }
     return null;
+  }
+
+  /**
+   * Best-effort JSON parsing for LLM output. Handles models that wrap the
+   * JSON in prose or code fences despite being told to respond with JSON only.
+   */
+  parseJsonResponse(content) {
+    if (!content) return null;
+    try {
+      return JSON.parse(content);
+    } catch {
+      const match = content.match(/\{[\s\S]*\}/);
+      if (!match) return null;
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        return null;
+      }
+    }
   }
 
   /** Initialize a new procedure run on the conversation, pinning the definition. */
@@ -139,7 +198,7 @@ class ProcedureService {
   }
 
   /** Extract candidate field values for pending collect/ask steps and validate them. */
-  async extractAndValidateFields(agent, conversation, procedureDef, userMessage) {
+  async extractAndValidateFields(agent, conversation, procedureDef, userMessage, usage = null) {
     const state = conversation.procedure_state;
     const pendingFieldSteps = procedureDef.steps.filter(
       s =>
@@ -150,7 +209,7 @@ class ProcedureService {
     );
     if (pendingFieldSteps.length === 0) return;
 
-    const extracted = await this.runExtractionLLM(agent, conversation, userMessage, pendingFieldSteps);
+    const extracted = await this.runExtractionLLM(agent, conversation, userMessage, pendingFieldSteps, usage);
     if (!extracted) return;
 
     for (const step of pendingFieldSteps) {
@@ -190,20 +249,18 @@ class ProcedureService {
   }
 
   /** Ask the LLM to extract field values the user has provided so far. */
-  async runExtractionLLM(agent, conversation, userMessage, steps) {
+  async runExtractionLLM(agent, conversation, userMessage, steps, usage = null) {
     const openai = new OpenAIService(
       agent.api_key.getDecryptedKey(),
       agent.api_key.provider.name
     );
 
-    if (!openai.supportsStructuredOutputs(agent.llm_settings.model)) {
-      // Structured outputs are required for reliable field extraction in v1
-      return null;
-    }
-
     const fieldList = steps
       .map(s => `- ${s.field_key} (${s.field_type || 'string'}): ${s.description || s.name}`)
       .join('\n');
+
+    const fieldKeys = steps.map(s => s.field_key);
+    const supportsStructured = openai.supportsStructuredOutputs(agent.llm_settings.model);
 
     const systemPrompt = [
       'Extract structured field values the user has actually provided (in their latest message, or earlier in the conversation).',
@@ -211,6 +268,10 @@ class ProcedureService {
       '',
       'Fields to extract:',
       fieldList,
+      '',
+      // Required regardless of structured-output support — see matchProcedure for rationale.
+      `Respond with JSON only, in the exact shape: {${fieldKeys.map(k => `"${k}": <value-or-omit>`).join(', ')}}`,
+      'Do not include any text before or after the JSON object.',
     ].join('\n');
 
     const recent = conversation
@@ -240,16 +301,21 @@ class ProcedureService {
       },
     };
 
+    // Reasoning-style models spend hidden reasoning tokens from the same completion
+    // budget, so a small cap can leave 0 tokens for the actual JSON output.
+    const maxTokens = openai.isFixedTemperatureModel(agent.llm_settings.model) ? 1200 : 300;
+
     try {
       const resp = await openai.generateCompletion(
         agent.llm_settings.model,
         userPrompt,
-        { ...agent.llm_settings.parameters, temperature: 0, max_tokens: 300 },
+        { ...agent.llm_settings.parameters, temperature: 0, max_tokens: maxTokens },
         systemPrompt,
-        schema,
+        supportsStructured ? schema : null,
         { prompt_cache_key: `agent_procedure_extract_${agent._id}` }
       );
-      return JSON.parse(resp.content);
+      this._accumulateUsage(usage || {}, resp.usage);
+      return this.parseJsonResponse(resp.content);
     } catch (e) {
       console.warn('[Procedure] extraction LLM call failed:', e.message);
       return null;
