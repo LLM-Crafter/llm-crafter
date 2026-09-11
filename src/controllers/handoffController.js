@@ -930,8 +930,11 @@ const getLatestMessages = async (req, res) => {
       sinceDate = new Date(Date.now() - 30000);
     }
 
-    // Filter messages (use decrypted view for GDPR-encrypted conversations)
-    const allMessages = conversation.getDecryptedMessages();
+    // Filter messages (use decrypted view for GDPR-encrypted conversations).
+    // Attachment analysis text is meant for the agent only, not this consumer-facing feed.
+    const allMessages = conversation.getDecryptedMessages({
+      includeAttachmentContext: false,
+    });
     let newMessages = allMessages.filter(msg => {
       const msgDate = new Date(msg.timestamp);
       const matchesTime = msgDate > sinceDate;

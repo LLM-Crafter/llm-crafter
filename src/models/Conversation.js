@@ -586,8 +586,13 @@ conversationSchema.methods.decryptContent = function (content) {
 };
 
 // Return a plain array of messages with content decrypted (does not mutate the document)
-conversationSchema.methods.getDecryptedMessages = function () {
+// By default, attachment analysis descriptions are appended to message content so the
+// agent has that context. Pass { includeAttachmentContext: false } for consumer-facing
+// views (e.g. the external handoff API) where the raw message content should be returned.
+conversationSchema.methods.getDecryptedMessages = function (options = {}) {
+  const { includeAttachmentContext = true } = options;
   const appendAttachmentContext = message => {
+    if (!includeAttachmentContext) return message;
     const media = message.channel_info?.media || [];
     const descriptions = media
       .filter(item => item.description)
