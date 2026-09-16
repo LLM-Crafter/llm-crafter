@@ -487,8 +487,15 @@ own auto-reply" loop. It also short-circuits on:
 - `Auto-Submitted` header (RFC 3834: `auto-replied`, `auto-generated`)
 - `List-Id` / `List-Unsubscribe` (mailing lists)
 - `Precedence: bulk | list | junk`
-- From-address local-parts `mailer-daemon`, `postmaster`, `no-reply`,
-  `noreply`, `do-not-reply`
+- From-address local-parts `mailer-daemon`, `postmaster`, `bounce(s)` — true
+  delivery-failure senders, always dropped
+- From-address local-parts `no-reply`, `noreply`, `do-not-reply` (any `-`/`.`/`_`
+  spelling) — dropped **unless** `recipient_resolution.enabled` is true for
+  this mailbox. Many lead platforms and contact-form relays send from a
+  no-reply address while still forwarding a genuine enquiry meant for a
+  different recipient; see
+  [Email Recipient Resolution](email-recipient-resolution.md) for routing
+  the reply correctly instead of discarding the email outright.
 - Inbound where `From` == the account's own `send_profile.from_email`
 
 When all guards pass it runs the LLM classifier (cheapest model per
@@ -518,6 +525,11 @@ Example for a sales inbox:
   "custom_prompt": "Only respond to genuine sales enquiries. Route support tickets and refund requests away."
 }
 ```
+
+Related: when a mailbox receives automated notifications (e.g. lead
+platforms, contact-form relays) that forward a third party's enquiry, see
+[Email Recipient Resolution](email-recipient-resolution.md) for redirecting
+the reply to that third party instead of the notification sender.
 
 ---
 

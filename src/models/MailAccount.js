@@ -166,6 +166,42 @@ const mailAccountSchema = new mongoose.Schema(
       },
     },
 
+    // ── Recipient resolution ─────────────────────────────────────────────
+    // Detects when a reply should go to an address mentioned in the email
+    // body instead of the envelope From/Reply-To (e.g. an automated lead
+    // notification forwarding a third party's enquiry). Runs in
+    // emailRecipientResolverService — config here. Disabled by default and
+    // gated so the LLM call only happens when there is actually something
+    // to resolve.
+    recipient_resolution: {
+      enabled: { type: Boolean, default: false },
+      // Confidence required before the resolved address is actually used.
+      min_confidence: { type: Number, default: 0.75, min: 0, max: 1 },
+      // Below min_confidence: force human_review instead of silently
+      // keeping the default recipient, so the suggestion isn't lost.
+      require_review_below_threshold: { type: Boolean, default: true },
+      // Optional steering prompt passed to the resolver LLM.
+      custom_prompt: { type: String, default: null },
+      // Global default for whether free body text (not just mailto: links)
+      // is scanned for candidate addresses. Off by default — too noisy
+      // (signatures, quoted history, CC'd addresses all match).
+      extract_plain_text_candidates: { type: Boolean, default: false },
+      // Per-sender/domain overrides for platforms with known quirks.
+      sender_overrides: [{
+        _id: false,
+        match_sender: { type: String, default: null }, // exact address, takes precedence
+        match_domain: { type: String, default: null },  // domain fallback match
+        // Bypass the "Stage 1 must find ≥1 candidate" gate for this sender —
+        // always run the resolver LLM even when no mailto: candidate is found.
+        force_ai_resolution: { type: Boolean, default: false },
+        // Override plain-text scanning just for this sender.
+        extract_plain_text_candidates: { type: Boolean, default: null },
+        // Free-text hint folded into the resolver prompt, e.g. "the buyer's
+        // email appears as plain text near a 'Contact' heading, not a link".
+        extraction_hint: { type: String, default: null },
+      }],
+    },
+
     // ── Polling configuration (only used when ingest_mode='imap_poll') ──
     poll_config: {
       interval_seconds: { type: Number, default: 60, min: 15 },

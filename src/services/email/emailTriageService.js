@@ -19,6 +19,7 @@
  */
 
 const OpenAIService = require('../openaiService');
+const { isHardBounceAddress, isNoReplyOnlyAddress } = require('./emailSenderGuards');
 
 class EmailTriageService {
   constructor() {
@@ -165,14 +166,19 @@ class EmailTriageService {
       return { decision: 'mailing_list', in_scope: false };
     }
 
-    // Bounce / NDR markers
-    const bouncePatterns = [
-      /mailer-daemon/i,
-      /postmaster@/i,
-      /^bounce[s]?@/i,
-      /no-?reply@/i,
-    ];
-    if (bouncePatterns.some(rx => rx.test(fromAddress))) {
+    // Bounce / NDR markers (mailer-daemon, postmaster, bounce@) never carry
+    // actionable content — always dropped.
+    if (isHardBounceAddress(fromAddress)) {
+      return { decision: 'bounce_or_no_reply', in_scope: false };
+    }
+
+    // Plain no-reply/do-not-reply senders are usually one-way notifications
+    // too, but some (lead platforms, CRM alerts, contact-form relays) forward
+    // a genuine enquiry meant for a different recipient. When this mailbox
+    // has recipient_resolution enabled, let those through to classification
+    // instead of discarding them outright — recipient_resolution is what
+    // routes the eventual reply to the right address, not this guard.
+    if (isNoReplyOnlyAddress(fromAddress) && !account.recipient_resolution?.enabled) {
       return { decision: 'bounce_or_no_reply', in_scope: false };
     }
 

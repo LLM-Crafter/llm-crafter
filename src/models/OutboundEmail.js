@@ -67,7 +67,15 @@ const outboundEmailSchema = new mongoose.Schema(
     // Why this row was produced (audit trail).
     reason: {
       type: String,
-      enum: ['auto_send', 'draft_only', 'low_confidence', 'human_review', 'escalated', 'manual'],
+      enum: [
+        'auto_send',
+        'draft_only',
+        'low_confidence',
+        'human_review',
+        'escalated',
+        'recipient_redirect_low_confidence',
+        'manual',
+      ],
       default: 'auto_send',
     },
     confidence: { type: Number, default: null, min: 0, max: 1 },

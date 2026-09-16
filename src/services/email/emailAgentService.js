@@ -38,6 +38,7 @@ const OutboundEmail = require('../../models/OutboundEmail');
 const agentService = require('../agentService');
 const attachmentProcessingService = require('../attachmentProcessingService');
 const emailTriageService = require('./emailTriageService');
+const emailRecipientResolverService = require('./emailRecipientResolverService');
 const emailUtils = require('./emailUtils');
 const draftService = require('./draftService');
 // (require paths are relative to src/services/email/)
@@ -99,14 +100,28 @@ class EmailAgentService {
 
     // ── 2. Conversation upsert keyed by thread root ──────────────────────
     const threadRoot = emailUtils.getThreadRoot(email);
-    const conversation = await this._resolveConversation({
-      agent,
-      account,
-      email,
-      threadRoot,
-      providerMessageId,
-      providerThreadId,
-    });
+    // Independent of the conversation lookup — resolved in parallel. Cheap
+    // no-op for the common case (returns null without calling an LLM).
+    const [conversation, recipientResolution] = await Promise.all([
+      this._resolveConversation({
+        agent,
+        account,
+        email,
+        threadRoot,
+        providerMessageId,
+        providerThreadId,
+      }),
+      emailRecipientResolverService.resolve(email, account, agent),
+    ]);
+    const resolvedReplyTo = recipientResolution?.meets_threshold
+      ? recipientResolution.to
+      : (email.reply_to || email.from_address);
+
+    // Fold the triage + recipient-resolution LLM calls into the conversation's
+    // cost totals, same as procedureService/hookService do for their own
+    // background LLM steps that don't produce a visible chat message.
+    this._foldLlmUsage(conversation, triage.usage);
+    this._foldLlmUsage(conversation, recipientResolution?.usage);
 
     if (providerThreadId) {
       await Conversation.updateOne(
@@ -225,9 +240,10 @@ class EmailAgentService {
         channel_info: {
           channel: 'email',
           email: {
-            // Effective reply recipient: honour Reply-To if the inbound
-            // message set one, otherwise fall back to From.
-            reply_to: email.reply_to || email.from_address,
+            // Effective reply recipient: honours an AI-resolved address (e.g.
+            // a lead notification forwarding a third party's enquiry) when
+            // confident, otherwise Reply-To/From as before.
+            reply_to: resolvedReplyTo,
             // CC addresses from the inbound message so the frontend can
             // offer a "Reply All" option that re-includes them.
             cc_addresses: email.cc_addresses || [],
@@ -246,6 +262,7 @@ class EmailAgentService {
       account,
       triage,
       reasoning,
+      recipientResolution,
     });
 
     // Hard guard: rate limit per thread per 24h.
@@ -273,6 +290,8 @@ class EmailAgentService {
       triage,
       providerMessageId,
       providerThreadId,
+      recipientResolution,
+      resolvedReplyTo,
     });
 
     // Back-fill the outbound reference onto the assistant message so the
@@ -397,7 +416,7 @@ class EmailAgentService {
    * Translate (policy, triage, responder_confidence) into a concrete action.
    * Returns: { action: 'auto_send' | 'draft_only' | 'human_review', reason, confidence }
    */
-  _decideReplyAction({ account, triage, reasoning }) {
+  _decideReplyAction({ account, triage, reasoning, recipientResolution }) {
     const policy = account.reply_policy || {};
     const mode = policy.mode || 'draft_only';
 
@@ -413,6 +432,22 @@ class EmailAgentService {
         reason: 'escalated',
         confidence,
         notes: `intent=${triage.intent} forces human review`,
+      };
+    }
+
+    // A possible recipient redirect was found but wasn't confident enough to
+    // act on automatically — never auto-send on a guess, surface it instead.
+    if (
+      recipientResolution &&
+      !recipientResolution.meets_threshold &&
+      account.recipient_resolution?.require_review_below_threshold !== false
+    ) {
+      return {
+        action: 'human_review',
+        reason: 'recipient_redirect_low_confidence',
+        confidence,
+        notes: `possible alternate recipient ${recipientResolution.to} ` +
+          `(confidence=${recipientResolution.confidence}) needs manual review`,
       };
     }
 
@@ -457,6 +492,20 @@ class EmailAgentService {
   }
 
   /**
+   * Fold a background classifier call's usage (triage, recipient
+   * resolution, ...) into the conversation's running cost totals — mirrors
+   * procedureService/hookService for their own non-message LLM steps.
+   * Persisted by whichever `conversation.save()`/`addMessage()` runs next.
+   */
+  _foldLlmUsage(conversation, usage) {
+    if (!usage) return;
+    conversation.metadata.total_cost =
+      (conversation.metadata.total_cost || 0) + (usage.cost || 0);
+    conversation.metadata.total_tokens_used =
+      (conversation.metadata.total_tokens_used || 0) + (usage.total_tokens || 0);
+  }
+
+  /**
    * Build and persist the OutboundEmail row in the correct initial state.
    * Does NOT send — the outbound worker picks up `queued` rows and sends.
    */
@@ -472,6 +521,8 @@ class EmailAgentService {
     triage,
     providerMessageId,
     providerThreadId,
+    recipientResolution,
+    resolvedReplyTo,
   }) {
     const send = account.send_profile || {};
     const messageId = emailUtils.generateMessageId(send.from_email);
@@ -490,7 +541,7 @@ class EmailAgentService {
       mail_account: account._id,
       agent: agent._id,
       conversation: conversation._id,
-      to: [email.reply_to || email.from_address],
+      to: [resolvedReplyTo || email.reply_to || email.from_address],
       cc: send.default_cc || [],
       bcc: send.default_bcc || [],
       from_email: send.from_email,
@@ -517,6 +568,7 @@ class EmailAgentService {
       metadata: {
         triage,
         decision,
+        recipient_resolution: recipientResolution || null,
       },
     });
 
