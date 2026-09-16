@@ -199,22 +199,8 @@ class MediaStorageService {
 
     for (const item of mediaItems) {
       try {
-        // Validate MIME type
-        if (allowedTypes.length > 0 && !this._isMimeAllowed(item.mime_type, allowedTypes)) {
-          console.warn(`[MediaStorage] MIME type ${item.mime_type} not allowed for org ${orgId}`);
-          results.push({
-            type: item.type,
-            url: null,
-            mime_type: item.mime_type,
-            file_size: item.file_size || null,
-            filename: item.filename || null,
-            stored: false,
-            error: 'mime_type_not_allowed',
-          });
-          continue;
-        }
-
-        // Download the media binary from the provider
+        // Download first — some channels (Instagram/Messenger) don't expose a MIME
+        // type in the webhook, so it's detected from the response below.
         const mediaBuffer = await this._downloadFromProvider(item, channelService, channel);
 
         if (!mediaBuffer) {
@@ -227,6 +213,21 @@ class MediaStorageService {
             filename: item.filename || null,
             stored: false,
             error: 'download_failed',
+          });
+          continue;
+        }
+
+        // Validate MIME type
+        if (allowedTypes.length > 0 && !this._isMimeAllowed(item.mime_type, allowedTypes)) {
+          console.warn(`[MediaStorage] MIME type ${item.mime_type} not allowed for org ${orgId}`);
+          results.push({
+            type: item.type,
+            url: null,
+            mime_type: item.mime_type,
+            file_size: item.file_size || null,
+            filename: item.filename || null,
+            stored: false,
+            error: 'mime_type_not_allowed',
           });
           continue;
         }
@@ -320,8 +321,45 @@ class MediaStorageService {
     if (channel === 'whatsapp') {
       return this._downloadWhatsAppMedia(mediaItem, channelService);
     }
+    if (channel === 'instagram' || channel === 'messenger') {
+      return this._downloadDirectUrlMedia(mediaItem);
+    }
+    if (channel === 'telegram') {
+      return this._downloadTelegramMedia(mediaItem, channelService);
+    }
     // Other channels can be added here
     return null;
+  }
+
+  /**
+   * Download media from a direct CDN URL (Instagram/Messenger attachment payloads).
+   * Also backfills mediaItem.mime_type from the response's Content-Type header,
+   * since these webhooks don't include a MIME type.
+   */
+  async _downloadDirectUrlMedia(mediaItem) {
+    if (!mediaItem.url) return null;
+
+    const response = await axios.get(mediaItem.url, { responseType: 'arraybuffer' });
+
+    if (!mediaItem.mime_type) {
+      const contentType = response.headers['content-type'];
+      if (contentType) {
+        mediaItem.mime_type = contentType.split(';')[0].trim();
+      }
+    }
+
+    return Buffer.from(response.data);
+  }
+
+  /**
+   * Download media from Telegram by resolving the file_id to a downloadable URL first
+   */
+  async _downloadTelegramMedia(mediaItem, channelService) {
+    const fileUrl = await channelService.getFileUrl(mediaItem.file_id || mediaItem.url);
+    if (!fileUrl) return null;
+
+    const response = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+    return Buffer.from(response.data);
   }
 
   /**
