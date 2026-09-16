@@ -53,7 +53,7 @@
     "helmet": "^8.0.0",
     "imapflow": "^1.4.1",
     "jsonwebtoken": "^9.0.2",
-    "mailparser": "^3.9.10",
+    "mailparser": "^3.9.28",
     "mammoth": "^1.10.0",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0",
