@@ -58,6 +58,12 @@ const createValidators = [
     .optional()
     .isFloat({ min: 0, max: 1 }),
   body('triage').optional().isObject(),
+  body('recipient_resolution').optional().isObject(),
+  body('recipient_resolution.enabled').optional().isBoolean(),
+  body('recipient_resolution.min_confidence')
+    .optional()
+    .isFloat({ min: 0, max: 1 }),
+  body('recipient_resolution.sender_overrides').optional().isArray(),
   body('poll_config').optional().isObject(),
   body('poll_config.interval_seconds').optional().isInt({ min: 15 }),
 ];
@@ -75,6 +81,12 @@ const updateValidators = [
     .optional()
     .isFloat({ min: 0, max: 1 }),
   body('triage').optional().isObject(),
+  body('recipient_resolution').optional().isObject(),
+  body('recipient_resolution.enabled').optional().isBoolean(),
+  body('recipient_resolution.min_confidence')
+    .optional()
+    .isFloat({ min: 0, max: 1 }),
+  body('recipient_resolution.sender_overrides').optional().isArray(),
   body('poll_config').optional().isObject(),
   body('credentials').optional().isObject(),
   body('is_active').optional().isBoolean(),
