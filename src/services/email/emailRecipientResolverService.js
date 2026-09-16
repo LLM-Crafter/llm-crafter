@@ -49,9 +49,16 @@ class EmailRecipientResolverService {
       "request from a third party, and the reply should instead go to that third party's address found",
       'in the body, not back to the notification sender.',
       '',
-      'Only set redirect=true when the body clearly identifies a specific different person as the one',
-      'who should receive the reply (e.g. "message from the buyer", a named contact with their own',
-      'email, a "reply to this person" link). Do not invent an address that is not present in the text.',
+      'Each candidate address below was already extracted from an explicit mailto: link or address in',
+      'the body — treat that as strong evidence, not a guess you need to double-check from scratch. If',
+      'the body frames the message as coming from a named third party (a buyer, customer, applicant, ...)',
+      "and a candidate is shown near that person's name or their own message, set redirect=true to that",
+      'candidate. Only keep redirect=false when none of the candidates are actually that third party (e.g.',
+      'they are other company contacts, unsubscribe links, or footer addresses).',
+      '',
+      'If you set redirect=true, `email` MUST be exactly one of the candidate addresses provided — never',
+      'invented, modified, or the sender/Reply-To address itself (that is never a valid redirect target,',
+      'since it is already the default). If you decide redirect=false, omit `email` entirely.',
       '',
       'Always respond with a strict JSON object matching the provided schema. No prose.',
     ].join('\n');
@@ -101,6 +108,29 @@ class EmailRecipientResolverService {
   extractPlainTextAddresses(text) {
     if (!text) return [];
     return (text.match(EMAIL_RX) || []).map(a => a.toLowerCase());
+  }
+
+  /**
+   * Short window of text around a candidate's first occurrence in either
+   * body part — gives the LLM localized evidence (e.g. a name right next to
+   * the address) instead of a bare address it has to hunt for in the full
+   * (possibly truncated) body.
+   */
+  getCandidateContext(email, address, radius = 80) {
+    for (const source of [email.body_html, email.body_text]) {
+      if (!source) continue;
+      const idx = source.toLowerCase().indexOf(address);
+      if (idx === -1) continue;
+      const start = Math.max(0, idx - radius);
+      const end = Math.min(source.length, idx + address.length + radius);
+      const snippet = source
+        .slice(start, end)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (snippet) return snippet;
+    }
+    return null;
   }
 
   /**
@@ -174,13 +204,16 @@ class EmailRecipientResolverService {
 
     if (candidates.length) {
       lines.push('## Candidate addresses found in the body (links or text)');
-      candidates.forEach(c => lines.push(`- ${c}`));
+      candidates.forEach(c => {
+        const context = this.getCandidateContext(email, c);
+        lines.push(context ? `- ${c} — nearby text: "${context}"` : `- ${c}`);
+      });
       lines.push('');
     }
 
     lines.push('## Email body');
     lines.push('---');
-    lines.push((email.body_text || '').slice(0, 3000));
+    lines.push((email.body_text || '').slice(0, 6000));
     lines.push('---');
     lines.push('');
     lines.push('Respond with JSON only.');
@@ -251,6 +284,17 @@ class EmailRecipientResolverService {
       }
 
       const resolvedEmail = String(parsed.email).toLowerCase();
+      const senderAddresses = [
+        (email.from_address || '').toLowerCase(),
+        (email.reply_to || '').toLowerCase(),
+      ].filter(Boolean);
+      // Defensive — reject the exact failure mode of a model echoing the
+      // sender's own address back as the "redirect" target instead of
+      // picking an actual candidate.
+      if (senderAddresses.includes(resolvedEmail)) {
+        console.log(`[RecipientResolver] account=${account._id} rejected — model echoed the sender's own address (${resolvedEmail}) as the redirect target`);
+        return null;
+      }
       // Defensive — never act on an automated address even if the model
       // picked one up from the body (e.g. a footer/tracking mailto).
       if (isNoReplyAddress(resolvedEmail)) {
