@@ -118,6 +118,12 @@ class EmailAgentService {
       ? recipientResolution.to
       : (email.reply_to || email.from_address);
 
+    console.log(
+      `[EmailAgent] recipient_resolution account=${mailAccountId} enabled=${account.recipient_resolution?.enabled === true} ` +
+      `redirected=${!!recipientResolution} to=${recipientResolution?.to ?? 'n/a'} confidence=${recipientResolution?.confidence ?? 'n/a'} ` +
+      `meets_threshold=${recipientResolution?.meets_threshold ?? 'n/a'}`
+    );
+
     // Fold the triage + recipient-resolution LLM calls into the conversation's
     // cost totals, same as procedureService/hookService do for their own
     // background LLM steps that don't produce a visible chat message.

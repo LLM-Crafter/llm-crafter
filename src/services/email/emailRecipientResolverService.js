@@ -203,8 +203,15 @@ class EmailRecipientResolverService {
       override?.extract_plain_text_candidates ?? config.extract_plain_text_candidates ?? false;
     const candidates = this.extractCandidateAddresses(email, account, { includePlainText });
 
+    console.log(
+      `[RecipientResolver] account=${account._id} from=${email.from_address} ` +
+      `candidates=${candidates.length} override=${override ? (override.match_sender || override.match_domain) : 'none'} ` +
+      `force_ai=${!!override?.force_ai_resolution} plain_text=${includePlainText}`
+    );
+
     // Nothing to resolve and no override forcing it — skip the LLM call entirely.
     if (candidates.length === 0 && !override?.force_ai_resolution) {
+      console.log(`[RecipientResolver] account=${account._id} skipped — no candidates found and no override forcing resolution`);
       return null;
     }
 
@@ -234,6 +241,11 @@ class EmailRecipientResolverService {
         parsed = match ? JSON.parse(match[0]) : null;
       }
 
+      console.log(
+        `[RecipientResolver] account=${account._id} llm_verdict redirect=${parsed?.redirect} ` +
+        `email=${parsed?.email ?? 'n/a'} confidence=${parsed?.confidence ?? 'n/a'}`
+      );
+
       if (!parsed || parsed.redirect !== true || !parsed.email) {
         return null;
       }
@@ -242,17 +254,24 @@ class EmailRecipientResolverService {
       // Defensive — never act on an automated address even if the model
       // picked one up from the body (e.g. a footer/tracking mailto).
       if (isNoReplyAddress(resolvedEmail)) {
+        console.log(`[RecipientResolver] account=${account._id} rejected — resolved address ${resolvedEmail} looks like a no-reply address`);
         return null;
       }
 
       const confidence = Number(parsed.confidence) || 0;
       const minConfidence = config.min_confidence ?? 0.75;
+      const meetsThreshold = confidence >= minConfidence;
+
+      console.log(
+        `[RecipientResolver] account=${account._id} resolved to=${resolvedEmail} ` +
+        `confidence=${confidence} min_confidence=${minConfidence} meets_threshold=${meetsThreshold}`
+      );
 
       return {
         to: resolvedEmail,
         name: parsed.name || null,
         confidence,
-        meets_threshold: confidence >= minConfidence,
+        meets_threshold: meetsThreshold,
         reasons: parsed.reasons || '',
         used_llm: true,
         usage: llmResponse.usage,
