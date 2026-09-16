@@ -25,7 +25,9 @@
 const OpenAIService = require('../openaiService');
 const { isNoReplyAddress } = require('./emailSenderGuards');
 
-const MAILTO_RX = /mailto:([^"'>\s?]+)/gi;
+// Stops at HTML-attribute delimiters as well as markdown/plain-text closers
+// (`)`, `]`) since this now also scans plain-text bodies, not just href values.
+const MAILTO_RX = /mailto:([^"'>\s?)\]]+)/gi;
 const EMAIL_RX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
 class EmailRecipientResolverService {
@@ -115,8 +117,15 @@ class EmailRecipientResolverService {
     ].filter(Boolean);
     const fromDomain = from.includes('@') ? from.split('@')[1] : '';
 
+    // mailto: is a deliberate "reply to this person" signal wherever it
+    // appears — scan both parts unconditionally. Some senders only carry a
+    // plain-text alternative (or forward/relay strips the HTML), and the
+    // link still shows up there as literal `mailto:...` text. The broader
+    // "any email-looking text" heuristic below is noisier, so that one stays
+    // gated behind extract_plain_text_candidates.
     const raw = [
       ...this.extractMailtoAddresses(email.body_html),
+      ...this.extractMailtoAddresses(email.body_text),
       ...(includePlainText ? this.extractPlainTextAddresses(email.body_text) : []),
     ];
 

@@ -22,6 +22,14 @@ through to classification specifically when `recipient_resolution.enabled`
 is true for the mailbox; true bounce senders (`mailer-daemon`, `postmaster`,
 `bounce@`) are still always dropped regardless.
 
+Triage only lets a no-reply sender through on the expectation that
+recipient resolution will find who to actually reply to. If it can't —
+no `mailto:`/candidate found anywhere, and no sender override forcing a
+plain-text search — replying to the no-reply sender itself would be
+pointless, so the email is dropped at that point instead of being handed to
+the (costly) agent-reasoning step. See
+[No candidate found](#no-candidate-found) below.
+
 **Recipient resolution** detects this situation and, when confident enough,
 redirects the reply to the address found in the body instead. It is fully
 opt-in and configured per `MailAccount` — there is nothing platform-specific
@@ -34,8 +42,11 @@ in the code; it works from the structure of the email itself.
 Two stages, run by `emailRecipientResolverService`:
 
 1. **Free candidate extraction (Stage 1 — no tokens spent).**
-   The service scans the email for `mailto:` links (and, optionally, plain
-   email-shaped text) and builds a list of candidate addresses, discarding:
+   The service scans for `mailto:` links in **both** the HTML and plain-text
+   bodies — some senders (or relaying/forwarding systems) only carry a
+   plain-text part, and the link still shows up there as literal
+   `mailto:...` text — plus, optionally, any bare email-shaped text, and
+   builds a list of candidate addresses, discarding:
 
    - the sender/`Reply-To` address itself (nothing to resolve)
    - the mailbox's own addresses (`send_profile.from_email` / `reply_to`)
@@ -59,6 +70,38 @@ The resolved address is only used automatically when its confidence meets
 `min_confidence`. Below that, the suggestion is **not** applied silently —
 the draft is forced into `human_review` instead, with the suggested address
 recorded so a person can confirm or correct it.
+
+For a normal sender (not a no-reply/automated address), resolution never
+causes the email itself to be skipped or discarded — that's triage's job
+and runs independently. When Stage 1 finds no candidate, Stage 2 decides no
+redirect is warranted, or the call errors, resolution simply falls back to
+the default recipient (`Reply-To`/`From`) and the email is triaged,
+drafted, and actioned exactly as it would be without this feature.
+
+### No candidate found
+
+A **no-reply/automated sender** is the one case where this matters: triage
+only let it through classification on the expectation that recipient
+resolution would name a real reply target (see the intro above). If
+resolution comes back with nothing — `null`, no candidates, no redirect —
+then `resolvedReplyTo` would otherwise fall back to that same no-reply
+address, producing a draft nobody could ever act on. Rather than spend an
+agent-reasoning call on an unsendable draft, the email stops there:
+recorded as `ProcessedEmail.outcome = 'skipped_no_recipient'`, no
+`OutboundEmail` draft is created, and no agent-reasoning call is made.
+
+The inbound email is still appended to the conversation as usual (so an
+operator can see what came in), followed by a `system` message explaining
+why no reply was drafted — a completely empty conversation would otherwise
+give no clue why a lead notification produced nothing. If this is the
+sender's normal shape (e.g. it never contains a `mailto:`, only plain text),
+add a `sender_overrides` entry for it so resolution actually runs.
+
+This only applies when there is **no candidate at all**. If a candidate was
+found but scored below `min_confidence`, that's a different, less final
+outcome — see [Config reference](#config-reference) `require_review_below_threshold`:
+the draft is still created, just forced into `human_review` so a person can
+fix the recipient.
 
 ---
 

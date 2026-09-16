@@ -124,18 +124,6 @@ class EmailAgentService {
     this._foldLlmUsage(conversation, triage.usage);
     this._foldLlmUsage(conversation, recipientResolution?.usage);
 
-    // Triage let a no-reply sender through specifically so recipient
-    // resolution could find the real party to reply to (see emailTriageService
-    // guards). If it found nothing, the sender itself is a dead end — drafting
-    // a reply back to a no-reply address is never useful, so stop here rather
-    // than spend an agent-reasoning call on an unsendable draft.
-    if (isNoReplyOnlyAddress(email.from_address) && !recipientResolution) {
-      await this._markProcessed(processedEmail, 'skipped_no_recipient', {
-        conversation_id: conversation._id,
-      });
-      return { status: 'skipped_no_recipient', triage };
-    }
-
     if (providerThreadId) {
       await Conversation.updateOne(
         { _id: conversation._id },
@@ -198,6 +186,30 @@ class EmailAgentService {
         },
       },
     });
+
+    // Triage let a no-reply sender through specifically so recipient
+    // resolution could find the real party to reply to (see emailTriageService
+    // guards). If it found nothing, drafting a reply back to the no-reply
+    // sender itself would be pointless. Stop before the (costly) reasoning
+    // call, but the inbound message above stays on the conversation so an
+    // operator can see what came in and reply manually if needed.
+    if (isNoReplyOnlyAddress(email.from_address) && !recipientResolution) {
+      await conversation.addMessage({
+        role: 'system',
+        content:
+          'No confident reply recipient could be resolved for this ' +
+          'notification email — the sender is a no-reply/automated address ' +
+          'and no alternate recipient was found in the body. If this sender ' +
+          'embeds the real recipient differently (e.g. plain text instead of ' +
+          'a mailto: link), add a recipient_resolution.sender_overrides entry ' +
+          'for it.',
+        timestamp: new Date(),
+      });
+      await this._markProcessed(processedEmail, 'skipped_no_recipient', {
+        conversation_id: conversation._id,
+      });
+      return { status: 'skipped_no_recipient', triage };
+    }
 
     // ── 4. Run the reasoning engine ──────────────────────────────────────
     // We deliberately call the chatbot brain directly — same code paths,
