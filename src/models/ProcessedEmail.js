@@ -36,6 +36,10 @@ const processedEmailSchema = new mongoose.Schema(
         'skipped_triage', // triage said no
         'skipped_loop',   // detected as our own outbound or auto-reply
         'skipped_dup',    // dedup hit (rare — usually we error on insert)
+        // triage let a no-reply sender through hoping recipient_resolution
+        // would find a real reply target in the body — it found none, and
+        // replying to a no-reply address itself would be pointless.
+        'skipped_no_recipient',
         'failed',         // unrecoverable
       ],
       default: 'pending',

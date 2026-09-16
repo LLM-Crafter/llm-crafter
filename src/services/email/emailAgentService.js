@@ -39,6 +39,7 @@ const agentService = require('../agentService');
 const attachmentProcessingService = require('../attachmentProcessingService');
 const emailTriageService = require('./emailTriageService');
 const emailRecipientResolverService = require('./emailRecipientResolverService');
+const { isNoReplyOnlyAddress } = require('./emailSenderGuards');
 const emailUtils = require('./emailUtils');
 const draftService = require('./draftService');
 // (require paths are relative to src/services/email/)
@@ -122,6 +123,18 @@ class EmailAgentService {
     // background LLM steps that don't produce a visible chat message.
     this._foldLlmUsage(conversation, triage.usage);
     this._foldLlmUsage(conversation, recipientResolution?.usage);
+
+    // Triage let a no-reply sender through specifically so recipient
+    // resolution could find the real party to reply to (see emailTriageService
+    // guards). If it found nothing, the sender itself is a dead end — drafting
+    // a reply back to a no-reply address is never useful, so stop here rather
+    // than spend an agent-reasoning call on an unsendable draft.
+    if (isNoReplyOnlyAddress(email.from_address) && !recipientResolution) {
+      await this._markProcessed(processedEmail, 'skipped_no_recipient', {
+        conversation_id: conversation._id,
+      });
+      return { status: 'skipped_no_recipient', triage };
+    }
 
     if (providerThreadId) {
       await Conversation.updateOne(
