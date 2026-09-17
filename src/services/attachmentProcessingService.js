@@ -129,6 +129,38 @@ class AttachmentProcessingService {
     return results;
   }
 
+  // Interprets media already uploaded to S3 by mediaStorageService (WhatsApp/Telegram/
+  // Instagram/Messenger pipeline) — these aren't backed by FileUpload records, so results
+  // are merged back onto the plain storedMedia items instead of a Mongoose doc.
+  async interpretChannelMedia(agent, storedMedia) {
+    const config = agent.config?.attachment_processing || {};
+    if (config.enabled === false) return storedMedia;
+
+    const results = [];
+    for (const item of storedMedia || []) {
+      if (!item.stored || !item.url) {
+        results.push(item);
+        continue;
+      }
+      try {
+        const buffer = await mediaStorageService.getBuffer(agent.organization, item.url);
+        const interpretation = await this.interpretBuffer(agent, buffer, {
+          type: item.type,
+          mime_type: item.mime_type,
+          filename: item.filename
+        });
+        results.push({ ...item, ...interpretation });
+      } catch (error) {
+        results.push({
+          ...item,
+          interpretation_status: 'failed',
+          interpretation_error: error.message
+        });
+      }
+    }
+    return results;
+  }
+
   async interpretBuffer(agent, buffer, item) {
     const config = agent.config?.attachment_processing || {};
     const maxExtracted = config.max_extracted_chars || 20_000;

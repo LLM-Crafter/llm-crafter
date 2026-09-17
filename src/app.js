@@ -118,6 +118,14 @@ try {
   console.error('[EmailPipeline] failed to start:', err.message);
 }
 
+// Start the channel message debounce scheduler (WhatsApp/Telegram/Instagram/Messenger).
+// Safe to run on every instance — buffered turns are claimed via an atomic Mongo
+// findOneAndDelete, so exactly one instance ever processes a given turn.
+if (process.env.CHANNEL_TURN_SCHEDULER_ENABLED !== 'false') {
+  require('./services/channelOrchestrator').startTurnScheduler();
+}
+
+
 // ─── GDPR Retention Cron ─────────────────────────────────────────────────────
 // Runs daily at 02:00 UTC to delete conversations/executions that have exceeded
 // the per-agent retention_days policy.

@@ -8,6 +8,8 @@ const Conversation = require('../models/Conversation');
 const ChannelConfig = require('../models/ChannelConfig');
 const agentService = require('./agentService');
 const mediaStorageService = require('./mediaStorageService');
+const attachmentProcessingService = require('./attachmentProcessingService');
+const channelTurnBufferService = require('./channelTurnBufferService');
 const messageTransformerService = require('./messageTransformerService');
 
 // Import channel services
@@ -17,11 +19,103 @@ const EmailService = require('./channels/emailService');
 const InstagramService = require('./channels/instagramService');
 const MessengerService = require('./channels/messengerService');
 
+// Channels where incoming messages are debounced before the agent runs, so a quick burst
+// of messages (e.g. someone typing across several bubbles, or sending photos) is handled
+// as a single turn instead of one reply per message. Website is intentionally excluded —
+// it has its own upload-then-send flow and immediate request/response expectations.
+// Buffering lives in Mongo (`channelTurnBufferService`), not in-process, so it works
+// correctly across multiple app instances (see startTurnScheduler()).
+const MESSAGE_DEBOUNCE_CHANNELS = new Set(['whatsapp', 'telegram', 'instagram', 'messenger']);
+const MESSAGE_DEBOUNCE_MS = parseInt(process.env.MESSAGE_DEBOUNCE_MS, 10) || 3000;
+const TURN_POLL_INTERVAL_MS = parseInt(process.env.CHANNEL_TURN_POLL_INTERVAL_MS, 10) || 1000;
+// How often an in-progress generation checks whether a newer message was buffered
+// (on any instance) for its conversation, so it can cancel and let the next turn take over.
+const TURN_CANCEL_CHECK_INTERVAL_MS = 750;
+
 class ChannelOrchestrator {
   constructor() {
     this.channelServices = new Map(); // Map of agentId_channel -> service instance
     this.initialized = new Set(); // Track which agents have been initialized
     this.executionTokens = new Map(); // Map of conversationId -> { cancelled: boolean }
+    this.turnPollTimer = null; // setInterval handle for the debounce-turn poller
+    this.turnPollInFlight = false; // guards against overlapping poll ticks
+  }
+
+  /**
+   * Start polling for due buffered turns (see `channelTurnBufferService`). Safe to call on
+   * every app instance — claiming is an atomic `findOneAndDelete`, so a turn is only ever
+   * picked up by one instance.
+   */
+  startTurnScheduler() {
+    if (this.turnPollTimer) return;
+    this.turnPollTimer = setInterval(() => this._pollDueTurns(), TURN_POLL_INTERVAL_MS);
+    console.log(`[ChannelOrchestrator] Turn scheduler started (poll interval ${TURN_POLL_INTERVAL_MS}ms)`);
+  }
+
+  stopTurnScheduler() {
+    if (!this.turnPollTimer) return;
+    clearInterval(this.turnPollTimer);
+    this.turnPollTimer = null;
+  }
+
+  /** Claims every currently-due turn and dispatches each (concurrently, not awaited here). */
+  async _pollDueTurns() {
+    if (this.turnPollInFlight) return;
+    this.turnPollInFlight = true;
+    try {
+      for (;;) {
+        const claimed = await channelTurnBufferService.claimDueTurn();
+        if (!claimed) break;
+        this._processClaimedTurn(claimed).catch(err => {
+          console.error(
+            `[ChannelOrchestrator] Error processing buffered turn for conversation ${claimed._id}:`,
+            err
+          );
+        });
+      }
+    } catch (err) {
+      console.error('[ChannelOrchestrator] Turn poll failed:', err.message);
+    } finally {
+      this.turnPollInFlight = false;
+    }
+  }
+
+  /**
+   * Runs a turn claimed from the buffer, re-fetching the conversation and re-creating the
+   * channel service locally (channel services aren't serializable, so they're never stored
+   * in Mongo — every instance can lazily recreate them from `ChannelConfig`).
+   */
+  async _processClaimedTurn(claimed) {
+    const conversation = await Conversation.findById(claimed._id);
+    if (!conversation) return;
+
+    const normalizedMessage = {
+      user_identifier: claimed.user_identifier,
+      content: claimed.content || '',
+      channel_metadata: claimed.channel_metadata || {},
+    };
+    const storedMedia = claimed.stored_media || [];
+
+    if (
+      conversation.current_handler === 'human' &&
+      conversation.status === 'human_controlled'
+    ) {
+      await this._recordHumanControlledMessage(conversation, claimed.channel, normalizedMessage, storedMedia);
+      return;
+    }
+
+    await this.initializeChannelsForAgent(claimed.agent);
+    const channelService = this.channelServices.get(`${claimed.agent}_${claimed.channel}`);
+
+    await this._runAgentTurn(
+      claimed.agent,
+      claimed.channel,
+      channelService,
+      conversation,
+      normalizedMessage,
+      storedMedia,
+      claimed.options || {}
+    );
   }
 
   /**
@@ -228,7 +322,10 @@ class ChannelOrchestrator {
       let storedMedia = [];
       if (normalizedMessage.media && normalizedMessage.media.length > 0 && channel !== 'website') {
         try {
-          const agent = await Agent.findById(agentId).select('organization').lean();
+          const agent = await Agent.findById(agentId).populate({
+            path: 'api_key',
+            populate: { path: 'provider' },
+          });
           storedMedia = await mediaStorageService.processAndStore({
             orgId: agent.organization,
             agentId,
@@ -237,6 +334,9 @@ class ChannelOrchestrator {
             channelService,
             channel,
           });
+          if (storedMedia.length > 0) {
+            storedMedia = await attachmentProcessingService.interpretChannelMedia(agent, storedMedia);
+          }
         } catch (mediaErr) {
           console.error(`[ChannelOrchestrator] Media processing failed (non-fatal):`, mediaErr.message);
         }
@@ -256,18 +356,7 @@ class ChannelOrchestrator {
           `[ChannelOrchestrator] Conversation ${conversation._id} is human-controlled, adding message without agent processing`
         );
 
-        // Add user message to conversation
-        conversation.messages.push({
-          role: 'user',
-          content: normalizedMessage.content,
-          timestamp: new Date(),
-          channel_info: {
-            channel: channel,
-            message_id: normalizedMessage.channel_metadata?.message_id,
-            media: storedMedia.length > 0 ? storedMedia : undefined,
-          },
-        });
-        await conversation.save();
+        await this._recordHumanControlledMessage(conversation, channel, normalizedMessage, storedMedia);
 
         // Optionally send acknowledgment that message was received
         // Uncomment below if you want auto-acknowledgment for every user message during human handoff
@@ -289,6 +378,68 @@ class ChannelOrchestrator {
         };
       }
 
+      // Debounce agent processing on chat-style channels so a burst of messages (or
+      // messages plus attachments) from the same exchange gets handled as a single turn.
+      // Buffered in Mongo (not in-process) so this is correct across multiple app instances.
+      const convKey = String(conversation._id);
+      if (MESSAGE_DEBOUNCE_CHANNELS.has(channel)) {
+        await channelTurnBufferService.bufferTurn(
+          convKey,
+          {
+            agentId,
+            channel,
+            userIdentifier: normalizedMessage.user_identifier,
+            content: normalizedMessage.content,
+            channelMetadata: normalizedMessage.channel_metadata,
+            storedMedia,
+            options,
+          },
+          MESSAGE_DEBOUNCE_MS
+        );
+        return { success: true, status: 'debounced', conversation_id: conversation._id };
+      }
+
+      return this._runAgentTurn(
+        agentId,
+        channel,
+        channelService,
+        conversation,
+        normalizedMessage,
+        storedMedia,
+        options
+      );
+    } catch (error) {
+      console.error(
+        `[ChannelOrchestrator] Error handling ${channel} message:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Persists an incoming user message without triggering agent processing (human handoff).
+   */
+  async _recordHumanControlledMessage(conversation, channel, normalizedMessage, storedMedia) {
+    conversation.messages.push({
+      role: 'user',
+      content: normalizedMessage.content,
+      timestamp: new Date(),
+      channel_info: {
+        channel,
+        message_id: normalizedMessage.channel_metadata?.message_id,
+        media: storedMedia.length > 0 ? storedMedia : undefined,
+      },
+    });
+    await conversation.save();
+  }
+
+  /**
+   * Runs agent reasoning for a (possibly debounced/merged) incoming message and sends the
+   * response back through the originating channel.
+   */
+  async _runAgentTurn(agentId, channel, channelService, conversation, normalizedMessage, storedMedia, options) {
+    try {
       // Build dynamic context with channel info
       const dynamicContext = {
         channel,
@@ -321,6 +472,24 @@ class ChannelOrchestrator {
       const cancellationToken = { cancelled: false };
       this.executionTokens.set(convKey, cancellationToken);
 
+      // While generating, watch for a newer message buffered for this conversation on ANY
+      // instance (see channelTurnBufferService) and cancel this run so the next turn takes
+      // over — this is what makes cancellation work across multiple app instances.
+      let cancelWatcher = null;
+      if (MESSAGE_DEBOUNCE_CHANNELS.has(channel)) {
+        cancelWatcher = setInterval(async () => {
+          try {
+            if (cancellationToken.cancelled) return;
+            if (await channelTurnBufferService.hasNewerTurn(convKey)) {
+              console.log(`[ChannelOrchestrator] Newer message detected — cancelling in-progress reasoning for conversation ${conversation._id}`);
+              cancellationToken.cancelled = true;
+            }
+          } catch (err) {
+            console.error(`[ChannelOrchestrator] Cancellation check failed for conversation ${conversation._id}:`, err.message);
+          }
+        }, TURN_CANCEL_CHECK_INTERVAL_MS);
+      }
+
       let agentResponse;
       try {
         // Execute agent (your existing logic!)
@@ -339,6 +508,7 @@ class ChannelOrchestrator {
         }
         throw err;
       } finally {
+        if (cancelWatcher) clearInterval(cancelWatcher);
         // Only remove our token if it hasn't already been replaced by a newer execution
         if (this.executionTokens.get(convKey) === cancellationToken) {
           this.executionTokens.delete(convKey);
@@ -443,7 +613,10 @@ class ChannelOrchestrator {
       let storedMedia = [];
       if (normalizedMessage.media && normalizedMessage.media.length > 0 && channel !== 'website') {
         try {
-          const agent = await Agent.findById(agentId).select('organization').lean();
+          const agent = await Agent.findById(agentId).populate({
+            path: 'api_key',
+            populate: { path: 'provider' },
+          });
           storedMedia = await mediaStorageService.processAndStore({
             orgId: agent.organization,
             agentId,
@@ -452,6 +625,9 @@ class ChannelOrchestrator {
             channelService,
             channel,
           });
+          if (storedMedia.length > 0) {
+            storedMedia = await attachmentProcessingService.interpretChannelMedia(agent, storedMedia);
+          }
         } catch (mediaErr) {
           console.error(`[ChannelOrchestrator] Streaming media processing failed (non-fatal):`, mediaErr.message);
         }
