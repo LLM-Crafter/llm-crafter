@@ -92,6 +92,14 @@ class EmailAgentService {
     );
 
     if (!triage.in_scope) {
+      // TEMP DEBUG: log the email body to inspect why triage filtered it out.
+      const bodyForLog = email.body_text || email.body_html || '';
+      const truncatedBody =
+        bodyForLog.length > 3000 ? `${bodyForLog.slice(0, 3000)}...[truncated]` : bodyForLog;
+      console.log(
+        `[EmailAgent][DEBUG] skipped_triage account=${mailAccountId} subject=${email.subject ?? 'n/a'} body=${truncatedBody}`
+      );
+
       await this._markProcessed(processedEmail, 'skipped_triage', {
         triage_decision: triage.decision,
         triage_reasons: triage.reasons,
