@@ -49,9 +49,23 @@ function isNoReplyAddress(address) {
   return isHardBounceAddress(address) || isNoReplyOnlyAddress(address);
 }
 
+/**
+ * True when the email already carries a deterministic "reply here instead"
+ * signal via the Reply-To header: it's set, differs from From, and isn't
+ * itself a no-reply/bounce-style address. Standard email semantics already
+ * answer the recipient question in this case — no AI resolution needed.
+ */
+function hasUsableReplyTo(email) {
+  const from = (email?.from_address || '').toLowerCase();
+  const replyTo = (email?.reply_to || '').toLowerCase();
+  if (!replyTo || replyTo === from) return false;
+  return !isNoReplyAddress(replyTo);
+}
+
 module.exports = {
   isNoReplyAddress,
   isHardBounceAddress,
   isNoReplyOnlyAddress,
+  hasUsableReplyTo,
   NOREPLY_PATTERNS,
 };

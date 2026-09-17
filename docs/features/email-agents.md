@@ -490,12 +490,17 @@ own auto-reply" loop. It also short-circuits on:
 - From-address local-parts `mailer-daemon`, `postmaster`, `bounce(s)` — true
   delivery-failure senders, always dropped
 - From-address local-parts `no-reply`, `noreply`, `do-not-reply` (any `-`/`.`/`_`
-  spelling) — dropped **unless** `recipient_resolution.enabled` is true for
-  this mailbox. Many lead platforms and contact-form relays send from a
-  no-reply address while still forwarding a genuine enquiry meant for a
-  different recipient; see
-  [Email Recipient Resolution](email-recipient-resolution.md) for routing
-  the reply correctly instead of discarding the email outright.
+  spelling) — dropped **unless** either of these is true:
+  - `Reply-To` is set, differs from `From`, and isn't itself a no-reply/bounce
+    address. Standard email semantics already answer "reply to whom?" in
+    that case — no AI, no config needed, the email just proceeds to
+    classification normally and recipient resolution isn't invoked at all.
+  - `recipient_resolution.enabled` is true for this mailbox. Many lead
+    platforms and contact-form relays send from a no-reply address with no
+    usable `Reply-To` either, while still forwarding a genuine enquiry meant
+    for a different recipient; see
+    [Email Recipient Resolution](email-recipient-resolution.md) for routing
+    the reply correctly instead of discarding the email outright.
 - Inbound where `From` == the account's own `send_profile.from_email`
 
 When all guards pass it runs the LLM classifier (cheapest model per

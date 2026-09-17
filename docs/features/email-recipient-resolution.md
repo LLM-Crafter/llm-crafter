@@ -18,9 +18,26 @@ often themselves a `no-reply@`/`do-not-reply@` address. Email triage
 normally drops those outright (see
 [Loop protection](email-agents.md#7-loop-protection)) — so simply enabling
 recipient resolution isn't enough on its own. Triage lets a no-reply sender
-through to classification specifically when `recipient_resolution.enabled`
-is true for the mailbox; true bounce senders (`mailer-daemon`, `postmaster`,
-`bounce@`) are still always dropped regardless.
+through to classification when either `Reply-To` already gives a usable,
+distinct address (see below), or `recipient_resolution.enabled` is true for
+the mailbox; true bounce senders (`mailer-daemon`, `postmaster`, `bounce@`)
+are still always dropped regardless.
+
+### Reply-To already answers it — no AI needed
+
+If the notification sets a `Reply-To` that differs from `From` and isn't
+itself a no-reply/bounce address, that's a deterministic, standard-email
+signal that needs no AI: the reply should go to `Reply-To`, exactly as
+normal email clients already behave. In this case:
+
+- Triage lets the email through regardless of `recipient_resolution.enabled`.
+- `emailRecipientResolverService.resolve()` is **not called at all** — no
+  candidate extraction, no LLM call, zero cost. The default recipient
+  fallback (`Reply-To`, then `From`) already gives the right answer.
+
+Recipient resolution only ever runs for the harder case: a no-reply `From`
+**and** no usable `Reply-To`, where the real recipient (if any) is buried
+somewhere in the body instead.
 
 Triage only lets a no-reply sender through on the expectation that
 recipient resolution will find who to actually reply to. If it can't —

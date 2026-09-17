@@ -39,7 +39,7 @@ const agentService = require('../agentService');
 const attachmentProcessingService = require('../attachmentProcessingService');
 const emailTriageService = require('./emailTriageService');
 const emailRecipientResolverService = require('./emailRecipientResolverService');
-const { isNoReplyOnlyAddress } = require('./emailSenderGuards');
+const { isNoReplyOnlyAddress, hasUsableReplyTo } = require('./emailSenderGuards');
 const emailUtils = require('./emailUtils');
 const draftService = require('./draftService');
 // (require paths are relative to src/services/email/)
@@ -101,6 +101,9 @@ class EmailAgentService {
 
     // ── 2. Conversation upsert keyed by thread root ──────────────────────
     const threadRoot = emailUtils.getThreadRoot(email);
+    // Reply-To already answers the recipient question deterministically —
+    // skip the AI resolver entirely, no tokens spent, no config needed.
+    const skipRecipientResolution = hasUsableReplyTo(email);
     // Independent of the conversation lookup — resolved in parallel. Cheap
     // no-op for the common case (returns null without calling an LLM).
     const [conversation, recipientResolution] = await Promise.all([
@@ -112,7 +115,9 @@ class EmailAgentService {
         providerMessageId,
         providerThreadId,
       }),
-      emailRecipientResolverService.resolve(email, account, agent),
+      skipRecipientResolution
+        ? Promise.resolve(null)
+        : emailRecipientResolverService.resolve(email, account, agent),
     ]);
     const resolvedReplyTo = recipientResolution?.meets_threshold
       ? recipientResolution.to
@@ -120,8 +125,8 @@ class EmailAgentService {
 
     console.log(
       `[EmailAgent] recipient_resolution account=${mailAccountId} enabled=${account.recipient_resolution?.enabled === true} ` +
-      `redirected=${!!recipientResolution} to=${recipientResolution?.to ?? 'n/a'} confidence=${recipientResolution?.confidence ?? 'n/a'} ` +
-      `meets_threshold=${recipientResolution?.meets_threshold ?? 'n/a'}`
+      `skipped_reply_to=${skipRecipientResolution} redirected=${!!recipientResolution} to=${recipientResolution?.to ?? 'n/a'} ` +
+      `confidence=${recipientResolution?.confidence ?? 'n/a'} meets_threshold=${recipientResolution?.meets_threshold ?? 'n/a'}`
     );
 
     // Fold the triage + recipient-resolution LLM calls into the conversation's
@@ -195,11 +200,12 @@ class EmailAgentService {
 
     // Triage let a no-reply sender through specifically so recipient
     // resolution could find the real party to reply to (see emailTriageService
-    // guards). If it found nothing, drafting a reply back to the no-reply
-    // sender itself would be pointless. Stop before the (costly) reasoning
-    // call, but the inbound message above stays on the conversation so an
-    // operator can see what came in and reply manually if needed.
-    if (isNoReplyOnlyAddress(email.from_address) && !recipientResolution) {
+    // guards). If it found nothing — and Reply-To didn't already answer it
+    // deterministically — drafting a reply back to the no-reply sender itself
+    // would be pointless. Stop before the (costly) reasoning call, but the
+    // inbound message above stays on the conversation so an operator can see
+    // what came in and reply manually if needed.
+    if (isNoReplyOnlyAddress(email.from_address) && !recipientResolution && !skipRecipientResolution) {
       await conversation.addMessage({
         role: 'system',
         content:
