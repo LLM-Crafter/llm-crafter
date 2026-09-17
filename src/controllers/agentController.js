@@ -2878,6 +2878,7 @@ const configureHooks = async (req, res) => {
       'human_controlled_only',
       'new_conversation',
       'inactivity',
+      'email_draft_ready',
     ];
     const validTypes = ['llm', 'webhook', 'regenerate_title'];
 

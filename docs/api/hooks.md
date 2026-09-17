@@ -70,13 +70,14 @@ GET /api/organizations/:orgId/projects/:projectId/agents/:agentId/hooks
 
 ## Triggers
 
-| Trigger                 | Fires when                                                                                     |
-| ----------------------- | ---------------------------------------------------------------------------------------------- |
-| `every_message`         | Any message is received (user or operator)                                                     |
-| `user_message_only`     | Only when the end-user sends a message                                                         |
-| `human_controlled_only` | Only when the conversation is under human/operator control                                     |
-| `new_conversation`      | A brand new conversation is created (fires once)                                               |
-| `inactivity`            | After `inactivity_seconds` of no messages in the conversation. Respects `inactivity_condition` |
+| Trigger                 | Fires when                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `every_message`         | Any message is received (user or operator)                                                                                                            |
+| `user_message_only`     | Only when the end-user sends a message                                                                                                                |
+| `human_controlled_only` | Only when the conversation is under human/operator control                                                                                            |
+| `new_conversation`      | A brand new conversation is created (fires once)                                                                                                      |
+| `inactivity`            | After `inactivity_seconds` of no messages in the conversation. Respects `inactivity_condition`                                                        |
+| `email_draft_ready`     | An email agent finishes composing a reply that is stored as a draft (`draft_only` or `human_review` reply policy outcome), instead of being auto-sent |
 
 ---
 
@@ -150,6 +151,28 @@ The `inactivity` trigger fires after a configurable period of silence in a conve
 
 ---
 
+## Email Draft Ready Trigger
+
+The `email_draft_ready` trigger fires only for **email-channel agents**, right after a reply is composed and persisted as an `OutboundEmail` in the `drafted` state (i.e. the mail account's `reply_policy` resolved to `draft_only` or `human_review` instead of auto-sending). It does not fire for auto-sent replies.
+
+This is typically paired with `type: "webhook"` to notify an inbox/approval UI that a draft is waiting for review.
+
+**Example: Notify an external system when a draft needs approval:**
+
+```json
+{
+  "name": "notify_draft_ready",
+  "type": "webhook",
+  "trigger": "email_draft_ready",
+  "webhook_url": "https://your-app.com/api/email-drafts/notify",
+  "webhook_secret": "your-hmac-secret"
+}
+```
+
+When this trigger fires, the webhook payload's `event` field is `"email_draft_ready"` and includes an additional `email_draft` object (see [Webhook Payload Format](#webhook-payload-format) below).
+
+---
+
 ## Webhook Payload Format
 
 When a webhook hook fires, it sends a `POST` request with `Content-Type: application/json`.
@@ -185,24 +208,68 @@ When a webhook hook fires, it sends a `POST` request with `Content-Type: applica
 }
 ```
 
+For an `email_draft_ready` hook, `event` is `"email_draft_ready"` and the payload also includes an `email_draft` object:
+
+```json
+{
+  "event": "email_draft_ready",
+  "hook_name": "notify_draft_ready",
+  "timestamp": "2026-05-05T14:32:01.123Z",
+  "agent_id": "abc-123",
+  "conversation_id": "conv-456",
+  "user_identifier": "customer@example.com",
+  "message": {
+    "role": "assistant",
+    "content": "Hi, thanks for reaching out..."
+  },
+  "conversation_status": "active",
+  "current_handler": "agent",
+  "email_draft": {
+    "outbound_id": "outbound-789",
+    "mail_account_id": "account-123",
+    "to": ["customer@example.com"],
+    "cc": [],
+    "subject": "Re: Question about my order",
+    "text": "Hi, thanks for reaching out...",
+    "html": "<p>Hi, thanks for reaching out...</p>",
+    "state": "drafted",
+    "reason": "low_confidence",
+    "confidence": 0.62,
+    "in_reply_to": "<original-message-id@customer.com>"
+  }
+}
+```
+
 ### Field Reference
 
-| Field                           | Type   | Always present | Description                                                                            |
-| ------------------------------- | ------ | -------------- | -------------------------------------------------------------------------------------- |
-| `event`                         | string | Yes            | Always `"message_hook"`                                                                |
-| `hook_name`                     | string | Yes            | Name of the hook that fired                                                            |
-| `timestamp`                     | string | Yes            | ISO 8601 timestamp of when the hook fired                                              |
-| `agent_id`                      | string | Yes            | ID of the agent the hook belongs to                                                    |
-| `conversation_id`               | string | Yes            | ID of the conversation                                                                 |
-| `user_identifier`               | string | Yes            | The end-user's identifier (e.g. email, phone, session ID)                              |
-| `message.role`                  | string | Yes            | `"user"` or `"human_operator"`                                                         |
-| `message.content`               | string | Yes            | The raw message text                                                                   |
-| `conversation_status`           | string | Yes            | One of: `active`, `agent_controlled`, `human_controlled`, `handoff_requested`, `ended` |
-| `current_handler`               | string | Yes            | `"agent"` or `"human"`                                                                 |
-| `external_operator`             | object | No             | **Only present when an external operator has taken over the conversation**             |
-| `external_operator.external_id` | string | —              | The operator's external ID                                                             |
-| `external_operator.name`        | string | —              | The operator's display name                                                            |
-| `external_operator.email`       | string | —              | The operator's email address                                                           |
+| Field                           | Type   | Always present | Description                                                                                     |
+| ------------------------------- | ------ | -------------- | ----------------------------------------------------------------------------------------------- |
+| `event`                         | string | Yes            | `"message_hook"` for all triggers except `email_draft_ready`, which sends `"email_draft_ready"` |
+| `hook_name`                     | string | Yes            | Name of the hook that fired                                                                     |
+| `timestamp`                     | string | Yes            | ISO 8601 timestamp of when the hook fired                                                       |
+| `agent_id`                      | string | Yes            | ID of the agent the hook belongs to                                                             |
+| `conversation_id`               | string | Yes            | ID of the conversation                                                                          |
+| `user_identifier`               | string | Yes            | The end-user's identifier (e.g. email, phone, session ID)                                       |
+| `message.role`                  | string | Yes            | `"user"` or `"human_operator"`                                                                  |
+| `message.content`               | string | Yes            | The raw message text                                                                            |
+| `conversation_status`           | string | Yes            | One of: `active`, `agent_controlled`, `human_controlled`, `handoff_requested`, `ended`          |
+| `current_handler`               | string | Yes            | `"agent"` or `"human"`                                                                          |
+| `external_operator`             | object | No             | **Only present when an external operator has taken over the conversation**                      |
+| `external_operator.external_id` | string | —              | The operator's external ID                                                                      |
+| `external_operator.name`        | string | —              | The operator's display name                                                                     |
+| `external_operator.email`       | string | —              | The operator's email address                                                                    |
+| `email_draft`                   | object | No             | **Only present for the `email_draft_ready` trigger**                                            |
+| `email_draft.outbound_id`       | string | —              | ID of the `OutboundEmail` row holding the draft                                                 |
+| `email_draft.mail_account_id`   | string | —              | ID of the mail account the draft belongs to                                                     |
+| `email_draft.to`                | array  | —              | Recipient email address(es)                                                                     |
+| `email_draft.cc`                | array  | —              | CC email address(es)                                                                            |
+| `email_draft.subject`           | string | —              | Draft email subject                                                                             |
+| `email_draft.text`              | string | —              | Plain-text draft body                                                                           |
+| `email_draft.html`              | string | —              | HTML draft body                                                                                 |
+| `email_draft.state`             | string | —              | Always `"drafted"` for this trigger                                                             |
+| `email_draft.reason`            | string | —              | Why the reply was drafted instead of auto-sent (e.g. `"low_confidence"`, `"human_review"`)      |
+| `email_draft.confidence`        | number | —              | Triage/responder confidence score used in the decision, if any                                  |
+| `email_draft.in_reply_to`       | string | —              | `Message-Id` of the inbound email this draft replies to                                         |
 
 ### Verifying the Signature
 

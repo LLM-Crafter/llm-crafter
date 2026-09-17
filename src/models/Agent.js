@@ -139,6 +139,7 @@ const agentSchema = new mongoose.Schema(
             'human_controlled_only',   // fires only when conversation is human-controlled
             'new_conversation',        // fires when a new conversation is created
             'inactivity',              // fires after N seconds of no messages
+            'email_draft_ready',       // fires when an email agent produces a drafted reply
           ],
           required: true,
         },

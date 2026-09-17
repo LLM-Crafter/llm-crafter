@@ -37,6 +37,7 @@ const OutboundEmail = require('../../models/OutboundEmail');
 
 const agentService = require('../agentService');
 const attachmentProcessingService = require('../attachmentProcessingService');
+const hookService = require('../hookService');
 const emailTriageService = require('./emailTriageService');
 const emailRecipientResolverService = require('./emailRecipientResolverService');
 const { isNoReplyOnlyAddress, hasUsableReplyTo } = require('./emailSenderGuards');
@@ -363,6 +364,32 @@ class EmailAgentService {
         .catch(err =>
           console.error(`[EmailAgent] remote draft create failed for ${outbound._id}:`, err.message)
         );
+
+      // Fire-and-forget: notify any 'email_draft_ready' hooks configured on the agent.
+      hookService.executeHooks(
+        agent,
+        conversation,
+        draftText,
+        'assistant',
+        'email_draft_ready',
+        {
+          email_draft: {
+            outbound_id: outbound._id,
+            mail_account_id: account._id,
+            to: outbound.to,
+            cc: outbound.cc,
+            subject: outbound.subject,
+            text: outbound.text,
+            html: outbound.html,
+            state: outbound.state,
+            reason: outbound.reason,
+            confidence: outbound.confidence,
+            in_reply_to: outbound.in_reply_to,
+          },
+        }
+      ).catch(err => {
+        console.error(`[EmailAgent] email_draft_ready hooks failed for ${outbound._id}:`, err.message);
+      });
     }
 
     await this._markProcessed(processedEmail, 'processed', {

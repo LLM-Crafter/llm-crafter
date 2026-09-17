@@ -20,9 +20,10 @@ class HookService {
    * @param {Object}  conversation – Conversation document
    * @param {string}  message      – the raw message content
    * @param {string}  messageRole  – 'user' | 'human_operator' | 'system'
-   * @param {string}  event        – 'message' | 'new_conversation'
+   * @param {string}  event        – 'message' | 'new_conversation' | 'email_draft_ready'
+   * @param {Object}  [extra]      – event-specific payload data (e.g. { email_draft } for 'email_draft_ready')
    */
-  async executeHooks(agent, conversation, message, messageRole, event = 'message') {
+  async executeHooks(agent, conversation, message, messageRole, event = 'message', extra = {}) {
     const hooks = (agent.hooks || []).filter(h => h.enabled);
     if (hooks.length === 0) return;
 
@@ -40,7 +41,7 @@ class HookService {
     // Fire all matching hooks in parallel, non-blocking
     const results = await Promise.allSettled(
       matchingHooks.map(hook =>
-        this._executeHook(hook, agent, conversation, message, messageRole)
+        this._executeHook(hook, agent, conversation, message, messageRole, event, extra)
       )
     );
 
@@ -75,6 +76,10 @@ class HookService {
       return hook.trigger === 'new_conversation';
     }
 
+    if (event === 'email_draft_ready') {
+      return hook.trigger === 'email_draft_ready';
+    }
+
     // Inactivity hooks are never triggered directly by a message —
     // they are scheduled via scheduleInactivityHooks() and fire from a timer.
     if (hook.trigger === 'inactivity') {
@@ -99,9 +104,9 @@ class HookService {
   /**
    * Execute a single hook (LLM or webhook).
    */
-  async _executeHook(hook, agent, conversation, message, messageRole) {
+  async _executeHook(hook, agent, conversation, message, messageRole, event = 'message', extra = {}) {
     if (hook.type === 'webhook') {
-      return this._executeWebhook(hook, agent, conversation, message, messageRole);
+      return this._executeWebhook(hook, agent, conversation, message, messageRole, event, extra);
     }
     if (hook.type === 'regenerate_title') {
       return this._executeRegenerateTitleHook(hook, agent, conversation);
@@ -116,13 +121,13 @@ class HookService {
   /**
    * POST message content + conversation context to an external URL.
    */
-  async _executeWebhook(hook, agent, conversation, message, messageRole) {
+  async _executeWebhook(hook, agent, conversation, message, messageRole, event = 'message', extra = {}) {
     if (!hook.webhook_url) {
       throw new Error('Webhook URL is not configured');
     }
 
     const payload = {
-      event: 'message_hook',
+      event: event === 'email_draft_ready' ? 'email_draft_ready' : 'message_hook',
       hook_name: hook.name,
       timestamp: new Date().toISOString(),
       agent_id: agent._id,
@@ -135,6 +140,12 @@ class HookService {
       conversation_status: conversation.status,
       current_handler: conversation.current_handler,
     };
+
+    // Email drafts carry extra context (recipient, subject, state) not
+    // captured by the generic message/conversation fields above.
+    if (extra.email_draft) {
+      payload.email_draft = extra.email_draft;
+    }
 
     // Include external operator info if conversation was taken over
     if (conversation.handoff_info?.assigned_external_operator) {
