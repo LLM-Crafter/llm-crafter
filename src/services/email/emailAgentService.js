@@ -265,6 +265,7 @@ class EmailAgentService {
         dynamicContext
       );
       conversation.current_turn_language = detection.language;
+      this._foldLlmUsage(conversation, detection.usage);
       await conversation.save();
     }
 

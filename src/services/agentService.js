@@ -220,6 +220,11 @@ class AgentService {
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;
+      // Fold the background detection call's cost into the conversation, same as title/suggestion calls
+      if (detection.usage?.cost) {
+        conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + detection.usage.cost;
+        conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + (detection.usage.total_tokens || 0);
+      }
       await conversation.save();
     }
 
@@ -490,6 +495,11 @@ class AgentService {
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;
+      // Fold the background detection call's cost into the conversation, same as title/suggestion calls
+      if (detection.usage?.cost) {
+        conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + detection.usage.cost;
+        conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + (detection.usage.total_tokens || 0);
+      }
       await conversation.save();
     }
 

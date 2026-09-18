@@ -122,36 +122,37 @@ class LanguageDetectionService {
    * @param {string} providerName - Provider name (e.g. "openai", "anthropic", "google", …)
    * @param {Array} [conversationMessages=[]] - Recent conversation messages for context
    * @param {string|null} [previousLanguage=null] - Language detected on the previous turn
-   * @returns {Promise<{ language: string, confidence: string }>}
+   * @returns {Promise<{ language: string, confidence: string, usage: Object|null }>}
    *   language  — ISO 639-1 code (lowercase), e.g. "en"
    *   confidence — "high" when the detector produced a clean code, "low" otherwise
+   *   usage — token/cost usage when an LLM call was actually made, else null
    */
   async detectLanguage(text, decryptedApiKey, providerName, conversationMessages = [], previousLanguage = null, dynamicContext = {}) {
     // Guard: empty input → use previous language or default to "en"
     if (!text || text.trim().length === 0) {
-      return { language: previousLanguage || 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low', usage: null };
     }
 
     // Fast path: if the message is ONLY numbers, punctuation, emails, or URLs
     // skip the LLM call and carry forward the previous language
     const stripped = text.trim();
     if (/^[\d\s\-+().,:;@#&*!?\/\\=<>{}[\]|~`$%^_"']+$/.test(stripped)) {
-      return { language: previousLanguage || 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low', usage: null };
     }
     // Email-only check
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(stripped)) {
-      return { language: previousLanguage || 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low', usage: null };
     }
     // URL-only check (http/https/www links) — words inside URLs are not language indicators
     if (/^(https?:\/\/|www\.)[^\s]+$/i.test(stripped)) {
-      return { language: previousLanguage || 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low', usage: null };
     }
     // Single-word check: a lone word (e.g. a name like "Donald", a city
     // like "Amsterdam") is inherently ambiguous.  When a previous language
     // is already established, carry it forward instead of risking a false
     // language switch.
     if (previousLanguage && !/\s/.test(stripped)) {
-      return { language: previousLanguage, confidence: 'low' };
+      return { language: previousLanguage, confidence: 'low', usage: null };
     }
 
     try {
@@ -174,24 +175,24 @@ class LanguageDetectionService {
 
       if (isoMatch) {
         console.log(`[LanguageDetection] Detected language "${isoMatch[1]}" with high confidence for message: "${text}"`);
-        return { language: isoMatch[1], confidence: 'high' };
+        return { language: isoMatch[1], confidence: 'high', usage: response.usage };
       }
 
       // Try to extract a 2-letter code from a longer response
       const fallbackMatch = raw.match(/\b([a-z]{2})\b/);
       if (fallbackMatch) {
-        return { language: fallbackMatch[1], confidence: 'low' };
+        return { language: fallbackMatch[1], confidence: 'low', usage: response.usage };
       }
 
       // Unable to parse — use previous language or default
       console.warn(
         `[LanguageDetection] Could not parse LLM response: "${raw}", falling back`
       );
-      return { language: previousLanguage || 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low', usage: response.usage };
     } catch (error) {
       console.error('[LanguageDetection] Detection failed:', error.message);
       // Non-blocking — fall back so the conversation continues
-      return { language: previousLanguage || 'en', confidence: 'low' };
+      return { language: previousLanguage || 'en', confidence: 'low', usage: null };
     }
   }
 }
