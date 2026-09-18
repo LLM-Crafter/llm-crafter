@@ -43,6 +43,7 @@ const emailRecipientResolverService = require('./emailRecipientResolverService')
 const { isNoReplyOnlyAddress, hasUsableReplyTo } = require('./emailSenderGuards');
 const emailUtils = require('./emailUtils');
 const draftService = require('./draftService');
+const languageDetectionService = require('../languageDetectionService');
 // (require paths are relative to src/services/email/)
 
 class EmailAgentService {
@@ -251,6 +252,21 @@ class EmailAgentService {
         })),
       },
     };
+
+    // Detect language of the inbound email (same opt-out flag chatbot uses)
+    if (agent.config.enforce_language_detection !== false) {
+      const decryptedKey = agent.api_key.getDecryptedKey();
+      const detection = await languageDetectionService.detectLanguage(
+        bodyText,
+        decryptedKey,
+        agent.api_key.provider.name,
+        conversation.getDecryptedMessages(),
+        conversation.current_turn_language || null,
+        dynamicContext
+      );
+      conversation.current_turn_language = detection.language;
+      await conversation.save();
+    }
 
     let reasoning;
     try {
