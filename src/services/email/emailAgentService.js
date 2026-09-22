@@ -316,6 +316,12 @@ class EmailAgentService {
         metadata: {
           outbound_id: null,      // back-filled below once the OutboundEmail row exists
           outbound_state: null,
+          // Never read by the reasoning loops — only role/content reach the LLM.
+          draft_audit: {
+            was_edited: null,
+            original_text: draftText,
+            original_html: draftHtml,
+          },
         },
       });
     }
@@ -615,6 +621,7 @@ class EmailAgentService {
   }) {
     const send = account.send_profile || {};
     const messageId = emailUtils.generateMessageId(send.from_email);
+    const subject = emailUtils.buildReplySubject(email.subject);
     const references = [
       ...(email.references || []),
       ...(email.message_id ? [email.message_id] : []),
@@ -636,9 +643,15 @@ class EmailAgentService {
       from_email: send.from_email,
       from_name: send.from_name || null,
       reply_to: send.reply_to || null,
-      subject: emailUtils.buildReplySubject(email.subject),
+      subject,
       text: draftText,
       html: draftHtml,
+      original_draft: {
+        subject,
+        text: draftText,
+        html: draftHtml,
+        generated_at: new Date(),
+      },
       reply_context: {
         text: bodyText,
         html: email.body_html || null,

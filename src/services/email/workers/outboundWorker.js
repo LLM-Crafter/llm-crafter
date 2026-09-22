@@ -26,6 +26,7 @@ const Conversation = require('../../../models/Conversation');
 const lockService = require('../../distributedLockService');
 const smtpTransport = require('../transports/smtpTransport');
 const imapDraftTransport = require('../transports/imapDraftTransport');
+const draftAuditService = require('../draftAuditService');
 const gmailApiService = require('../gmailApiService');
 const microsoftGraphService = require('../microsoftGraphService');
 // (require paths are relative to src/services/email/workers/)
@@ -168,6 +169,20 @@ class OutboundWorker {
         },
       }
     );
+
+    await draftAuditService
+      .recordSend(outbound, {
+        text: outbound.text,
+        html: outbound.html,
+        subject: outbound.subject,
+        source: 'api',
+      })
+      .catch(err =>
+        console.error(
+          `[OutboundWorker] draft audit failed for ${outbound._id}:`,
+          err.message
+        )
+      );
 
     // SMTP delivery has succeeded, so the server-side draft is no longer
     // needed. Cleanup is deliberately non-fatal: an IMAP failure must not

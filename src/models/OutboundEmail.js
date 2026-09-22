@@ -52,6 +52,33 @@ const outboundEmailSchema = new mongoose.Schema(
       },
     ],
 
+    // Immutable snapshot of the agent's first generated reply. Written once at
+    // creation and never touched again, so it survives reviewer edits in our
+    // UI and rewrites done in the operator's own mail client.
+    original_draft: {
+      _id: false,
+      subject: { type: String, default: null },
+      text: { type: String, default: null },
+      html: { type: String, default: null },
+      generated_at: { type: Date, default: null },
+    },
+    // The body as it actually left the mailbox. Written once, by whichever
+    // path completed the send.
+    final_sent: {
+      _id: false,
+      subject: { type: String, default: null },
+      text: { type: String, default: null },
+      html: { type: String, default: null },
+      source: {
+        type: String,
+        enum: ['api', 'external_client', null],
+        default: null,
+      },
+      recorded_at: { type: Date, default: null },
+    },
+    // Whether the sent plain text differs from the original draft. null until sent.
+    was_edited: { type: Boolean, default: null },
+
     // Threading headers
     message_id: { type: String, required: true, unique: true }, // self-stamped
     in_reply_to: { type: String, default: null },

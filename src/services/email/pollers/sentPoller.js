@@ -29,6 +29,7 @@ const MailAccount = require('../../../models/MailAccount');
 const OutboundEmail = require('../../../models/OutboundEmail');
 const emailParser = require('../emailParser');
 const emailUtils = require('../emailUtils');
+const draftAuditService = require('../draftAuditService');
 const gmailOAuthService = require('../gmailOAuthService');
 
 /**
@@ -335,6 +336,21 @@ async function _reconcileTrackedOutbound(
       },
     }
   );
+
+  // No-op when our own outbound worker already recorded this send.
+  await draftAuditService
+    .recordSend(outbound, {
+      text: bodyText,
+      html: email.body_html || null,
+      subject: email.subject || outbound.subject,
+      source: 'external_client',
+    })
+    .catch(err =>
+      console.error(
+        `[SentPoller] draft audit failed for ${outbound._id}:`,
+        err.message
+      )
+    );
 
   if (outbound.conversation) {
     await Conversation.updateOne(
