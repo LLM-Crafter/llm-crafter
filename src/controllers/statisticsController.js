@@ -1,6 +1,7 @@
 const PromptExecution = require('../models/PromptExecution');
 const AgentExecution = require('../models/AgentExecution');
 const Conversation = require('../models/Conversation');
+const OutboundEmail = require('../models/OutboundEmail');
 const Agent = require('../models/Agent');
 const Project = require('../models/Project');
 const Organization = require('../models/Organization');
@@ -774,7 +775,12 @@ const getOrganizationsOverview = async (req, res) => {
     organizations.forEach(org => {
       const buckets = new Map();
       bucketSeries.forEach(key =>
-        buckets.set(key, { conversations: 0, cost: 0, channels: emptyChannels() })
+        buckets.set(key, {
+          conversations: 0,
+          cost: 0,
+          channels: emptyChannels(),
+          drafts: { sent: 0, edited: 0 },
+        })
       );
       orgBuckets.set(org._id, buckets);
     });
@@ -813,7 +819,12 @@ const getOrganizationsOverview = async (req, res) => {
         const bucketKey = formatBucketDate(row._id.bucket);
         const channel = row._id.channel || 'website';
         const entry =
-          buckets.get(bucketKey) || { conversations: 0, cost: 0, channels: emptyChannels() };
+          buckets.get(bucketKey) || {
+            conversations: 0,
+            cost: 0,
+            channels: emptyChannels(),
+            drafts: { sent: 0, edited: 0 },
+          };
         entry.conversations += row.conversationCount;
         entry.cost += row.totalCost;
         if (!entry.channels[channel]) entry.channels[channel] = { conversations: 0, cost: 0 };
@@ -821,7 +832,59 @@ const getOrganizationsOverview = async (req, res) => {
         entry.channels[channel].cost += row.totalCost;
         buckets.set(bucketKey, entry);
       });
+
+      // Email drafts: how many AI replies went out, and how many were altered
+      // by a human first. Bucketed on send time, not draft time.
+      const draftResults = await OutboundEmail.aggregate([
+        {
+          $match: {
+            agent: { $in: agentIds },
+            was_edited: { $ne: null },
+            sent_at: { $gte: startDate },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              agent: '$agent',
+              bucket: {
+                $dateTrunc: {
+                  date: '$sent_at',
+                  unit: granularity,
+                  timezone: 'UTC',
+                  ...(granularity === 'week' && { startOfWeek: 'monday' }),
+                },
+              },
+            },
+            sent: { $sum: 1 },
+            edited: { $sum: { $cond: ['$was_edited', 1, 0] } },
+          },
+        },
+      ]);
+
+      draftResults.forEach(row => {
+        const orgId = agentOrgMap.get(row._id.agent);
+        const buckets = orgId && orgBuckets.get(orgId);
+        if (!buckets) return;
+
+        const bucketKey = formatBucketDate(row._id.bucket);
+        const entry =
+          buckets.get(bucketKey) || {
+            conversations: 0,
+            cost: 0,
+            channels: emptyChannels(),
+            drafts: { sent: 0, edited: 0 },
+          };
+        entry.drafts.sent += row.sent;
+        entry.drafts.edited += row.edited;
+        buckets.set(bucketKey, entry);
+      });
     }
+
+    const withEditRate = drafts => ({
+      ...drafts,
+      edit_rate: drafts.sent > 0 ? Math.round((drafts.edited / drafts.sent) * 1e4) / 1e4 : 0,
+    });
 
     const organizationsResponse = organizations.map(org => {
       const buckets = orgBuckets.get(org._id);
@@ -837,6 +900,7 @@ const getOrganizationsOverview = async (req, res) => {
               { conversations: s.conversations, cost: Math.round(s.cost * 1e6) / 1e6 },
             ])
           ),
+          drafts: withEditRate(stats.drafts),
         }));
 
       const totals = series.reduce(
@@ -848,14 +912,17 @@ const getOrganizationsOverview = async (req, res) => {
             acc.channels[channel].conversations += s.conversations;
             acc.channels[channel].cost += s.cost;
           });
+          acc.drafts.sent += point.drafts.sent;
+          acc.drafts.edited += point.drafts.edited;
           return acc;
         },
-        { conversations: 0, cost: 0, channels: {} }
+        { conversations: 0, cost: 0, channels: {}, drafts: { sent: 0, edited: 0 } }
       );
       totals.cost = Math.round(totals.cost * 1e6) / 1e6;
       Object.values(totals.channels).forEach(s => {
         s.cost = Math.round(s.cost * 1e6) / 1e6;
       });
+      totals.drafts = withEditRate(totals.drafts);
 
       return {
         organization: { id: org._id, name: org.name },
