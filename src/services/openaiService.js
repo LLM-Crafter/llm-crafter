@@ -459,6 +459,10 @@ class OpenAIService {
       delete mappedParams.max_tokens;
     }
 
+    if (!mappedParams.reasoning_effort) {
+      delete mappedParams.reasoning_effort;
+    }
+
     if (this.provider === 'google') {
       delete mappedParams.frequency_penalty;
       delete mappedParams.presence_penalty;

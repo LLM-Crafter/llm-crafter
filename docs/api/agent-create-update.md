@@ -29,14 +29,15 @@ All fields marked **required** apply to `POST`. For `PUT` every field is optiona
 
 ### `llm_settings`
 
-| Field                                       | Type    | Required | Default | Constraints                                     |
-| ------------------------------------------- | ------- | -------- | ------- | ----------------------------------------------- |
-| `llm_settings.model`                        | string  | yes      | —       | Must belong to the provider linked to `api_key` |
-| `llm_settings.parameters.temperature`       | number  | no       | `0.7`   | `0` – `2`                                       |
-| `llm_settings.parameters.max_tokens`        | integer | no       | `1000`  | ≥ 1                                             |
-| `llm_settings.parameters.top_p`             | number  | no       | `1`     | `0` – `1`                                       |
-| `llm_settings.parameters.frequency_penalty` | number  | no       | `0`     | `-2` – `2`                                      |
-| `llm_settings.parameters.presence_penalty`  | number  | no       | `0`     | `-2` – `2`                                      |
+| Field                                       | Type    | Required | Default | Constraints                                                                                              |
+| ------------------------------------------- | ------- | -------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `llm_settings.model`                        | string  | yes      | —       | Must belong to the provider linked to `api_key`                                                          |
+| `llm_settings.parameters.temperature`       | number  | no       | `0.7`   | `0` – `2`                                                                                                |
+| `llm_settings.parameters.max_tokens`        | integer | no       | `1000`  | ≥ 1                                                                                                      |
+| `llm_settings.parameters.top_p`             | number  | no       | `1`     | `0` – `1`                                                                                                |
+| `llm_settings.parameters.frequency_penalty` | number  | no       | `0`     | `-2` – `2`                                                                                               |
+| `llm_settings.parameters.presence_penalty`  | number  | no       | `0`     | `-2` – `2`                                                                                               |
+| `llm_settings.parameters.reasoning_effort`  | string  | no       | `null`  | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. Only sent when set; supported values vary per model |
 
 ---
 

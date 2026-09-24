@@ -88,6 +88,12 @@ const agentSchema = new mongoose.Schema(
           max: 2,
           default: 0,
         },
+        // Omitted from provider requests when null, so the model's own default applies.
+        reasoning_effort: {
+          type: String,
+          enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', null],
+          default: null,
+        },
       },
     },
     tools: [

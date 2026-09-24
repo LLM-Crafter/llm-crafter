@@ -529,7 +529,14 @@ const updateAgent = async (req, res) => {
       agent.system_prompt = req.body.system_prompt;
     }
     if (req.body.llm_settings) {
-      agent.llm_settings = { ...agent.llm_settings, ...req.body.llm_settings };
+      const { parameters, ...llmSettings } = req.body.llm_settings;
+      for (const [key, value] of Object.entries(llmSettings)) {
+        agent.set(`llm_settings.${key}`, value);
+      }
+      // Merge per-field so a partial update (e.g. only reasoning_effort) keeps the rest.
+      for (const [key, value] of Object.entries(parameters || {})) {
+        agent.set(`llm_settings.parameters.${key}`, value);
+      }
     }
     if (req.body.config) {
       agent.config = { ...agent.config, ...req.body.config };

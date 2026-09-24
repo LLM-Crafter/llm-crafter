@@ -13,6 +13,8 @@ const taskUpload = multer({
   limits: { fileSize: 20 * 1024 * 1024, files: 10 },
 });
 
+const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+
 // Validation middleware
 const createAgentValidation = [
   body('name')
@@ -37,6 +39,10 @@ const createAgentValidation = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('Max tokens must be a positive integer'),
+  body('llm_settings.parameters.reasoning_effort')
+    .optional({ nullable: true })
+    .isIn(REASONING_EFFORTS)
+    .withMessage(`Reasoning effort must be one of: ${REASONING_EFFORTS.join(', ')}`),
   body('tools').optional().isArray().withMessage('Tools must be an array'),
   body('procedures').optional().isArray().withMessage('procedures must be an array'),
   // Question suggestions validation
@@ -120,6 +126,10 @@ const updateAgentValidation = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('Max tokens must be a positive integer'),
+  body('llm_settings.parameters.reasoning_effort')
+    .optional({ nullable: true })
+    .isIn(REASONING_EFFORTS)
+    .withMessage(`Reasoning effort must be one of: ${REASONING_EFFORTS.join(', ')}`),
   body('tools').optional().isArray().withMessage('Tools must be an array'),
   body('procedures').optional().isArray().withMessage('procedures must be an array'),
   body('is_active').optional().isBoolean(),
