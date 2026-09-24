@@ -63,7 +63,7 @@ Response:
 
 ```json
 {
-  "url": "https://accounts.google.com/o/oauth2/auth?client_id=…&scope=https://mail.google.com/…"
+  "url": "https://accounts.google.com/o/oauth2/auth?client_id=…&scope=https://www.googleapis.com/auth/gmail.readonly…"
 }
 ```
 

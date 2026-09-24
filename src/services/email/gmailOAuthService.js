@@ -11,8 +11,8 @@
  * client (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET). Falls back to the login
  * credentials if the dedicated vars are not set.
  *
- * Required Gmail scope: https://mail.google.com/
- * (Full IMAP + SMTP access via XOAUTH2)
+ * Required Gmail scopes: gmail.readonly + gmail.compose
+ * (Gmail API only — IMAP/SMTP XOAUTH2 would need https://mail.google.com/)
  *
  * Required env vars:
  *   GMAIL_OAUTH_CLIENT_ID      — preferred; dedicated client for mailbox connects
@@ -28,7 +28,8 @@ const encryption = require('../../utils/encryption');
 const MailAccount = require('../../models/MailAccount');
 
 const GMAIL_SCOPES = [
-  'https://mail.google.com/',          // Full IMAP + SMTP via XOAUTH2
+  'https://www.googleapis.com/auth/gmail.readonly', // messages, history, watch
+  'https://www.googleapis.com/auth/gmail.compose',  // drafts + send
   'https://www.googleapis.com/auth/userinfo.email', // Read the mailbox address
 ];
 
@@ -69,7 +70,7 @@ class GmailOAuthService {
   /**
    * Exchange an authorization code (from the callback) for tokens.
    *
-   * @returns {{ access_token, refresh_token, expiry_date, email }}
+   * @returns {{ access_token, refresh_token, expiry_date, scope, email }}
    */
   async exchangeCode(code) {
     const client = this.buildClient();
@@ -84,6 +85,7 @@ class GmailOAuthService {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expiry_date: tokens.expiry_date,   // ms epoch
+      scope: tokens.scope,
       email: data.email,
     };
   }

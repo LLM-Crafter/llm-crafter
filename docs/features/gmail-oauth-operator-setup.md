@@ -71,14 +71,14 @@ before you can create credentials.
 5. On the **Scopes** screen click **Add or Remove Scopes** and add:
 
    ```
-   https://mail.google.com/
+   https://www.googleapis.com/auth/gmail.readonly
+   https://www.googleapis.com/auth/gmail.compose
    ```
 
-   This is the full Gmail access scope. It covers Gmail API message, draft,
-   send, history, and watch operations. Click **Update** then **Save and Continue**.
+   `gmail.readonly` covers message reads, history, and watch; `gmail.compose`
+   covers drafts and sending. Click **Update** then **Save and Continue**.
 
-   > **Note on scope sensitivity:** `https://mail.google.com/` is a
-   > _restricted_ scope. For **Internal** apps this is fine. For **External**
+   > **Note on scope sensitivity:** both are _restricted_ scopes. For **Internal** apps this is fine. For **External**
    > apps, Google requires either completing the verification process (see
    > Step 6) or keeping the app in _Testing_ status (max 100 test users).
 
@@ -433,7 +433,7 @@ as test users can connect. To allow any Google account:
 1. Go to **APIs & Services → OAuth consent screen**.
 2. Click **Publish App** → **Confirm**.
 
-Because you are requesting the restricted `https://mail.google.com/` scope,
+Because you are requesting restricted Gmail scopes (`gmail.readonly`, `gmail.compose`),
 Google will require a **security review** before the app is published. This
 process involves:
 
@@ -484,7 +484,7 @@ refresh token is missing or has been revoked.
 ## Checklist
 
 - [ ] Google Cloud project created and Gmail API enabled
-- [ ] OAuth consent screen configured (app name, support email, `https://mail.google.com/` scope)
+- [ ] OAuth consent screen configured (app name, support email, `gmail.readonly` + `gmail.compose` scopes)
 - [ ] OAuth 2.0 Web Application client created
 - [ ] `https://<api-domain>/api/v1/email/oauth/google/callback` added as authorized redirect URI
 - [ ] Gmail OAuth credentials and `API_BASE_URL` set in environment
@@ -507,6 +507,6 @@ refresh token is missing or has been revoked.
 | `invalid_client` error                                 | `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` is wrong or the env var wasn't picked up after restart.                                     |
 | Consent screen shows "This app isn't verified" warning | Normal for External apps before verification. Users can click "Advanced → Go to app" to proceed during testing.                          |
 | Token refresh fails after user revokes access          | The user needs to go through the consent flow again. Call the authorize endpoint with their existing `accountId` to reconnect.           |
-| Scope not shown on consent screen                      | The `https://mail.google.com/` scope wasn't added in the consent screen configuration. Revisit Step 3.                                   |
+| Scope not shown on consent screen                      | The `gmail.readonly` / `gmail.compose` scopes weren't added in the consent screen configuration. Revisit Step 3.                         |
 | Push endpoint returns `401` or `403`                   | The subscription's OIDC audience or service account does not match `GMAIL_PUBSUB_AUDIENCE` / `GMAIL_PUBSUB_SERVICE_ACCOUNT`.             |
 | No push arrives after connection                       | Check the Gmail publisher IAM grant on the topic and inspect `state.gmail_last_watch_error` on the mail account.                         |

@@ -852,7 +852,7 @@ const gmailOAuthCallback = async (req, res) => {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expires_at: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-      scope: 'https://mail.google.com/',
+      scope: tokens.scope || null,
       token_type: 'Bearer',
     };
     // For Gmail, IMAP host is fixed.
