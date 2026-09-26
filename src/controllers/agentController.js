@@ -5,6 +5,7 @@ const Project = require('../models/Project');
 const ApiKey = require('../models/ApiKey');
 const FileUpload = require('../models/FileUpload');
 const Organization = require('../models/Organization');
+const KnowledgeBase = require('../models/KnowledgeBase');
 const agentService = require('../services/agentService');
 const toolService = require('../services/toolService');
 const summarizationService = require('../services/summarizationService');
@@ -58,6 +59,27 @@ function validateProcedures(procedures) {
     }
   }
   return null;
+}
+
+/**
+ * Validate rag_search `knowledge_base_ids` against the agent's org/project.
+ * Returns an error message string, or null when valid. Empty array = project-wide KB.
+ */
+async function validateKnowledgeBaseIds(ids, orgId, projectId) {
+  if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id)) {
+    return 'knowledge_base_ids must be an array of knowledge base IDs';
+  }
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return null;
+
+  const count = await KnowledgeBase.countDocuments({
+    _id: { $in: unique },
+    organization_id: orgId,
+    project_id: projectId,
+  });
+  return count === unique.length
+    ? null
+    : 'One or more knowledge bases were not found in this project';
 }
 
 /**
@@ -2439,6 +2461,86 @@ const getWebSearchConfig = async (req, res) => {
   }
 };
 
+// ===== RAG SEARCH (KNOWLEDGE BASE) CONFIGURATION =====
+
+const configureRagSearch = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const ragTool = agent.tools.find(tool => tool.name === 'rag_search');
+    if (!ragTool) {
+      return res
+        .status(400)
+        .json({ error: 'Agent does not have rag_search tool configured' });
+    }
+
+    const { knowledge_base_ids = [] } = req.body;
+    const kbError = await validateKnowledgeBaseIds(
+      knowledge_base_ids,
+      req.params.orgId,
+      req.params.projectId
+    );
+    if (kbError) {
+      return res.status(400).json({ error: kbError });
+    }
+
+    const ids = [...new Set(knowledge_base_ids)];
+    ragTool.parameters = { ...(ragTool.parameters || {}), knowledge_base_ids: ids };
+    agent.markModified('tools');
+    await agent.save();
+
+    res.json({
+      message: 'RAG search configuration updated successfully',
+      knowledge_base_ids: ids,
+      scope: ids.length > 0 ? 'isolated' : 'project',
+    });
+  } catch (error) {
+    console.error('Configure RAG search error:', error);
+    res.status(500).json({ error: 'Failed to configure RAG search' });
+  }
+};
+
+const getRagSearchConfig = async (req, res) => {
+  try {
+    const agent = await Agent.findOne({
+      _id: req.params.agentId,
+      project: req.params.projectId,
+      organization: req.params.orgId,
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const ragTool = agent.tools.find(tool => tool.name === 'rag_search');
+    if (!ragTool) {
+      return res
+        .status(404)
+        .json({ error: 'Agent does not have rag_search tool configured' });
+    }
+
+    const ids = ragTool.parameters?.knowledge_base_ids || [];
+    res.json({
+      success: true,
+      data: {
+        knowledge_base_ids: ids,
+        scope: ids.length > 0 ? 'isolated' : 'project',
+      },
+    });
+  } catch (error) {
+    console.error('Get RAG search config error:', error);
+    res.status(500).json({ error: 'Failed to get RAG search configuration' });
+  }
+};
+
 // ===== WEBPAGE SCRAPER CONFIGURATION =====
 
 const configureWebpageScraper = async (req, res) => {
@@ -2754,6 +2856,20 @@ const addToolToAgent = async (req, res) => {
       });
     }
 
+    if (
+      tool_name === 'rag_search' &&
+      parameters?.knowledge_base_ids !== undefined
+    ) {
+      const kbError = await validateKnowledgeBaseIds(
+        parameters.knowledge_base_ids,
+        req.params.orgId,
+        req.params.projectId
+      );
+      if (kbError) {
+        return res.status(400).json({ error: kbError });
+      }
+    }
+
     // Add tool to agent
     agent.tools.push({
       name: tool_name,
@@ -3001,6 +3117,8 @@ module.exports = {
   getAgentsForApiKey,
   configureWebSearch,
   getWebSearchConfig,
+  configureRagSearch,
+  getRagSearchConfig,
   configureWebpageScraper,
   getWebpageScraperConfig,
   configureGoogleCalendar,

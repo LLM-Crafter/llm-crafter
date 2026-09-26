@@ -585,6 +585,26 @@ router.get(
   agentController.getWebSearchConfig
 );
 
+// ===== RAG SEARCH (KNOWLEDGE BASE) CONFIGURATION ROUTES =====
+
+router.post(
+  '/:agentId/rag-config',
+  auth,
+  orgAuth.hasRole('member'),
+  body('knowledge_base_ids')
+    .isArray()
+    .withMessage('knowledge_base_ids must be an array (empty = project knowledge base)'),
+  validate,
+  agentController.configureRagSearch
+);
+
+router.get(
+  '/:agentId/rag-config',
+  auth,
+  orgAuth.hasRole('viewer'),
+  agentController.getRagSearchConfig
+);
+
 // ===== WEBPAGE SCRAPER CONFIGURATION ROUTES =====
 
 router.post(

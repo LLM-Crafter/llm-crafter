@@ -65,6 +65,7 @@ class IndexingJobProcessor {
       job_id: jobId,
       organization_id: organizationId,
       project_id: projectId,
+      knowledge_base_id: options.knowledgeBaseId || null,
       type: jobType,
       api_key_id: apiKeyId,
       documents: documents,
@@ -197,7 +198,8 @@ class IndexingJobProcessor {
             batch.documents || batch,
             job.organization_id,
             job.project_id,
-            job.api_key_id
+            job.api_key_id,
+            job.knowledge_base_id || null
           );
           
           console.log(`✅ Batch ${globalIndex + 1} completed: ${indexedIds.length} chunks`);
@@ -289,7 +291,8 @@ class IndexingJobProcessor {
               [doc],
               job.organization_id,
               job.project_id,
-              job.api_key_id
+              job.api_key_id,
+              job.knowledge_base_id || null
             );
             
             console.log(`✅ Document ${globalIndex + 1} completed: ${indexedIds.length} chunks`);
@@ -328,7 +331,8 @@ class IndexingJobProcessor {
           documents,
           job.organization_id,
           job.project_id,
-          job.api_key_id
+          job.api_key_id,
+          job.knowledge_base_id || null
         );
         
         results.indexed_ids = indexedIds;
@@ -364,7 +368,7 @@ class IndexingJobProcessor {
    */
   async getJobStatus(jobId) {
     const job = await IndexingJob.findOne({ job_id: jobId })
-      .select('job_id type status progress started_at completed_at processing_time_ms error results createdAt');
+      .select('job_id type status knowledge_base_id progress started_at completed_at processing_time_ms error results createdAt');
     
     if (!job) {
       return null;
@@ -374,6 +378,7 @@ class IndexingJobProcessor {
       job_id: job.job_id,
       type: job.type,
       status: job.status,
+      knowledge_base_id: job.knowledge_base_id || null,
       progress: {
         ...job.progress,
         // Calculate percentage completion

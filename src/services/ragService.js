@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const OpenAIService = require('./openaiService');
 const ApiKey = require('../models/ApiKey');
 const VectorDatabaseConfig = require('../models/VectorDatabaseConfig');
@@ -5,9 +6,26 @@ const { createVectorDatabase } = require('./vectorDatabaseService');
 
 class RAGService {
   constructor() {
-    this.vectorStore = new Map(); // Fallback in-memory store
-    this.documentIndex = new Map();
     this.vectorDBInstances = new Map(); // Cache for vector DB connections
+  }
+
+  buildScope(organizationId, projectId, knowledgeBaseId = null) {
+    return {
+      organization_id: organizationId,
+      project_id: projectId,
+      knowledge_base_id: knowledgeBaseId || null,
+    };
+  }
+
+  resolveDocumentId(doc) {
+    if (doc.id !== undefined && doc.id !== null && doc.id !== '') {
+      return String(doc.id);
+    }
+    return crypto
+      .createHash('sha256')
+      .update(JSON.stringify(doc))
+      .digest('hex')
+      .slice(0, 32);
   }
 
   /**
@@ -83,9 +101,16 @@ class RAGService {
   /**
    * Process and index JSON documents for RAG
    */
-  async indexJsonDocuments(documents, organizationId, projectId, apiKeyId) {
+  async indexJsonDocuments(
+    documents,
+    organizationId,
+    projectId,
+    apiKeyId,
+    knowledgeBaseId = null
+  ) {
     const startTime = Date.now();
     const indexed = [];
+    const scopeKey = knowledgeBaseId || 'project';
 
     try {
       // Get vector database instance
@@ -99,36 +124,25 @@ class RAGService {
             projectId
           );
           const embeddings = await this.generateEmbeddings(chunks, apiKeyId);
+          const documentId = this.resolveDocumentId(doc);
 
           for (let i = 0; i < chunks.length; i++) {
-            const chunkId = `${organizationId}_${projectId}_${Date.now()}_${i}`;
+            // Deterministic so re-indexing a document overwrites its chunks instead of duplicating them
+            const chunkId = `${organizationId}_${projectId}_${scopeKey}_${documentId}_${i}`;
             const documentData = {
               id: chunkId,
               content: chunks[i].content,
               title: chunks[i].metadata.title || doc.title || '',
               source: chunks[i].metadata.source || doc.source || '',
-              document_id: chunks[i].metadata.document_id || doc.id || chunkId,
+              document_id: documentId,
               chunk_index: i,
               organization_id: organizationId,
               project_id: projectId,
+              knowledge_base_id: knowledgeBaseId || null,
               embedding: embeddings[i],
             };
 
-            // Index in vector database
             await vectorDB.indexDocument(documentData);
-
-            // Also store in fallback memory store for compatibility
-            this.vectorStore.set(chunkId, {
-              id: chunkId,
-              embedding: embeddings[i],
-              content: chunks[i].content,
-              title: documentData.title,
-              source: documentData.source,
-              document_id: documentData.document_id,
-              chunk_index: documentData.chunk_index,
-              organization_id: documentData.organization_id,
-              project_id: documentData.project_id,
-            });
 
             indexed.push(chunkId);
           }
@@ -457,6 +471,51 @@ class RAGService {
   }
 
   /**
+   * Generate an embedding for a search query
+   */
+  async embedQuery(query, apiKeyId) {
+    const apiKey = await ApiKey.findById(apiKeyId).populate('provider');
+    if (!apiKey || !apiKey.is_active) {
+      throw new Error('Invalid or inactive API key');
+    }
+
+    const openai = new OpenAIService(
+      apiKey.getDecryptedKey(),
+      apiKey.provider.name
+    );
+    const response = await openai.createEmbedding({
+      input: query,
+      model: 'text-embedding-3-small',
+    });
+    return response.data[0].embedding;
+  }
+
+  /**
+   * Normalize a provider result (flat fields) into { id, content, similarity, metadata }
+   */
+  formatResult(match, includeMetadata = true) {
+    const {
+      id,
+      content,
+      text,
+      score,
+      similarity,
+      embedding,
+      organization_id,
+      project_id,
+      knowledge_base_id,
+      ...metadata
+    } = match;
+
+    return {
+      id,
+      content: content || text,
+      similarity: similarity ?? score,
+      metadata: includeMetadata ? metadata : undefined,
+    };
+  }
+
+  /**
    * Search for relevant documents using vector similarity
    */
   async searchSimilar(
@@ -466,329 +525,37 @@ class RAGService {
     apiKeyId,
     options = {}
   ) {
-    const {
-      limit = 10,
-      threshold = 0.7,
-      filters = {},
-      includeMetadata = true,
-    } = options;
+    const { limit = 10, includeMetadata = true, knowledgeBaseId = null } =
+      options;
 
-    console.log('🧠 RAGService.searchSimilar - Start');
-    console.log('  Query:', query);
-    console.log('  Organization ID:', organizationId);
-    console.log('  Project ID:', projectId);
-    console.log('  API Key ID:', apiKeyId);
-    console.log('  Options:', { limit, threshold, filters });
+    console.log('🧠 RAGService.searchSimilar', {
+      organizationId,
+      projectId,
+      knowledgeBaseId,
+      limit,
+    });
 
     try {
-      // Check BOTH vector database AND memory store
-      console.log('  📚 Checking storage systems...');
-      console.log('  📚 In-memory vector store size:', this.vectorStore.size);
+      const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+      const queryEmbedding = await this.embedQuery(query, apiKeyId);
 
-      // Also check if we can get vector database instance
-      let vectorDB = null;
-      try {
-        vectorDB = await this.getVectorDatabase(organizationId, projectId);
-        console.log(
-          '  💾 Vector database connection:',
-          vectorDB ? 'SUCCESS' : 'FAILED'
-        );
-        if (vectorDB && typeof vectorDB.search === 'function') {
-          console.log('  💾 Vector database has search method');
-        }
-      } catch (error) {
-        console.log('  💾 Vector database connection error:', error.message);
-      }
-
-      // Generate embedding for query (needed for vector database search)
-      let queryEmbedding = null;
-      if (vectorDB && typeof vectorDB.search === 'function') {
-        console.log('  🔑 Looking up API key for embeddings...');
-        const apiKey = await ApiKey.findById(apiKeyId).populate('provider');
-        if (!apiKey || !apiKey.is_active) {
-          console.error('  ❌ Invalid or inactive API key:', apiKeyId);
-          throw new Error('Invalid or inactive API key');
-        }
-
-        console.log('  � API key found, provider:', apiKey.provider.name);
-        const decryptedKey = apiKey.getDecryptedKey();
-        const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
-
-        console.log('  🧮 Generating embedding for query...');
-        const response = await openai.createEmbedding({
-          input: query,
-          model: 'text-embedding-3-small',
-        });
-        queryEmbedding = response.data[0].embedding;
-        console.log(
-          '  ✅ Query embedding generated, dimensions:',
-          queryEmbedding.length
-        );
-      }
-
-      // Check if documents exist in vector database first
-      let vectorDBResults = [];
-      if (vectorDB && typeof vectorDB.search === 'function' && queryEmbedding) {
-        try {
-          console.log('  🔍 Attempting vector database search...');
-          // Pass the actual embedding to the vector database
-          vectorDBResults = await vectorDB.search(
-            query,
-            queryEmbedding,
-            limit,
-            {
-              organization_id: organizationId,
-              project_id: projectId,
-            }
-          );
-          console.log('  💾 Vector DB results:', vectorDBResults.length);
-
-          if (vectorDBResults.length > 0) {
-            console.log('  ✅ Found results in vector database!');
-            return {
-              query,
-              results: vectorDBResults.slice(0, limit).map(result => ({
-                id: result.id,
-                content: result.content || result.text,
-                similarity: result.similarity || result.score,
-                metadata: includeMetadata ? result.metadata : undefined,
-              })),
-              total_results: vectorDBResults.length,
-              search_method: 'semantic_vectordb',
-            };
-          }
-        } catch (vectorDBError) {
-          console.log('  ⚠️ Vector DB search failed:', vectorDBError.message);
-        }
-      }
-
-      // Fall back to memory store search
-      const totalDocs = this.vectorStore.size;
-      console.log('  📚 Total documents in memory store:', totalDocs);
-
-      if (totalDocs === 0) {
-        console.log('  ⚠️ No documents in memory store!');
-        console.log(
-          '  🔍 Let me check what documents might exist elsewhere...'
-        );
-
-        // Try to load documents from vector database into memory store
-        if (vectorDB && typeof vectorDB.getAllDocuments === 'function') {
-          try {
-            const dbDocs = await vectorDB.getAllDocuments({
-              organization_id: organizationId,
-              project_id: projectId,
-            });
-            console.log('  💾 Documents in vector DB:', dbDocs.length);
-
-            // Load them into memory store for this search
-            dbDocs.forEach(doc => {
-              this.vectorStore.set(doc.id, {
-                id: doc.id,
-                embedding: doc.embedding,
-                content: doc.content || doc.text,
-                metadata: {
-                  organization_id: organizationId,
-                  project_id: projectId,
-                  ...doc.metadata,
-                },
-              });
-            });
-
-            console.log(
-              '  🔄 Loaded',
-              dbDocs.length,
-              'documents into memory store'
-            );
-          } catch (loadError) {
-            console.log(
-              '  ⚠️ Failed to load from vector DB:',
-              loadError.message
-            );
-          }
-        }
-      }
-
-      // Continue with memory store search (updated total after potential loading)
-      const updatedTotalDocs = this.vectorStore.size;
-      console.log(
-        '  📚 Updated total documents in memory store:',
-        updatedTotalDocs
+      const matches = await vectorDB.search(
+        query,
+        queryEmbedding,
+        limit,
+        this.buildScope(organizationId, projectId, knowledgeBaseId)
       );
-
-      if (updatedTotalDocs === 0) {
-        // Let's also check what documents exist across all orgs/projects
-        console.log('  🔍 DEBUG: Checking all documents in memory store...');
-        const allDocs = Array.from(this.vectorStore.values());
-        console.log('  📊 Total documents across all orgs:', allDocs.length);
-
-        if (allDocs.length > 0) {
-          console.log('  📊 Sample document metadata:');
-          allDocs.slice(0, 3).forEach((doc, i) => {
-            console.log(`    Doc ${i + 1}:`, {
-              id: doc.id,
-              org_id: doc.metadata?.organization_id || doc.organization_id,
-              project_id: doc.metadata?.project_id || doc.project_id,
-              hasContent: !!doc.content,
-              hasEmbedding: !!doc.embedding,
-            });
-          });
-
-          // Group by org/project
-          const orgProjectCounts = {};
-          allDocs.forEach(doc => {
-            const orgId = doc.metadata?.organization_id || doc.organization_id;
-            const projId = doc.metadata?.project_id || doc.project_id;
-            const key = `${orgId}/${projId}`;
-            orgProjectCounts[key] = (orgProjectCounts[key] || 0) + 1;
-          });
-
-          console.log('  📊 Documents by org/project:');
-          Object.entries(orgProjectCounts).forEach(([key, count]) => {
-            console.log(`    ${key}: ${count} documents`);
-          });
-        }
-
-        return {
-          query,
-          results: [],
-          total_results: 0,
-          search_method: 'semantic',
-          debug_info: {
-            memory_store_size: updatedTotalDocs,
-            vector_db_available: !!vectorDB,
-            vector_db_results: vectorDBResults.length,
-          },
-        };
-      }
-
-      // Continue with memory store semantic search
-      // Generate embedding for query if not already done (for in-memory search)
-      if (!queryEmbedding) {
-        console.log('  🔑 Looking up API key for in-memory search...');
-        const apiKey = await ApiKey.findById(apiKeyId).populate('provider');
-        if (!apiKey || !apiKey.is_active) {
-          console.error('  ❌ Invalid or inactive API key:', apiKeyId);
-          throw new Error('Invalid or inactive API key');
-        }
-
-        console.log('  🔑 API key found, provider:', apiKey.provider.name);
-
-        const decryptedKey = apiKey.getDecryptedKey();
-        const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
-
-        console.log('  🧮 Generating embedding for query...');
-        const response = await openai.createEmbedding({
-          input: query,
-          model: 'text-embedding-3-small',
-        });
-        queryEmbedding = response.data[0].embedding;
-        console.log(
-          '  ✅ Query embedding generated, dimensions:',
-          queryEmbedding.length
-        );
-      }
-
-      // Filter documents by organization/project
-      console.log('  🔍 Filtering documents by org/project...');
-      const orgProjectDocs = Array.from(this.vectorStore.values()).filter(
-        doc => {
-          const docOrgId = doc.metadata?.organization_id || doc.organization_id;
-          const docProjId = doc.metadata?.project_id || doc.project_id;
-
-          const matchesOrg = docOrgId === organizationId;
-          const matchesProject = docProjId === projectId;
-
-          if (!matchesOrg || !matchesProject) {
-            console.log(
-              `  🔍 Doc ${doc.id}: org=${docOrgId} (${matchesOrg}), project=${docProjId} (${matchesProject})`
-            );
-          }
-
-          return matchesOrg && matchesProject;
-        }
-      );
-
-      console.log(
-        '  📊 Documents matching org/project:',
-        orgProjectDocs.length,
-        'out of',
-        updatedTotalDocs
-      );
-
-      if (orgProjectDocs.length === 0) {
-        console.log(
-          '  ⚠️ No documents found for this organization/project after filtering!'
-        );
-        return {
-          query,
-          results: [],
-          total_results: 0,
-          search_method: 'semantic',
-        };
-      }
-
-      // Apply additional filters and calculate similarity
-      console.log('  🔍 Applying filters and calculating similarity...');
-      const candidates = orgProjectDocs
-        .filter(doc => {
-          // Apply additional filters
-          for (const [key, value] of Object.entries(filters)) {
-            if (value && doc.metadata && doc.metadata[key] !== value) {
-              return false;
-            }
-          }
-          return true;
-        })
-        .map(doc => ({
-          ...doc,
-          similarity: this.cosineSimilarity(queryEmbedding, doc.embedding),
-        }))
-        .filter(doc => {
-          const meetsThreshold = doc.similarity >= threshold;
-          if (!meetsThreshold) {
-            console.log(
-              `    📊 Doc ${doc.id}: similarity ${doc.similarity.toFixed(4)} < threshold ${threshold}`
-            );
-          }
-          return meetsThreshold;
-        })
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, limit);
-
-      console.log('  📊 Candidates after filtering:', candidates.length);
-      console.log(
-        '  📊 Top similarities:',
-        candidates
-          .slice(0, 3)
-          .map(c => `${c.similarity.toFixed(4)}`)
-          .join(', ')
-      );
-
-      const results = candidates.map(doc => ({
-        id: doc.id,
-        content: doc.content,
-        similarity: doc.similarity,
-        metadata: includeMetadata ? doc.metadata || {} : undefined,
-      }));
-
-      console.log('  ✅ Memory store semantic search complete');
-      console.log('  📊 Final results:', results.length);
 
       return {
         query,
-        results,
-        total_results: orgProjectDocs.length,
-        search_method: 'semantic',
+        results: matches
+          .slice(0, limit)
+          .map(match => this.formatResult(match, includeMetadata)),
+        total_results: matches.length,
+        search_method: 'semantic_vectordb',
       };
     } catch (error) {
       console.error('❌ RAGService.searchSimilar error:', error);
-      console.error('❌ Error context:', {
-        query,
-        organizationId,
-        projectId,
-        apiKeyId,
-      });
       return {
         query,
         results: [],
@@ -812,6 +579,7 @@ class RAGService {
       themes = [],
       dateRange = null,
       sentiment = null,
+      knowledgeBaseId = null,
     } = options;
 
     try {
@@ -821,15 +589,15 @@ class RAGService {
         organizationId,
         projectId,
         apiKeyId,
-        { limit: limit * 2, threshold: 0.5 }
+        { limit: limit * 2, threshold: 0.5, knowledgeBaseId }
       );
 
       // Get keyword matches
-      const keywordResults = this.keywordSearch(
+      const keywordResults = await this.keywordSearch(
         query,
         organizationId,
         projectId,
-        { brands, models, themes, dateRange, sentiment }
+        { brands, models, themes, dateRange, sentiment, knowledgeBaseId }
       );
 
       // Combine and rank results
@@ -862,62 +630,53 @@ class RAGService {
   /**
    * Keyword-based search with metadata filtering
    */
-  keywordSearch(query, organizationId, projectId, filters = {}) {
-    console.log('📝 RAGService.keywordSearch - Start');
-    console.log('  Query:', query);
-    console.log('  Organization ID:', organizationId);
-    console.log('  Project ID:', projectId);
-    console.log('  Filters:', filters);
+  async keywordSearch(query, organizationId, projectId, filters = {}) {
+    const {
+      brands = [],
+      models = [],
+      themes = [],
+      sentiment = null,
+      knowledgeBaseId = null,
+    } = filters;
 
-    const queryWords = query.toLowerCase().split(/\s+/);
-    const { brands, models, themes, dateRange, sentiment } = filters;
+    const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+    // Only providers that can enumerate documents (memory) support keyword matching
+    if (typeof vectorDB.getAllDocuments !== 'function') {
+      return [];
+    }
 
-    console.log('  📚 Total documents in vector store:', this.vectorStore.size);
-    console.log('  🔤 Query words:', queryWords);
+    const queryWords = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (queryWords.length === 0) {
+      return [];
+    }
 
-    const results = Array.from(this.vectorStore.values())
+    const docs = await vectorDB.getAllDocuments(
+      this.buildScope(organizationId, projectId, knowledgeBaseId)
+    );
+
+    return docs
       .filter(doc => {
-        // Basic filters
-        if (!doc.metadata) {
+        if (brands.length > 0 && !brands.includes(doc.brand)) {
           return false;
         }
-        if (
-          doc.metadata.organization_id !== organizationId ||
-          doc.metadata.project_id !== projectId
-        ) {
+        if (models.length > 0 && !models.includes(doc.model)) {
           return false;
         }
-
-        // Brand filter
-        if (brands.length > 0 && !brands.includes(doc.metadata.brand)) {
-          return false;
-        }
-
-        // Model filter
-        if (models.length > 0 && !models.includes(doc.metadata.model)) {
-          return false;
-        }
-
-        // Theme filter
         if (themes.length > 0) {
-          const docThemes = doc.metadata.themes || [];
+          const docThemes = doc.themes || [];
           if (!themes.some(theme => docThemes.includes(theme))) {
             return false;
           }
         }
-
-        // Sentiment filter
-        if (sentiment && doc.metadata.sentiment !== sentiment) {
+        if (sentiment && doc.sentiment !== sentiment) {
           return false;
         }
-
         return true;
       })
       .map(doc => {
-        const content = doc.content.toLowerCase();
-        const title = (doc.metadata.title || '').toLowerCase();
+        const content = (doc.content || '').toLowerCase();
+        const title = (doc.title || '').toLowerCase();
 
-        // Calculate keyword match score
         const contentMatches = queryWords.filter(word =>
           content.includes(word)
         ).length;
@@ -929,25 +688,13 @@ class RAGService {
           (contentMatches + titleMatches * 2) / (queryWords.length * 3);
 
         return {
-          ...doc,
+          ...this.formatResult(doc),
           keywordScore,
-          similarity: keywordScore, // For compatibility
+          similarity: keywordScore,
         };
       })
-      .filter(doc => doc.keywordScore > 0)
+      .filter(result => result.keywordScore > 0)
       .sort((a, b) => b.keywordScore - a.keywordScore);
-
-    console.log('  📊 Keyword search results:', results.length);
-    console.log(
-      '  📊 Top keyword scores:',
-      results
-        .slice(0, 3)
-        .map(r => r.keywordScore.toFixed(4))
-        .join(', ')
-    );
-    console.log('  ✅ Keyword search complete');
-
-    return results;
   }
 
   /**
@@ -998,223 +745,48 @@ class RAGService {
   /**
    * Get document statistics
    */
-  async getStats(organizationId, projectId) {
-    console.log('📈 RAGService.getStats - Start');
-    console.log('  Organization ID:', organizationId);
-    console.log('  Project ID:', projectId);
-
-    try {
-      // Try to get stats from vector database first
-      const vectorDB = await this.getVectorDatabase(organizationId, projectId);
-
-      if (vectorDB && typeof vectorDB.getStats === 'function') {
-        console.log('  📊 Getting stats from vector database');
-        const stats = await vectorDB.getStats(organizationId, projectId);
-        console.log('  📊 Vector DB stats result:', stats);
-        console.log('  ✅ Stats complete (from vector DB)');
-        return stats;
-      }
-    } catch (error) {
-      console.warn(
-        '  ⚠️ Failed to get stats from vector database, falling back to memory:',
-        error.message
-      );
-    }
-
-    // Fallback to in-memory store
-    console.log('  📊 Getting stats from in-memory store');
-    console.log('  Total documents in store:', this.vectorStore.size);
-
-    const docs = Array.from(this.vectorStore.values()).filter(
-      doc =>
-        doc.metadata.organization_id === organizationId &&
-        doc.metadata.project_id === projectId
+  async getStats(organizationId, projectId, knowledgeBaseId = null) {
+    const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+    return vectorDB.getStats(
+      this.buildScope(organizationId, projectId, knowledgeBaseId)
     );
-
-    console.log('  Documents for org/project:', docs.length);
-
-    // Calculate date range from indexed_at field
-    const indexedDates = docs
-      .map(d => new Date(d.metadata.indexed_at || Date.now()).getTime())
-      .filter(t => !isNaN(t));
-    const dateRange =
-      indexedDates.length > 0
-        ? {
-            oldest: Math.min(...indexedDates),
-            newest: Math.max(...indexedDates),
-          }
-        : null;
-
-    const stats = {
-      total_documents: docs.length,
-      indexed_range: dateRange,
-    };
-
-    console.log('  📊 Memory stats result:', stats);
-    console.log('  ✅ Stats complete (from memory)');
-
-    return stats;
   }
 
   /**
-   * Calculate cosine similarity between two vectors
+   * Clear all indexed data for a project KB or an isolated knowledge base
    */
-  cosineSimilarity(vectorA, vectorB) {
-    if (!vectorA || !vectorB || vectorA.length !== vectorB.length) {
-      return 0;
-    }
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < vectorA.length; i++) {
-      dotProduct += vectorA[i] * vectorB[i];
-      normA += vectorA[i] * vectorA[i];
-      normB += vectorB[i] * vectorB[i];
-    }
-
-    if (normA === 0 || normB === 0) {
-      return 0;
-    }
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-  }
-
-  /**
-   * Clear all indexed data for an organization/project
-   */
-  async clearIndex(organizationId, projectId) {
-    console.log('🗑️ RAGService.clearIndex - Start');
-    console.log('  Organization ID:', organizationId);
-    console.log('  Project ID:', projectId);
-
-    try {
-      // Try to clear from vector database first
-      const vectorDB = await this.getVectorDatabase(organizationId, projectId);
-
-      if (vectorDB && typeof vectorDB.clearIndex === 'function') {
-        console.log('  🗑️ Clearing index from vector database');
-        const result = await vectorDB.clearIndex(organizationId, projectId);
-        console.log('  🗑️ Vector DB clear result:', result);
-
-        // Also clear from memory store to keep it in sync
-        const toDeleteFromMemory = [];
-        for (const [id, doc] of this.vectorStore.entries()) {
-          if (
-            doc.metadata.organization_id === organizationId &&
-            doc.metadata.project_id === projectId
-          ) {
-            toDeleteFromMemory.push(id);
-          }
-        }
-        toDeleteFromMemory.forEach(id => this.vectorStore.delete(id));
-
-        console.log('  ✅ Clear complete (from vector DB)');
-        return result;
-      }
-    } catch (error) {
-      console.warn(
-        '  ⚠️ Failed to clear from vector database, falling back to memory:',
-        error.message
-      );
-    }
-
-    // Fallback to in-memory store only
-    console.log('  🗑️ Clearing index from in-memory store');
-    const toDelete = [];
-
-    for (const [id, doc] of this.vectorStore.entries()) {
-      if (
-        doc.metadata.organization_id === organizationId &&
-        doc.metadata.project_id === projectId
-      ) {
-        toDelete.push(id);
-      }
-    }
-
-    toDelete.forEach(id => this.vectorStore.delete(id));
-
-    const result = {
-      deleted_count: toDelete.length,
-    };
-
-    console.log('  🗑️ Memory clear result:', result);
-    console.log('  ✅ Clear complete (from memory)');
-
-    return result;
+  async clearIndex(organizationId, projectId, knowledgeBaseId = null) {
+    console.log('🗑️ RAGService.clearIndex', {
+      organizationId,
+      projectId,
+      knowledgeBaseId,
+    });
+    const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+    return vectorDB.clearIndex(
+      this.buildScope(organizationId, projectId, knowledgeBaseId)
+    );
   }
 
   /**
    * Delete documents by document_id
    */
-  async deleteByDocumentId(documentId, organizationId, projectId) {
-    console.log('🗑️ RAGService.deleteByDocumentId - Start');
-    console.log('  Document ID:', documentId);
-    console.log('  Organization ID:', organizationId);
-    console.log('  Project ID:', projectId);
+  async deleteByDocumentId(
+    documentId,
+    organizationId,
+    projectId,
+    knowledgeBaseId = null
+  ) {
+    const vectorDB = await this.getVectorDatabase(organizationId, projectId);
+    const result = await vectorDB.deleteDocument(
+      documentId,
+      this.buildScope(organizationId, projectId, knowledgeBaseId)
+    );
 
-    try {
-      // Try to delete from vector database first
-      const vectorDB = await this.getVectorDatabase(organizationId, projectId);
-
-      if (vectorDB && typeof vectorDB.deleteDocument === 'function') {
-        console.log('  🗑️ Deleting from vector database');
-        await vectorDB.deleteDocument(documentId, projectId);
-
-        // Also delete from memory store to keep it in sync
-        const toDeleteFromMemory = [];
-        for (const [id, doc] of this.vectorStore.entries()) {
-          if (
-            doc.organization_id === organizationId &&
-            doc.project_id === projectId &&
-            doc.document_id === documentId
-          ) {
-            toDeleteFromMemory.push(id);
-          }
-        }
-        toDeleteFromMemory.forEach(id => this.vectorStore.delete(id));
-
-        console.log(`  ✅ Delete complete: ${toDeleteFromMemory.length} chunks removed`);
-        return {
-          success: true,
-          deleted_count: toDeleteFromMemory.length,
-          document_id: documentId,
-        };
-      }
-    } catch (error) {
-      console.warn(
-        '  ⚠️ Failed to delete from vector database, falling back to memory:',
-        error.message
-      );
-    }
-
-    // Fallback to in-memory store only
-    console.log('  🗑️ Deleting from in-memory store');
-    const toDelete = [];
-
-    for (const [id, doc] of this.vectorStore.entries()) {
-      if (
-        doc.organization_id === organizationId &&
-        doc.project_id === projectId &&
-        doc.document_id === documentId
-      ) {
-        toDelete.push(id);
-      }
-    }
-
-    toDelete.forEach(id => this.vectorStore.delete(id));
-
-    const result = {
+    return {
       success: true,
-      deleted_count: toDelete.length,
+      deleted_count: result?.deleted_count ?? null,
       document_id: documentId,
     };
-
-    console.log('  🗑️ Memory delete result:', result);
-    console.log('  ✅ Delete complete (from memory)');
-
-    return result;
   }
 }
 

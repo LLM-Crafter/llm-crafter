@@ -19,6 +19,13 @@ try {
   );
 }
 
+// Project-wide docs keep the legacy project_id namespace so existing data stays readable.
+function resolveNamespace({ project_id, knowledge_base_id }) {
+  return knowledge_base_id ? `kb_${knowledge_base_id}` : project_id;
+}
+
+const WEAVIATE_PROJECT_SCOPE = '__project__';
+
 /**
  * Vector Database Interface
  * Provides a unified interface for different vector database providers
@@ -162,15 +169,16 @@ class VectorDatabaseInterface {
     throw new Error('search method must be implemented by subclass');
   }
 
-  async deleteDocument(documentId, projectId) {
+  // scope = { organization_id, project_id, knowledge_base_id }
+  async deleteDocument(documentId, scope) {
     throw new Error('deleteDocument method must be implemented by subclass');
   }
 
-  async getStats(organizationId, projectId) {
+  async getStats(scope) {
     throw new Error('getStats method must be implemented by subclass');
   }
 
-  async clearIndex(organizationId, projectId) {
+  async clearIndex(scope) {
     throw new Error('clearIndex method must be implemented by subclass');
   }
 }
@@ -225,14 +233,58 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
 
   async ensureSchema() {
     // Check if class exists
+    let existingClass;
     try {
-      await this.client.schema.classGetter().withClassName(this.className).do();
+      existingClass = await this.client.schema
+        .classGetter()
+        .withClassName(this.className)
+        .do();
       console.log(`✅ Weaviate class '${this.className}' exists`);
     } catch (error) {
       // Class doesn't exist, create it
       console.log(`📝 Creating Weaviate class '${this.className}'`);
       await this.createSchema();
+      return;
     }
+
+    const hasKbProperty = (existingClass?.properties || []).some(
+      p => p.name === 'knowledge_base_id'
+    );
+    if (!hasKbProperty) {
+      await this.client.schema
+        .propertyCreator()
+        .withClassName(this.className)
+        .withProperty({
+          name: 'knowledge_base_id',
+          dataType: ['text'],
+          description: 'Knowledge base ID',
+        })
+        .do();
+    }
+  }
+
+  _scopeWhere(scope, extraOperands = []) {
+    return {
+      operator: 'And',
+      operands: [
+        {
+          path: ['organization_id'],
+          operator: 'Equal',
+          valueText: scope.organization_id,
+        },
+        {
+          path: ['project_id'],
+          operator: 'Equal',
+          valueText: scope.project_id,
+        },
+        {
+          path: ['knowledge_base_id'],
+          operator: 'Equal',
+          valueText: scope.knowledge_base_id || WEAVIATE_PROJECT_SCOPE,
+        },
+        ...extraOperands,
+      ],
+    };
   }
 
   async createSchema() {
@@ -275,6 +327,11 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
           dataType: ['string'],
           description: 'Project ID',
         },
+        {
+          name: 'knowledge_base_id',
+          dataType: ['text'],
+          description: 'Knowledge base ID',
+        },
       ],
       vectorizer: 'none', // We'll provide our own vectors
     };
@@ -299,6 +356,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
             chunk_index: doc.chunk_index || 0,
             organization_id: doc.organization_id,
             project_id: doc.project_id,
+            knowledge_base_id: doc.knowledge_base_id || WEAVIATE_PROJECT_SCOPE,
           })
           .withVector(doc.embedding)
           .do();
@@ -315,97 +373,62 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
 
   async search(query, embedding, limit = 10, filters = {}) {
     try {
-      let searchQuery = this.client.graphql
+      const searchQuery = this.client.graphql
         .get()
         .withClassName(this.className)
         .withFields(
-          'content title source document_id chunk_index organization_id project_id'
+          'content title source document_id chunk_index organization_id project_id knowledge_base_id _additional { id certainty }'
         )
         .withNearVector({
           vector: embedding,
           certainty: 0.7,
         })
+        .withWhere(this._scopeWhere(filters))
         .withLimit(limit);
 
-      // Add organization/project filters if provided
-      if (filters.organization_id || filters.project_id) {
-        const whereConditions = [];
-
-        if (filters.organization_id) {
-          whereConditions.push({
-            path: ['organization_id'],
-            operator: 'Equal',
-            valueString: filters.organization_id,
-          });
-        }
-
-        if (filters.project_id) {
-          whereConditions.push({
-            path: ['project_id'],
-            operator: 'Equal',
-            valueString: filters.project_id,
-          });
-        }
-
-        // Combine conditions with AND if both exist
-        if (whereConditions.length === 1) {
-          searchQuery = searchQuery.withWhere(whereConditions[0]);
-        } else if (whereConditions.length === 2) {
-          searchQuery = searchQuery.withWhere({
-            operator: 'And',
-            operands: whereConditions,
-          });
-        }
-      }
-
       const result = await searchQuery.do();
-      return result.data.Get[this.className] || [];
+      return (result.data.Get[this.className] || []).map(
+        ({ _additional, ...rest }) => ({
+          ...rest,
+          id: _additional?.id,
+          score: _additional?.certainty,
+        })
+      );
     } catch (error) {
       console.error('Error searching Weaviate:', error);
       throw error;
     }
   }
 
-  async deleteDocument(documentId, projectId) {
+  async deleteDocument(documentId, scope) {
     try {
-      await this.client.data
-        .deleter()
+      const result = await this.client.batch
+        .objectsBatchDeleter()
         .withClassName(this.className)
-        .withWhere({
-          path: ['document_id'],
-          operator: 'Equal',
-          valueText: documentId,
-        })
+        .withWhere(
+          this._scopeWhere(scope, [
+            {
+              path: ['document_id'],
+              operator: 'Equal',
+              valueText: documentId,
+            },
+          ])
+        )
         .do();
 
-      return true;
+      return { deleted_count: result?.results?.successful ?? null };
     } catch (error) {
       console.error('Error deleting document from Weaviate:', error);
       throw error;
     }
   }
 
-  async getStats(organizationId, projectId) {
+  async getStats(scope) {
     try {
-      // Get total document count for this org/project
       const aggregateResult = await this.client.graphql
         .aggregate()
         .withClassName(this.className)
-        .withWhere({
-          operator: 'And',
-          operands: [
-            {
-              path: ['organization_id'],
-              operator: 'Equal',
-              valueText: organizationId,
-            },
-            {
-              path: ['project_id'],
-              operator: 'Equal',
-              valueText: projectId,
-            },
-          ],
-        })
+        .withWhere(this._scopeWhere(scope))
         .withFields('meta { count }')
         .do();
 
@@ -420,21 +443,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
           const sampleResult = await this.client.graphql
             .get()
             .withClassName(this.className)
-            .withWhere({
-              operator: 'And',
-              operands: [
-                {
-                  path: ['organization_id'],
-                  operator: 'Equal',
-                  valueText: organizationId,
-                },
-                {
-                  path: ['project_id'],
-                  operator: 'Equal',
-                  valueText: projectId,
-                },
-              ],
-            })
+            .withWhere(this._scopeWhere(scope))
             .withFields('_additional { id creationTimeUnix }')
             .withLimit(100)
             .do();
@@ -472,7 +481,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
     }
   }
 
-  async clearIndex(organizationId, projectId) {
+  async clearIndex(scope) {
     try {
       // Get count before deletion using aggregate API directly
       let countBefore = 0;
@@ -480,21 +489,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
         const aggregateResult = await this.client.graphql
           .aggregate()
           .withClassName(this.className)
-          .withWhere({
-            operator: 'And',
-            operands: [
-              {
-                path: ['organization_id'],
-                operator: 'Equal',
-                valueText: organizationId,
-              },
-              {
-                path: ['project_id'],
-                operator: 'Equal',
-                valueText: projectId,
-              },
-            ],
-          })
+          .withWhere(this._scopeWhere(scope))
           .withFields('meta { count }')
           .do();
 
@@ -512,30 +507,14 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
         countBefore = 0;
       }
 
-      // Delete all documents for this org/project
       console.log(
-        `🗑️ Deleting documents for org: ${organizationId}, project: ${projectId}`
+        `🗑️ Deleting documents for org: ${scope.organization_id}, project: ${scope.project_id}, kb: ${scope.knowledge_base_id || 'project'}`
       );
 
-      // Weaviate batch deletion using the correct API
       const deleteResult = await this.client.batch
         .objectsBatchDeleter()
         .withClassName(this.className)
-        .withWhere({
-          operator: 'And',
-          operands: [
-            {
-              path: ['organization_id'],
-              operator: 'Equal',
-              valueText: organizationId,
-            },
-            {
-              path: ['project_id'],
-              operator: 'Equal',
-              valueText: projectId,
-            },
-          ],
-        })
+        .withWhere(this._scopeWhere(scope))
         .do();
 
       console.log('🗑️ Weaviate delete result:', deleteResult);
@@ -625,18 +604,15 @@ class PineconeVectorDB extends VectorDatabaseInterface {
       }
     }
 
-    // Use project_id as namespace for data isolation
-    const namespace = documents[0]?.project_id;
-    if (!namespace) {
+    if (!documents[0]?.project_id) {
       throw new Error(
         'project_id is required for Pinecone namespace isolation'
       );
     }
+    const namespace = resolveNamespace(documents[0]);
 
-    const vectors = documents.map(doc => ({
-      id: doc.id || `doc_${Date.now()}_${Math.random()}`,
-      values: doc.embedding,
-      metadata: {
+    const vectors = documents.map(doc => {
+      const metadata = {
         content: doc.content,
         title: doc.title || '',
         source: doc.source || '',
@@ -644,8 +620,17 @@ class PineconeVectorDB extends VectorDatabaseInterface {
         chunk_index: doc.chunk_index || 0,
         organization_id: doc.organization_id,
         project_id: doc.project_id,
-      },
-    }));
+      };
+      // Pinecone rejects null metadata values
+      if (doc.knowledge_base_id) {
+        metadata.knowledge_base_id = doc.knowledge_base_id;
+      }
+      return {
+        id: doc.id || `doc_${Date.now()}_${Math.random()}`,
+        values: doc.embedding,
+        metadata,
+      };
+    });
 
     console.log(
       `  📦 Upserting ${vectors.length} vectors to Pinecone namespace: ${namespace}`
@@ -663,17 +648,15 @@ class PineconeVectorDB extends VectorDatabaseInterface {
       );
     }
 
-    // Use project_id as namespace for data isolation
-    const namespace = filters.project_id;
-    if (!namespace) {
+    if (!filters.project_id) {
       throw new Error(
         'project_id is required in filters for Pinecone namespace isolation'
       );
     }
+    const namespace = resolveNamespace(filters);
 
     console.log(`  🔍 Querying Pinecone namespace: ${namespace}`);
 
-    // Build metadata filter (exclude project_id since it's used as namespace)
     const metadataFilter = {};
     if (filters.organization_id) {
       metadataFilter.organization_id = filters.organization_id;
@@ -694,31 +677,28 @@ class PineconeVectorDB extends VectorDatabaseInterface {
 
     return results.matches.map(match => ({
       ...match.metadata,
+      id: match.id,
       score: match.score,
     }));
   }
 
-  async deleteDocument(documentId, projectId) {
-    // Use deleteMany with filter to delete all chunks with this document_id
-    // Note: Need to use namespace for proper scoping
-    await this.index.namespace(projectId).deleteMany({
+  async deleteDocument(documentId, scope) {
+    await this.index.namespace(resolveNamespace(scope)).deleteMany({
       document_id: documentId,
     });
-    return true;
+    return { deleted_count: null };
   }
 
-  async getStats(organizationId, projectId) {
+  async getStats(scope) {
+    const namespace = resolveNamespace(scope);
     try {
-      console.log(`  📊 Getting stats for Pinecone namespace: ${projectId}`);
+      console.log(`  📊 Getting stats for Pinecone namespace: ${namespace}`);
 
-      // Use describeIndexStats with filter for the namespace
       const stats = await this.index.describeIndexStats();
-
-      // Get stats for the specific namespace
-      const namespaceStats = stats.namespaces?.[projectId];
+      const namespaceStats = stats.namespaces?.[namespace];
 
       if (!namespaceStats) {
-        console.log(`  ℹ️ No data found in namespace: ${projectId}`);
+        console.log(`  ℹ️ No data found in namespace: ${namespace}`);
         return {
           total_documents: 0,
           indexed_range: null,
@@ -726,7 +706,8 @@ class PineconeVectorDB extends VectorDatabaseInterface {
       }
 
       return {
-        total_documents: namespaceStats.vectorCount || 0,
+        total_documents:
+          namespaceStats.recordCount ?? namespaceStats.vectorCount ?? 0,
         indexed_range: null, // Pinecone doesn't provide timestamp info in stats
       };
     } catch (error) {
@@ -735,21 +716,20 @@ class PineconeVectorDB extends VectorDatabaseInterface {
     }
   }
 
-  async clearIndex(organizationId, projectId) {
+  async clearIndex(scope) {
+    const namespace = resolveNamespace(scope);
     try {
-      // Get count before deletion
-      const statsBefore = await this.getStats(organizationId, projectId);
+      const statsBefore = await this.getStats(scope);
       const countBefore = statsBefore.total_documents;
 
       console.log(
-        `  🗑️ Deleting all vectors from Pinecone namespace: ${projectId} (${countBefore} vectors)`
+        `  🗑️ Deleting all vectors from Pinecone namespace: ${namespace} (${countBefore} vectors)`
       );
 
-      // Delete all vectors in the namespace
-      await this.index.namespace(projectId).deleteAll();
+      await this.index.namespace(namespace).deleteAll();
 
       console.log(
-        `  ✅ Deleted ${countBefore} vectors from namespace: ${projectId}`
+        `  ✅ Deleted ${countBefore} vectors from namespace: ${namespace}`
       );
 
       return {
@@ -783,7 +763,8 @@ class MemoryVectorDB extends VectorDatabaseInterface {
       const id = doc.id || `doc_${Date.now()}_${Math.random()}`;
       const docWithId = { ...doc, id };
 
-      // Add to memory storage
+      // Upsert semantics, matching Pinecone
+      this.documents = this.documents.filter(d => d.id !== id);
       this.documents.push(docWithId);
 
       // Implement simple LRU if we exceed max documents
@@ -797,12 +778,25 @@ class MemoryVectorDB extends VectorDatabaseInterface {
     return results;
   }
 
-  async search(query, embedding, limit = 10) {
-    // Simple cosine similarity search
-    const similarities = this.documents.map(doc => {
-      const similarity = this.cosineSimilarity(embedding, doc.embedding);
-      return { ...doc, similarity };
-    });
+  _inScope(doc, scope) {
+    return (
+      doc.organization_id === scope.organization_id &&
+      doc.project_id === scope.project_id &&
+      (doc.knowledge_base_id || null) === (scope.knowledge_base_id || null)
+    );
+  }
+
+  async getAllDocuments(scope) {
+    return this.documents.filter(doc => this._inScope(doc, scope));
+  }
+
+  async search(query, embedding, limit = 10, filters = {}) {
+    const similarities = this.documents
+      .filter(doc => this._inScope(doc, filters))
+      .map(doc => {
+        const similarity = this.cosineSimilarity(embedding, doc.embedding);
+        return { ...doc, similarity };
+      });
 
     // Sort by similarity and return top results
     return similarities
@@ -814,19 +808,16 @@ class MemoryVectorDB extends VectorDatabaseInterface {
       });
   }
 
-  async deleteDocument(documentId, projectId) {
+  async deleteDocument(documentId, scope) {
     const initialLength = this.documents.length;
     this.documents = this.documents.filter(
-      doc => doc.document_id !== documentId
+      doc => !(this._inScope(doc, scope) && doc.document_id === documentId)
     );
-    return this.documents.length < initialLength;
+    return { deleted_count: initialLength - this.documents.length };
   }
 
-  async getStats(organizationId, projectId) {
-    const docs = this.documents.filter(
-      doc =>
-        doc.organization_id === organizationId && doc.project_id === projectId
-    );
+  async getStats(scope) {
+    const docs = this.documents.filter(doc => this._inScope(doc, scope));
 
     // Calculate date range from indexed_at field
     const indexedDates = docs
@@ -846,14 +837,9 @@ class MemoryVectorDB extends VectorDatabaseInterface {
     };
   }
 
-  async clearIndex(organizationId, projectId) {
+  async clearIndex(scope) {
     const initialCount = this.documents.length;
-    this.documents = this.documents.filter(
-      doc =>
-        !(
-          doc.organization_id === organizationId && doc.project_id === projectId
-        )
-    );
+    this.documents = this.documents.filter(doc => !this._inScope(doc, scope));
     const deletedCount = initialCount - this.documents.length;
 
     return {
@@ -902,4 +888,5 @@ module.exports = {
   PineconeVectorDB,
   MemoryVectorDB,
   createVectorDatabase,
+  resolveNamespace,
 };

@@ -6,9 +6,15 @@ const auth = require('../middleware/auth');
 const orgAuth = require('../middleware/organizationAuth');
 const validate = require('../middleware/validate');
 
+const validateKnowledgeBaseId = body('knowledge_base_id')
+  .optional({ nullable: true })
+  .isString()
+  .withMessage('knowledge_base_id must be a string');
+
 // Validation middleware
 const validateIndexRequest = [
   body('documents').isArray().withMessage('Documents must be an array'),
+  validateKnowledgeBaseId,
 ];
 
 const validateSearchRequest = [
@@ -25,12 +31,14 @@ const validateSearchRequest = [
     .optional()
     .isIn(['semantic', 'hybrid', 'keyword'])
     .withMessage('Invalid search type'),
+  validateKnowledgeBaseId,
 ];
 
 const validateBatchRequest = [
   body('document_batches')
     .isArray()
     .withMessage('Document batches must be an array'),
+  validateKnowledgeBaseId,
 ];
 
 /**

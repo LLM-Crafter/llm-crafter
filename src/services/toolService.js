@@ -13,6 +13,7 @@ const voiceService = require('./voiceService');
 const encryptionUtil = require('../utils/encryption');
 const ApiKey = require('../models/ApiKey');
 const Organization = require('../models/Organization');
+const KnowledgeBase = require('../models/KnowledgeBase');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
@@ -1937,60 +1938,41 @@ class ToolService {
       themes = [],
       sentiment = null,
       include_metadata = true,
-      organization_id,
-      project_id,
     } = parameters;
 
     const startTime = Date.now();
 
-    // Enhanced logging for debugging
-    console.log('🔍 RAG Search Handler - Start');
-    console.log('  Query:', query);
-    console.log('  Search Type:', search_type);
-    console.log('  Limit:', limit);
-    console.log('  Threshold:', threshold);
-    console.log('  Parameters org/project:', { organization_id, project_id });
-    console.log('  Config org/project:', {
-      org: config.organization_id,
-      project: config.project_id,
-      api_key_id: config._agent_api_key_id,
-    });
-
     if (!query) {
-      console.error('❌ RAG Search: Missing query parameter');
       throw new Error('Query parameter is required for RAG search');
     }
 
-    // Get organization and project from parameters or config
-    const organizationId = organization_id || config.organization_id;
-    const projectId = project_id || config.project_id;
-
-    console.log('  Final context:', { organizationId, projectId });
+    // Scope comes only from the agent config; LLM-supplied parameters must never widen it
+    const organizationId = config.organization_id;
+    const projectId = config.project_id;
 
     if (!organizationId || !projectId) {
-      console.error('❌ RAG Search: Missing organization/project context');
       throw new Error(
-        'Organization and project context required for RAG search (via parameter or agent config)'
+        'Organization and project context required for RAG search'
       );
     }
 
-    // Get API key from agent config
     const apiKeyId = config._agent_api_key_id;
     if (!apiKeyId) {
-      console.error('❌ RAG Search: Missing API key');
       throw new Error('Agent API key not configured for RAG search');
     }
 
-    console.log('  API Key ID:', apiKeyId);
+    console.log('🔍 RAG Search Handler', {
+      search_type,
+      limit,
+      organizationId,
+      projectId,
+      knowledge_base_ids: config.knowledge_base_ids || [],
+    });
 
-    try {
-      let searchResults;
-
-      console.log(`🔍 Executing ${search_type} search...`);
-
+    const runSearch = async knowledgeBaseId => {
       switch (search_type) {
         case 'hybrid':
-          searchResults = await ragService.hybridSearch(
+          return ragService.hybridSearch(
             query,
             organizationId,
             projectId,
@@ -2003,22 +1985,18 @@ class ToolService {
               sentiment,
               semanticWeight: config.semantic_weight || 0.7,
               keywordWeight: config.keyword_weight || 0.3,
+              knowledgeBaseId,
             }
           );
-          break;
 
-        case 'keyword':
-          console.log('  📝 Keyword search - no embeddings needed');
-          const keywordResults = ragService.keywordSearch(
+        case 'keyword': {
+          const keywordResults = await ragService.keywordSearch(
             query,
             organizationId,
             projectId,
-            { brands, models, themes, sentiment }
+            { brands, models, themes, sentiment, knowledgeBaseId }
           );
-
-          console.log('  📊 Keyword results count:', keywordResults.length);
-
-          searchResults = {
+          return {
             query,
             results: keywordResults.slice(0, limit).map(result => ({
               id: result.id,
@@ -2029,11 +2007,10 @@ class ToolService {
             total_results: keywordResults.length,
             search_method: 'keyword',
           };
-          break;
+        }
 
         default: // semantic
-          console.log('  🧠 Semantic search - generating embeddings...');
-          searchResults = await ragService.searchSimilar(
+          return ragService.searchSimilar(
             query,
             organizationId,
             projectId,
@@ -2043,33 +2020,64 @@ class ToolService {
               threshold,
               filters: { brands, models, themes, sentiment },
               includeMetadata: include_metadata,
+              knowledgeBaseId,
             }
           );
-          break;
+      }
+    };
+
+    try {
+      const knowledgeBaseIds = await this.resolveRagKnowledgeBaseIds(
+        config.knowledge_base_ids,
+        organizationId,
+        projectId
+      );
+
+      let searchResults;
+      if (knowledgeBaseIds.length <= 1) {
+        searchResults = await runSearch(knowledgeBaseIds[0] || null);
+      } else {
+        const perKb = await Promise.all(knowledgeBaseIds.map(runSearch));
+        const score = r => r.finalScore ?? r.similarity ?? 0;
+        const merged = perKb
+          .flatMap(r => r.results || [])
+          .sort((a, b) => score(b) - score(a));
+        searchResults = {
+          query,
+          results: merged.slice(0, limit),
+          total_results: perKb.reduce((n, r) => n + (r.total_results || 0), 0),
+          search_method: perKb[0].search_method,
+        };
+        const errors = perKb.filter(r => r.error).map(r => r.error);
+        if (errors.length === perKb.length) {
+          searchResults.error = errors[0];
+        }
       }
 
-      console.log('  ✅ Search completed');
-      console.log('  📊 Results found:', searchResults.results?.length || 0);
-      console.log('  📊 Total available:', searchResults.total_results || 0);
-
-      // Add execution time
       searchResults.execution_time_ms = Date.now() - startTime;
 
-      // Add knowledge base stats if requested
       if (config.include_stats) {
-        console.log('  📈 Getting knowledge base stats...');
-        searchResults.knowledge_base_stats = ragService.getStats(
-          organizationId,
-          projectId
+        const scopes = knowledgeBaseIds.length ? knowledgeBaseIds : [null];
+        const stats = await Promise.all(
+          scopes.map(kbId =>
+            ragService.getStats(organizationId, projectId, kbId)
+          )
         );
-        console.log('  📈 Stats:', searchResults.knowledge_base_stats);
+        searchResults.knowledge_base_stats =
+          stats.length === 1
+            ? stats[0]
+            : {
+                total_documents: stats.reduce(
+                  (n, s) => n + (s.total_documents || 0),
+                  0
+                ),
+                indexed_range: null,
+              };
       }
 
       console.log('🔍 RAG Search Handler - Complete:', {
-        query,
         results_count: searchResults.results?.length || 0,
         execution_time: searchResults.execution_time_ms,
-        success: true,
       });
 
       return searchResults;
@@ -2094,6 +2102,35 @@ class ToolService {
         execution_time_ms: Date.now() - startTime,
       };
     }
+  }
+
+  /**
+   * Resolve the agent's configured isolated knowledge bases.
+   * Returns [] for the project-wide KB (default). Throws if isolated KBs are
+   * configured but none are valid, so an isolated agent never falls back to the project KB.
+   */
+  async resolveRagKnowledgeBaseIds(configuredIds, organizationId, projectId) {
+    const requested = Array.isArray(configuredIds)
+      ? [...new Set(configuredIds.filter(id => typeof id === 'string' && id))]
+      : [];
+    if (requested.length === 0) {
+      return [];
+    }
+
+    const found = await KnowledgeBase.find({
+      _id: { $in: requested },
+      organization_id: organizationId,
+      project_id: projectId,
+    })
+      .select('_id')
+      .lean();
+
+    if (found.length === 0) {
+      throw new Error(
+        'None of the knowledge bases configured for this agent exist'
+      );
+    }
+    return found.map(kb => kb._id);
   }
 
   /**

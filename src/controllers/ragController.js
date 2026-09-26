@@ -1,6 +1,27 @@
 const ragService = require('../services/ragService');
 const indexingJobProcessor = require('../services/indexingJobProcessor');
+const KnowledgeBase = require('../models/KnowledgeBase');
 const { validationResult } = require('express-validator');
+
+// Returns null for the project-wide KB, or a verified KB id scoped to the route's org/project.
+async function resolveKnowledgeBaseId(req) {
+  const raw = req.body?.knowledge_base_id ?? req.query?.knowledge_base_id;
+  if (raw === undefined || raw === null || raw === '') {
+    return null;
+  }
+  const kbId = String(raw);
+  const exists = await KnowledgeBase.exists({
+    _id: kbId,
+    organization_id: req.params.orgId,
+    project_id: req.params.projectId,
+  });
+  if (!exists) {
+    const error = new Error('Knowledge base not found');
+    error.status = 404;
+    throw error;
+  }
+  return kbId;
+}
 
 class RAGController {
   /**
@@ -34,6 +55,8 @@ class RAGController {
         });
       }
 
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+
       // Check if background processing is requested (default: true)
       if (process_in_background) {
         console.log(`📋 Queuing ${documents.length} documents for background indexing...`);
@@ -45,6 +68,7 @@ class RAGController {
           api_key_id,
           {
             type: 'single',
+            knowledgeBaseId,
             userAgent: req.get('User-Agent'),
             ipAddress: req.ip
           }
@@ -54,6 +78,7 @@ class RAGController {
           success: true,
           background_processing: true,
           job_id: jobInfo.job_id,
+          knowledge_base_id: knowledgeBaseId,
           estimated_time: jobInfo.estimated_time,
           message: `Documents queued for background indexing. Use job ID ${jobInfo.job_id} to check status.`,
           document_count: documents.length,
@@ -67,12 +92,14 @@ class RAGController {
           documents,
           orgId,
           projectId,
-          api_key_id
+          api_key_id,
+          knowledgeBaseId
         );
 
         res.json({
           success: true,
           background_processing: false,
+          knowledge_base_id: knowledgeBaseId,
           indexed_count: indexedIds.length,
           indexed_ids: indexedIds,
           message: `Successfully indexed ${indexedIds.length} document chunks`,
@@ -80,7 +107,7 @@ class RAGController {
       }
     } catch (error) {
       console.error('RAG indexing error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message,
       });
@@ -101,7 +128,7 @@ class RAGController {
         });
       }
 
-      const { organizationId, projectId } = req.params;
+      const { orgId: organizationId, projectId } = req.params;
       const {
         query,
         limit = 5,
@@ -129,6 +156,8 @@ class RAGController {
         });
       }
 
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+
       let results;
 
       switch (search_type) {
@@ -144,16 +173,17 @@ class RAGController {
               models,
               themes,
               sentiment,
+              knowledgeBaseId,
             }
           );
           break;
 
-        case 'keyword':
-          const keywordResults = ragService.keywordSearch(
+        case 'keyword': {
+          const keywordResults = await ragService.keywordSearch(
             query,
             organizationId,
             projectId,
-            { brands, models, themes, sentiment }
+            { brands, models, themes, sentiment, knowledgeBaseId }
           );
 
           results = {
@@ -168,6 +198,7 @@ class RAGController {
             search_method: 'keyword',
           };
           break;
+        }
 
         default: // semantic
           results = await ragService.searchSimilar(
@@ -180,6 +211,7 @@ class RAGController {
               threshold,
               filters: { brands, models, themes, sentiment },
               includeMetadata: include_metadata,
+              knowledgeBaseId,
             }
           );
           break;
@@ -191,7 +223,7 @@ class RAGController {
       });
     } catch (error) {
       console.error('RAG search error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message,
       });
@@ -205,16 +237,18 @@ class RAGController {
   async getStats(req, res) {
     try {
       const { orgId, projectId } = req.params;
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
 
-      const stats = await ragService.getStats(orgId, projectId);
+      const stats = await ragService.getStats(orgId, projectId, knowledgeBaseId);
 
       res.json({
         success: true,
+        knowledge_base_id: knowledgeBaseId,
         stats,
       });
     } catch (error) {
       console.error('RAG stats error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message,
       });
@@ -228,17 +262,19 @@ class RAGController {
   async clearKnowledgeBase(req, res) {
     try {
       const { orgId, projectId } = req.params;
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
 
-      const result = await ragService.clearIndex(orgId, projectId);
+      const result = await ragService.clearIndex(orgId, projectId, knowledgeBaseId);
 
       res.json({
         success: true,
+        knowledge_base_id: knowledgeBaseId,
         message: `Cleared ${result.deleted_count} documents from knowledge base`,
         deleted_count: result.deleted_count,
       });
     } catch (error) {
       console.error('RAG clear error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message,
       });
@@ -269,6 +305,8 @@ class RAGController {
         });
       }
 
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+
       // Check if background processing is requested (default: true for batch operations)
       if (process_in_background) {
         console.log(`📋 Queuing ${document_batches.length} document batches for background indexing...`);
@@ -280,6 +318,7 @@ class RAGController {
           api_key_id,
           {
             type: 'batch',
+            knowledgeBaseId,
             userAgent: req.get('User-Agent'),
             ipAddress: req.ip
           }
@@ -289,6 +328,7 @@ class RAGController {
           success: true,
           background_processing: true,
           job_id: jobInfo.job_id,
+          knowledge_base_id: knowledgeBaseId,
           estimated_time: jobInfo.estimated_time,
           message: `Document batches queued for background indexing. Use job ID ${jobInfo.job_id} to check status.`,
           batch_count: document_batches.length,
@@ -313,7 +353,8 @@ class RAGController {
               batch.documents,
               orgId,
               projectId,
-              api_key_id
+              api_key_id,
+              knowledgeBaseId
             );
 
             results.successful_batches++;
@@ -336,7 +377,7 @@ class RAGController {
       }
     } catch (error) {
       console.error('RAG batch indexing error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message,
       });
@@ -462,22 +503,28 @@ class RAGController {
   async deleteByDocumentId(req, res) {
     try {
       const { orgId, projectId, documentId } = req.params;
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
 
       const result = await ragService.deleteByDocumentId(
         documentId,
         orgId,
-        projectId
+        projectId,
+        knowledgeBaseId
       );
 
       res.json({
         success: true,
-        message: `Deleted ${result.deleted_count} document chunks`,
+        message:
+          result.deleted_count === null
+            ? 'Document chunks deleted'
+            : `Deleted ${result.deleted_count} document chunks`,
         deleted_count: result.deleted_count,
         document_id: documentId,
+        knowledge_base_id: knowledgeBaseId,
       });
     } catch (error) {
       console.error('RAG document deletion error:', error);
-      res.status(500).json({
+      res.status(error.status || 500).json({
         success: false,
         error: error.message,
       });

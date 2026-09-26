@@ -14,6 +14,13 @@ const indexingJobSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+
+  // null = project-wide KB
+  knowledge_base_id: {
+    type: String,
+    ref: 'KnowledgeBase',
+    default: null
+  },
   
   job_id: {
     type: String,
@@ -133,7 +140,7 @@ indexingJobSchema.statics.findJobsByOrganization = function(organizationId, proj
   return this.find(filter)
     .sort({ createdAt: -1 })
     .limit(limit)
-    .select('job_id type status progress started_at completed_at processing_time_ms error createdAt');
+    .select('job_id type status knowledge_base_id progress started_at completed_at processing_time_ms error createdAt');
 };
 
 indexingJobSchema.statics.getJobStats = function(organizationId, projectId) {
