@@ -20,6 +20,7 @@ const OutboundEmail = require('../models/OutboundEmail');
 const Conversation = require('../models/Conversation');
 const draftService = require('../services/email/draftService');
 const outboundAttachmentService = require('../services/email/outboundAttachmentService');
+const emailAgentService = require('../services/email/emailAgentService');
 
 async function getAgentOr404(req, res) {
   const { orgId, projectId, agentId } = req.params;
@@ -385,10 +386,43 @@ const retryOutbound = async (req, res) => {
   }
 };
 
+/**
+ * Regenerate a draft with the agent, optionally steered by staff guidance.
+ * Synchronous: responds with the new draft once reasoning finishes.
+ */
+const regenerateDraft = async (req, res) => {
+  try {
+    const agent = await getAgentOr404(req, res);
+    if (!agent) return;
+    const account = await getAccountOr404(req, res, agent._id);
+    if (!account) return;
+
+    const { guidance, mode } = req.body || {};
+    const result = await emailAgentService.regenerateDraft({
+      account,
+      outboundId: req.params.outboundId,
+      guidance: guidance?.trim() || null,
+      mode: mode || 'revise',
+      requestedBy: req.user
+        ? { user_id: req.user._id, name: req.user.name || null, email: req.user.email || null }
+        : null,
+    });
+
+    res.json(result);
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    console.error('[Outbound] regenerate draft error:', err);
+    res.status(500).json({ error: 'Failed to regenerate draft' });
+  }
+};
+
 module.exports = {
   listOutbound,
   getOutbound,
   updateDraft,
+  regenerateDraft,
   sendDraft,
   cancelOutbound,
   retryOutbound,

@@ -623,9 +623,13 @@ conversationSchema.methods.getDecryptedMessages = function (options = {}) {
 
 // Enhanced method to get optimized conversation context for agent
 // Always returns plaintext content (decrypts if encrypt_messages is enabled)
-conversationSchema.methods.getContextForAgent = function (maxTokens = 4000) {
+// `beforeIndex` hides that message and everything after it (used when regenerating a reply).
+conversationSchema.methods.getContextForAgent = function (maxTokens = 4000, { beforeIndex } = {}) {
   // Use decrypted in-memory view so the LLM always receives plaintext
-  const workingMessages = this.getDecryptedMessages();
+  const allMessages = this.getDecryptedMessages();
+  const workingMessages = Number.isInteger(beforeIndex)
+    ? allMessages.slice(0, beforeIndex)
+    : allMessages;
 
   const messages = [];
 

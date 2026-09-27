@@ -1,5 +1,6 @@
 const OpenAIService = require('./openaiService');
 const APIKey = require('../models/ApiKey');
+const { getActiveGuidance } = require('../utils/operatorGuidance');
 
 class SummarizationService {
   /**
@@ -111,6 +112,11 @@ class SummarizationService {
 
       prompt += `${role}: ${content}\n\n`;
 
+      if (msg.role === 'assistant') {
+        getActiveGuidance(msg).forEach(g => {
+          prompt += `[Staff guidance applied to this reply: ${g}]\n\n`;
+        });
+      }
       // Include detailed tool usage information (parameters and results)
       if (msg.tools_used && msg.tools_used.length > 0) {
         msg.tools_used.forEach(t => {

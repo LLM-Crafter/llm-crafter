@@ -52,9 +52,9 @@ const outboundEmailSchema = new mongoose.Schema(
       },
     ],
 
-    // Immutable snapshot of the agent's first generated reply. Written once at
-    // creation and never touched again, so it survives reviewer edits in our
-    // UI and rewrites done in the operator's own mail client.
+    // Snapshot of the agent's latest generated reply (replaced only by an AI
+    // regeneration, never by human edits), so it survives reviewer edits in
+    // our UI and rewrites done in the operator's own mail client.
     original_draft: {
       _id: false,
       subject: { type: String, default: null },

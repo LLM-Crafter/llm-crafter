@@ -44,7 +44,19 @@ const { isNoReplyOnlyAddress, hasUsableReplyTo } = require('./emailSenderGuards'
 const emailUtils = require('./emailUtils');
 const draftService = require('./draftService');
 const languageDetectionService = require('../languageDetectionService');
+const lockService = require('../distributedLockService');
+const encryptionUtil = require('../../utils/encryption');
+const { getActiveGuidance } = require('../../utils/operatorGuidance');
 // (require paths are relative to src/services/email/)
+
+// Long enough to cover a full reasoning loop with tool calls.
+const REGENERATE_LOCK_TTL_MS = 3 * 60 * 1000;
+
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
 
 class EmailAgentService {
   /**
@@ -430,6 +442,167 @@ class EmailAgentService {
       decision,
       triage,
     };
+  }
+
+  /**
+   * Regenerate a pending draft, optionally steered by staff guidance. The
+   * previous version is kept in the message's `metadata.revisions`.
+   * Errors carry an HTTP `status` (404 / 409 / 502).
+   *
+   * @param {Object} params
+   * @param {Object} params.account      - MailAccount document
+   * @param {string} params.outboundId
+   * @param {string|null} [params.guidance]
+   * @param {'revise'|'fresh'} [params.mode]
+   * @param {Object|null} [params.requestedBy] - { user_id, name, email }
+   * @returns {Promise<{ outbound: Object, message: Object }>}
+   */
+  async regenerateDraft({ account, outboundId, guidance = null, mode = 'revise', requestedBy = null }) {
+    const outbound = await OutboundEmail.findOne({ _id: outboundId, mail_account: account._id });
+    if (!outbound) throw httpError(404, 'OutboundEmail not found');
+    if (outbound.state !== 'drafted') {
+      throw httpError(409, `Only drafts can be regenerated (current state: ${outbound.state})`);
+    }
+
+    const result = await lockService.withLock(
+      `email_regenerate:${outbound._id}`,
+      REGENERATE_LOCK_TTL_MS,
+      async () => ({
+        value: await this._regenerateDraftLocked({ account, outbound, guidance, mode, requestedBy }),
+      })
+    );
+    if (!result) throw httpError(409, 'This draft is already being regenerated');
+    return result.value;
+  }
+
+  async _regenerateDraftLocked({ account, outbound, guidance, mode, requestedBy }) {
+    const [agent, conversation] = await Promise.all([
+      Agent.findById(account.agent).populate({ path: 'api_key', populate: { path: 'provider' } }),
+      Conversation.findById(outbound.conversation),
+    ]);
+    if (!agent) throw httpError(404, 'Agent not found');
+    if (!conversation) throw httpError(404, 'Conversation not found for this draft');
+
+    const messageIndex = conversation.messages.findIndex(
+      m => m.role === 'assistant' && String(m.metadata?.outbound_id) === String(outbound._id)
+    );
+    if (messageIndex === -1) throw httpError(409, 'Draft message not found in conversation');
+
+    const messages = conversation.getDecryptedMessages({ includeAttachmentContext: false });
+    const target = messages[messageIndex];
+    const inbound = messages.slice(0, messageIndex).reverse().find(m => m.role === 'user');
+    const inboundEmail = inbound?.channel_info?.email || {};
+    const triage = outbound.metadata?.triage || {};
+
+    // Same shape processIncomingEmail passes to the reasoning engine.
+    const dynamicContext = {
+      channel: 'email',
+      email_context: {
+        subject: inboundEmail.subject,
+        from: inboundEmail.from_email,
+        triage_topic: triage.topic,
+        triage_intent: triage.intent,
+        triage_confidence: triage.confidence,
+        attachments: (inbound?.channel_info?.media || []).map(attachment => ({
+          filename: attachment.filename,
+          mime_type: attachment.mime_type,
+          description: attachment.description || null,
+          interpretation_status: attachment.interpretation_status,
+        })),
+      },
+    };
+
+    const send = account.send_profile || {};
+    const reasoning = await agentService.regenerateAssistantResponse(agent, conversation, messageIndex, {
+      guidance,
+      priorGuidance: getActiveGuidance(target),
+      previousDraft: this._stripSignature(target.content, send.signature_text),
+      mode,
+      dynamicContext,
+    });
+    if (!reasoning.content) throw httpError(502, 'The agent did not produce a new draft');
+
+    const draftText = emailUtils.renderText(reasoning.content, send.signature_text);
+    const draftHtml = emailUtils.renderHtml(reasoning.content, send.signature_html);
+    const now = new Date();
+
+    // AI regeneration moves the audit baseline, so it isn't counted as a human edit.
+    const updated = await OutboundEmail.findOneAndUpdate(
+      { _id: outbound._id, state: 'drafted' },
+      {
+        $set: {
+          text: draftText,
+          html: draftHtml,
+          'original_draft.text': draftText,
+          'original_draft.html': draftHtml,
+          'original_draft.generated_at': now,
+        },
+      },
+      { new: true }
+    );
+    if (!updated) throw httpError(409, 'Draft was sent or cancelled while it was being regenerated');
+
+    const revision = {
+      mode,
+      guidance: guidance || null,
+      previous_content: target.content,
+      previous_html: target.channel_info?.email?.body_html || null,
+      requested_by: requestedBy,
+      token_usage: reasoning.token_usage,
+      created_at: now,
+    };
+    const usage = reasoning.token_usage || {};
+    const storedContent = conversation.gdpr?.encrypt_messages
+      ? encryptionUtil.encrypt(draftText)
+      : draftText;
+
+    await Conversation.updateOne(
+      { _id: conversation._id, 'messages.metadata.outbound_id': outbound._id },
+      {
+        $set: {
+          'messages.$.content': storedContent,
+          'messages.$.channel_info.email.body_html': draftHtml,
+          'messages.$.thinking_process': reasoning.thinking_process,
+          'messages.$.tools_used': reasoning.tools_used,
+          'messages.$.token_usage': reasoning.token_usage,
+          'messages.$.metadata.draft_audit.original_text': draftText,
+          'messages.$.metadata.draft_audit.original_html': draftHtml,
+        },
+        $push: { 'messages.$.metadata.revisions': revision },
+        $inc: {
+          'metadata.total_cost': usage.cost || 0,
+          'metadata.total_tokens_used': usage.total_tokens || 0,
+          'metadata.tools_executed_count': reasoning.tools_used?.length || 0,
+        },
+      }
+    );
+
+    if (['gmail', 'graph'].includes(account.provider)) {
+      await draftService.update(account, updated).catch(err =>
+        console.error(`[EmailAgent] remote draft update failed for ${updated._id}:`, err.message)
+      );
+    }
+
+    const fresh = await Conversation.findById(conversation._id);
+    const message = fresh
+      ?.getDecryptedMessages({ includeAttachmentContext: false })
+      .find(m => String(m.metadata?.outbound_id) === String(updated._id)) || null;
+
+    console.log(
+      `[EmailAgent] draft regenerated outbound=${updated._id} mode=${mode} ` +
+      `has_guidance=${!!guidance} revisions=${message?.metadata?.revisions?.length ?? 'n/a'}`
+    );
+
+    return { outbound: updated, message };
+  }
+
+  _stripSignature(text, signatureText) {
+    const body = String(text || '').trim();
+    const signature = String(signatureText || '').trim();
+    if (signature && body.endsWith(signature)) {
+      return body.slice(0, -signature.length).trim();
+    }
+    return body;
   }
 
   // ────────────────────────────────────────────────────────────────────────

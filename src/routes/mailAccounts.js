@@ -235,6 +235,17 @@ router.put(
 );
 
 router.post(
+  '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/:accountId/outbound/:outboundId/regenerate',
+  auth,
+  organizationAuth.hasRole('member'),
+  outboundIdParam,
+  body('guidance').optional({ nullable: true }).isString().isLength({ max: 2000 }),
+  body('mode').optional().isIn(['revise', 'fresh']),
+  validate,
+  outboundController.regenerateDraft
+);
+
+router.post(
   '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/:accountId/outbound/:outboundId/send',
   auth,
   organizationAuth.hasRole('member'),

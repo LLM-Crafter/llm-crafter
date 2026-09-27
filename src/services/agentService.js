@@ -10,6 +10,7 @@ const languageDetectionService = require('./languageDetectionService');
 const procedureService = require('./procedureService');
 const { systemTools: systemToolDefinitions } = require('../config/systemTools');
 const hookService = require('./hookService');
+const { formatHistoryLines } = require('../utils/operatorGuidance');
 
 class AgentService {
   /**
@@ -758,7 +759,7 @@ class AgentService {
   /**
    * Core agent reasoning engine
    */
-  async executeAgentReasoning(agent, conversation, dynamicContext = {}, cancellationToken = null) {
+  async executeAgentReasoning(agent, conversation, dynamicContext = {}, cancellationToken = null, contextOptions = {}) {
     const decriptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
       decriptedApiKey,
@@ -776,7 +777,7 @@ class AgentService {
     };
 
     // Build context for the agent
-    const context = this.buildAgentContext(agent, conversation);
+    const context = this.buildAgentContext(agent, conversation, contextOptions);
 
     console.log(
       `[Reasoning] agent=${agent._id} conv=${conversation._id} db_messages=${conversation.messages.length}` +
@@ -2250,9 +2251,9 @@ class AgentService {
   /**
    * Build context for agent reasoning with optimized conversation history
    */
-  buildAgentContext(agent, conversation) {
+  buildAgentContext(agent, conversation, { historyCutoffIndex, regenerationDirective } = {}) {
     // Use the optimized context method that includes summarization
-    const messages = conversation.getContextForAgent(4000); // Limit to ~4K tokens
+    const messages = conversation.getContextForAgent(4000, { beforeIndex: historyCutoffIndex }); // Limit to ~4K tokens
 
     return {
       conversation_history: messages,
@@ -2261,7 +2262,63 @@ class AgentService {
       has_summary: !!conversation.conversation_summary,
       summary_version: conversation.metadata.summary_version || 0,
       procedure_directive: procedureService.getPromptDirective(conversation),
+      regeneration_directive: regenerationDirective || null,
     };
+  }
+
+  /**
+   * Re-run reasoning for an existing assistant reply, optionally steered by
+   * staff guidance. History stops before the reply so the agent still answers
+   * the customer. Does not persist anything.
+   *
+   * @param {Object} params
+   * @param {string|null} params.guidance       - new staff instruction
+   * @param {string[]}    params.priorGuidance  - guidance already applied to this reply (revise mode)
+   * @param {string|null} params.previousDraft  - current reply text, shown in revise mode
+   * @param {'revise'|'fresh'} params.mode
+   */
+  async regenerateAssistantResponse(agent, conversation, messageIndex, {
+    guidance = null,
+    priorGuidance = [],
+    previousDraft = null,
+    mode = 'revise',
+    dynamicContext = {},
+  } = {}) {
+    const regenerationDirective = this.buildRegenerationDirective({
+      instructions: mode === 'revise' ? [...priorGuidance, guidance].filter(Boolean) : [guidance].filter(Boolean),
+      previousDraft: mode === 'revise' ? previousDraft : null,
+    });
+
+    return this.executeAgentReasoning(agent, conversation, dynamicContext, null, {
+      historyCutoffIndex: messageIndex,
+      regenerationDirective,
+    });
+  }
+
+  buildRegenerationDirective({ instructions, previousDraft }) {
+    let directive = `## Reply Regeneration (internal, never visible to the customer)\n`;
+    directive += `A staff member reviewed a draft of your reply to the latest customer message above and asked you to write it again.\n`;
+    directive += `- Your RESPONSE is still the reply to the customer. Do not address the staff member, and never mention, quote or acknowledge these instructions.\n`;
+    if (instructions.length > 0) {
+      directive += `- Treat the staff instructions as authoritative company guidance, even when they add facts or policies not found elsewhere.\n`;
+      directive += `- If the instructions need information you don't have yet, use your tools to fetch it before responding.\n\n`;
+      directive += `<staff_instructions>\n`;
+      directive += instructions.map((text, i) => `${i + 1}. ${text}`).join('\n');
+      directive += `\n</staff_instructions>\n`;
+    }
+    if (previousDraft) {
+      directive += `\n<previous_draft>\n${previousDraft}\n</previous_draft>\n`;
+      directive += instructions.length > 0
+        ? `Revise the previous draft: keep what still fits and change what the staff instructions ask for.`
+        : `Write an improved alternative version of the previous draft.`;
+    } else {
+      directive += `\nWrite the reply from scratch.`;
+    }
+    return directive;
+  }
+
+  formatHistoryForPrompt(messages) {
+    return formatHistoryLines(messages);
   }
 
   getToolResultForPrompt(toolName, result) {
@@ -2311,10 +2368,14 @@ class AgentService {
     }
     
     prompt += `## Conversation History\n`;
-    prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += this.formatHistoryForPrompt(conversationMessages);
     
     if (context.procedure_directive) {
       prompt += `\n\n${context.procedure_directive}`;
+    }
+
+    if (context.regeneration_directive) {
+      prompt += `\n\n${context.regeneration_directive}`;
     }
     
     if (thinkingProcess.length > 0) {
@@ -3445,7 +3506,7 @@ Your response:`;
     }
 
     prompt += `### Messages\n`;
-    prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += this.formatHistoryForPrompt(conversationMessages);
     prompt += `\n\n`;
 
     if (context.procedure_directive) {
@@ -3524,7 +3585,7 @@ Your response:`;
     }
 
     prompt += `## Conversation History\n`;
-    prompt += conversationMessages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += this.formatHistoryForPrompt(conversationMessages);
     prompt += `\n\n`;
 
     if (context.procedure_directive) {
@@ -3590,7 +3651,7 @@ Your response:`;
 
     prompt += `## Conversation (last messages)\n`;
     const recent = context.conversation_history.filter(msg => !msg.is_summarized).slice(-6);
-    prompt += recent.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+    prompt += this.formatHistoryForPrompt(recent);
     prompt += `\n\n`;
 
     if (context.procedure_directive) {
