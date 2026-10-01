@@ -3,6 +3,22 @@ const OpenAI = require('openai');
 // Price per 1K tokens (as of current OpenAI pricing)
 const PRICING = {
   openai: {
+    // GPT-6 series — short-context pricing (long context is 2x input/cached, 1.5x output)
+    'gpt-6-astra': {
+      input: 0.01, // $10.00 per million tokens input
+      cachedInput: 0.001, // $1.00 per million tokens cached input
+      output: 0.05, // $50.00 per million tokens output
+    },
+    'gpt-6.1-sol': {
+      input: 0.002, // $2.00 per million tokens input
+      cachedInput: 0.0001, // $0.10 per million tokens cached input
+      output: 0.01, // $10.00 per million tokens output
+    },
+    'gpt-6-luna': {
+      input: 0.0001, // $0.10 per million tokens input
+      cachedInput: 0.00001, // $0.01 per million tokens cached input
+      output: 0.0005, // $0.50 per million tokens output
+    },
     'gpt-5.6-sol': {
       input: 0.004, // $4.00 per million tokens input
       output: 0.02, // $20.00 per million tokens output
@@ -366,14 +382,14 @@ class OpenAIService {
       return 0;
     }
 
-    // For OpenAI, cached tokens are 10% of the normal input token cost
+    // For OpenAI, cached tokens use the model's cachedInput rate, or 10% of the normal input cost
     let inputCost = (promptTokens / 1000) * pricing.input;
     if (this.provider === 'openai' && cachedTokens > 0) {
       // Calculate cost for non-cached tokens at full price
       const nonCachedTokens = promptTokens - cachedTokens;
       const nonCachedCost = (nonCachedTokens / 1000) * pricing.input;
-      // Calculate cost for cached tokens at 10% price
-      const cachedCost = (cachedTokens / 1000) * pricing.input * 0.1;
+      const cachedRate = pricing.cachedInput ?? pricing.input * 0.1;
+      const cachedCost = (cachedTokens / 1000) * cachedRate;
       inputCost = nonCachedCost + cachedCost;
     }
 

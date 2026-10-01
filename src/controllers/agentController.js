@@ -16,6 +16,55 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const encryptionUtil = require('../utils/encryption');
 const attachmentProcessingService = require('../services/attachmentProcessingService');
+const { PROVIDER_NAME: JEV_PROVIDER_NAME } = require('../services/jevService');
+
+const JEV_FEATURE_FLAGS = ['critic_precheck', 'planner_gate', 'language_detection', 'procedure_matching', 'email_triage'];
+
+/**
+ * Validate `config.jev` from a create/update request body.
+ * Returns { status, error } or null when valid.
+ */
+async function validateJevConfig(jev, projectId, mainApiKey) {
+  if (!jev) return null;
+
+  const anyFeatureEnabled =
+    JEV_FEATURE_FLAGS.some(flag => jev[flag] === true) || jev.responder_routing?.enabled === true;
+  if (anyFeatureEnabled && !jev.api_key) {
+    return { status: 400, error: 'config.jev.api_key is required when enabling Jev features' };
+  }
+
+  if (jev.api_key) {
+    const jevKey = await ApiKey.findOne({ _id: jev.api_key, project: projectId }).populate('provider');
+    if (!jevKey) {
+      return { status: 404, error: 'Jev API key not found in this project' };
+    }
+    if (jevKey.provider?.name !== JEV_PROVIDER_NAME) {
+      return { status: 400, error: 'config.jev.api_key must be a TypeSafe API key' };
+    }
+    if (jev.model && !jevKey.provider.models.includes(jev.model)) {
+      return { status: 400, error: 'Invalid Jev model for the TypeSafe provider' };
+    }
+  }
+
+  if (
+    jev.min_confidence !== undefined &&
+    (typeof jev.min_confidence !== 'number' || jev.min_confidence < 0.5 || jev.min_confidence > 1)
+  ) {
+    return { status: 400, error: 'config.jev.min_confidence must be a number between 0.5 and 1' };
+  }
+
+  const routing = jev.responder_routing;
+  if (routing?.enabled && !routing.fast_model) {
+    return { status: 400, error: 'config.jev.responder_routing.fast_model is required when routing is enabled' };
+  }
+  for (const model of [routing?.fast_model, routing?.powerful_model]) {
+    if (model && !mainApiKey.provider.models.includes(model)) {
+      return { status: 400, error: `Invalid responder routing model "${model}" for the agent's provider` };
+    }
+  }
+
+  return null;
+}
 
 const PROCEDURE_STEP_TYPES = ['collect', 'ask', 'request_document', 'answer', 'tool_action', 'escalate'];
 const PROCEDURE_RESPONSE_POLICIES = ['collect_before_answer', 'answer_while_collecting'];
@@ -201,11 +250,22 @@ const createAgent = async (req, res) => {
         .json({ error: 'API key not found in this project' });
     }
 
+    if (apiKey.provider.name === JEV_PROVIDER_NAME) {
+      return res.status(400).json({
+        error: 'TypeSafe keys can only be used for Jev (config.jev.api_key), not as the agent LLM key',
+      });
+    }
+
     // Verify the model belongs to the provider
     if (!apiKey.provider.models.includes(req.body.llm_settings.model)) {
       return res
         .status(400)
         .json({ error: 'Invalid model for selected provider' });
+    }
+
+    const jevError = await validateJevConfig(req.body.config?.jev, req.params.projectId, apiKey);
+    if (jevError) {
+      return res.status(jevError.status).json({ error: jevError.error });
     }
     const documentModel = req.body.config?.attachment_processing?.document_model;
     if (documentModel && !apiKey.provider.models.includes(documentModel)) {
@@ -464,7 +524,8 @@ const updateAgent = async (req, res) => {
       req.body.api_key ||
       req.body.llm_settings?.model ||
       req.body.config?.attachment_processing?.document_model ||
-      req.body.config?.attachment_processing?.image_model
+      req.body.config?.attachment_processing?.image_model ||
+      req.body.config?.jev
     ) {
       const apiKey = await ApiKey.findOne({
         _id: req.body.api_key || agent.api_key,
@@ -475,6 +536,17 @@ const updateAgent = async (req, res) => {
         return res
           .status(404)
           .json({ error: 'API key not found in this project' });
+      }
+
+      if (req.body.api_key && apiKey.provider.name === JEV_PROVIDER_NAME) {
+        return res.status(400).json({
+          error: 'TypeSafe keys can only be used for Jev (config.jev.api_key), not as the agent LLM key',
+        });
+      }
+
+      const jevError = await validateJevConfig(req.body.config?.jev, req.params.projectId, apiKey);
+      if (jevError) {
+        return res.status(jevError.status).json({ error: jevError.error });
       }
 
       // Verify the model belongs to the provider

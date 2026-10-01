@@ -1,5 +1,6 @@
 const OpenAIService = require('./openaiService');
 const toolService = require('./toolService');
+const jevService = require('./jevService');
 
 /**
  * Procedure Service
@@ -83,6 +84,19 @@ class ProcedureService {
    * latest message, based on the procedure's semantic trigger description.
    */
   async matchProcedure(agent, conversation, userMessage, procedures, usage = null) {
+    if (jevService.isEnabled(agent, 'procedure_matching')) {
+      const jev = await jevService.matchProcedure(agent, {
+        recentMessages: conversation.getDecryptedMessages().slice(-6),
+        userMessage,
+        procedures,
+      });
+      if (jev) {
+        this._accumulateUsage(usage || {}, jev.usage);
+        console.log(`[Procedure] Jev match: ${jev.procedure_id || 'none'} (confidence=${jev.confidence.toFixed(2)})`);
+        return jev.procedure_id;
+      }
+    }
+
     const openai = new OpenAIService(
       agent.api_key.getDecryptedKey(),
       agent.api_key.provider.name

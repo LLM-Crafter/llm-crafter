@@ -8,6 +8,7 @@ const summarizationService = require('./summarizationService');
 const suggestionService = require('./suggestionService');
 const languageDetectionService = require('./languageDetectionService');
 const procedureService = require('./procedureService');
+const jevService = require('./jevService');
 const { systemTools: systemToolDefinitions } = require('../config/systemTools');
 const hookService = require('./hookService');
 const { formatHistoryLines } = require('../utils/operatorGuidance');
@@ -217,7 +218,8 @@ class AgentService {
         agent.api_key.provider.name,
         conversation.getDecryptedMessages(),
         conversation.current_turn_language || null,
-        dynamicContext
+        dynamicContext,
+        agent
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;
@@ -492,7 +494,8 @@ class AgentService {
         agent.api_key.provider.name,
         conversation.getDecryptedMessages(),
         conversation.current_turn_language || null,
-        dynamicContext
+        dynamicContext,
+        agent
       );
       detectedLanguage = detection.language;
       conversation.current_turn_language = detectedLanguage;
@@ -3700,6 +3703,73 @@ Your response:`;
     total.cost += usage.cost;
   }
 
+  // ---- Graph: Jev (TypeSafe classifier) helpers ------------------------------
+
+  /** Kick off Jev responder routing early so it overlaps with the planner. */
+  _startResponderRouting(agent, context) {
+    if (!jevService.isEnabled(agent, 'responder_routing')) return null;
+    return jevService.routeResponder(agent, { conversationHistory: context.conversation_history });
+  }
+
+  async _resolveResponderModel(agent, routingPromise, thinkingProcess, totalTokenUsage) {
+    const defaultModel = this._getGraphModel(agent, 'responder');
+    const route = routingPromise ? await routingPromise : null;
+    if (!route) return defaultModel;
+
+    this._accumulateUsage(totalTokenUsage, route.usage);
+    const routing = agent.config.jev.responder_routing;
+    const model = (route.tier === 'fast' ? routing.fast_model : routing.powerful_model) || defaultModel;
+    thinkingProcess.push({
+      step: 'responder_routing',
+      reasoning: `Jev routed responder to "${route.tier}" tier (confidence=${route.confidence.toFixed(2)}, ${route.latency_ms}ms) → ${model}.`,
+    });
+    return model;
+  }
+
+  _getCriticInstructions(agent) {
+    const { sections } = this.buildPromptSpec(agent);
+    return [
+      sections.identity_and_tone,
+      sections.guardrails,
+      sections.output_format,
+      sections.domain_workflows,
+      agent.system_prompt,
+    ].filter(Boolean).join('\n\n');
+  }
+
+  /**
+   * Jev pre-check in front of the LLM critic. Returns true when Jev confidently
+   * approves the draft, so the LLM critic can be skipped.
+   */
+  async _jevCriticPrecheck(agent, conversation, context, toolsUsed, draftReply, thinkingProcess, totalTokenUsage) {
+    if (!jevService.isEnabled(agent, 'critic_precheck')) return false;
+
+    const check = await jevService.checkDraftReply(agent, {
+      conversationHistory: context.conversation_history,
+      toolResults: toolsUsed.map(tr => ({
+        tool_name: tr.tool_name,
+        success: tr.success,
+        result: tr.success ? this.getToolResultForPrompt(tr.tool_name, tr.result) : undefined,
+        error: tr.error,
+      })),
+      draftReply,
+      agentInstructions: this._getCriticInstructions(agent),
+      procedureDirective: context.procedure_directive,
+      language: agent.config.enforce_language_detection !== false ? conversation.current_turn_language : null,
+    });
+    if (!check) return false;
+
+    this._accumulateUsage(totalTokenUsage, check.usage);
+    thinkingProcess.push({
+      step: check.passed ? 'critic' : 'critic_precheck',
+      reasoning: check.passed
+        ? `Approved by Jev pre-check (${check.summary}; ${check.latency_ms}ms). LLM critic skipped.`
+        : `Jev pre-check not confident (${check.summary}; ${check.latency_ms}ms). Running LLM critic.`,
+    });
+    console.log(`[Graph Critic] Jev pre-check passed=${check.passed} (${check.summary}, ${check.latency_ms}ms)`);
+    return check.passed;
+  }
+
   // ---- Graph: planner + tool execution (shared by both variants) -----------
 
   /**
@@ -3738,6 +3808,34 @@ Your response:`;
 
     // Accumulated results across rounds — fed back to the Planner each iteration
     const accumulatedResults = [];
+
+    if (jevService.isEnabled(agent, 'planner_gate') && agent.tools.length > 0) {
+      const gate = await jevService.assessToolNeed(agent, {
+        conversationHistory: context.conversation_history,
+        tools: agent.tools,
+        procedureDirective: context.procedure_directive,
+      });
+      if (gate) {
+        this._accumulateUsage(totalTokenUsage, gate.usage);
+        thinkingProcess.push({
+          step: gate.skip ? 'planner_skipped' : 'planner_gate',
+          reasoning: gate.skip
+            ? `Jev: no tools needed (p=${gate.probability.toFixed(2)}, ${gate.latency_ms}ms, funnel_state=${gate.funnel_state}). Planner skipped.`
+            : `Jev: tools may be needed (p_no_tools=${gate.probability.toFixed(2)}, ${gate.latency_ms}ms). Running planner.`,
+        });
+        if (gate.skip) {
+          return {
+            plannerOutput: {
+              ...latestPlannerOutput,
+              funnel_state: gate.funnel_state,
+              reasoning: 'Planner skipped by Jev gate.',
+            },
+            toolsUsed,
+            handoffResult: null,
+          };
+        }
+      }
+    }
 
     // Build static parts once (cached per agent)
     const plannerSystemPrompt = this.buildGraphPlannerSystemPrompt(agent);
@@ -3990,6 +4088,7 @@ Your response:`;
 
     // Reuse the same context-building helpers as the standard reasoning loop
     const context = this.buildAgentContext(agent, conversation);
+    const routingPromise = this._startResponderRouting(agent, context);
 
     // ========== STEP 1 + 1b: Planner & Tool Execution ========================
     const { plannerOutput, handoffResult } = await this._graphPlanAndExecuteTools(
@@ -4021,7 +4120,7 @@ Your response:`;
       plannerOutput.funnel_state
     );
 
-    const responderModel = this._getGraphModel(agent, 'responder');
+    const responderModel = await this._resolveResponderModel(agent, routingPromise, thinkingProcess, totalTokenUsage);
 
     const responderLLM = await openai.generateCompletion(
       responderModel,
@@ -4047,8 +4146,11 @@ Your response:`;
     // The critic runs when the graph-specific sub-flag is not explicitly disabled.
     // Default: enabled (agent.config.graph_enable_critic !== false).
     const criticEnabled = agent.config?.graph_enable_critic !== false;
+    const jevApproved = criticEnabled && finalResponse
+      ? await this._jevCriticPrecheck(agent, conversation, context, toolsUsed, finalResponse, thinkingProcess, totalTokenUsage)
+      : false;
 
-    if (criticEnabled && finalResponse) {
+    if (criticEnabled && finalResponse && !jevApproved) {
       const criticSystemPrompt = this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language);
       const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, finalResponse);
 
@@ -4103,7 +4205,7 @@ Your response:`;
           reasoning: 'Critic provided a corrected response which replaced the original.',
         });
       }
-    } else {
+    } else if (!jevApproved) {
       thinkingProcess.push({
         step: 'critic',
         reasoning: criticEnabled
@@ -4182,6 +4284,7 @@ Your response:`;
     );
 
     const context = this.buildAgentContext(agent, conversation);
+    const routingPromise = this._startResponderRouting(agent, context);
 
     // ========== STEP 1 + 1b: Planner & Tool Execution (non-streaming) ========
     const { plannerOutput, handoffResult } = await this._graphPlanAndExecuteTools(
@@ -4226,7 +4329,7 @@ Your response:`;
       // We stream only after the critic has approved (or been skipped).
     };
 
-    const responderModel = this._getGraphModel(agent, 'responder');
+    const responderModel = await this._resolveResponderModel(agent, routingPromise, thinkingProcess, totalTokenUsage);
 
     const responderLLM = await openai.generateStreamingCompletion(
       responderModel,
@@ -4256,8 +4359,11 @@ Your response:`;
     // After the stream completes we parse the full JSON for thinkingProcess logs.
     const criticEnabled = agent.config?.graph_enable_critic !== false;
     let finalResponse = responderBuffer;
+    const jevApproved = criticEnabled && responderBuffer
+      ? await this._jevCriticPrecheck(agent, conversation, context, toolsUsed, responderBuffer, thinkingProcess, totalTokenUsage)
+      : false;
 
-    if (criticEnabled && responderBuffer) {
+    if (criticEnabled && responderBuffer && !jevApproved) {
       const criticSystemPrompt = this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language);
       const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, responderBuffer);
       const criticModel = this._getGraphModel(agent, 'critic');
@@ -4424,13 +4530,15 @@ Your response:`;
       }
 
     } else {
-      thinkingProcess.push({
-        step: 'critic',
-        reasoning: criticEnabled
-          ? 'Critic skipped — no response to evaluate.'
-          : 'Critic disabled via agent.config.graph_enable_critic.',
-      });
-      // Critic disabled/skipped — stream the responder buffer directly
+      if (!jevApproved) {
+        thinkingProcess.push({
+          step: 'critic',
+          reasoning: criticEnabled
+            ? 'Critic skipped — no response to evaluate.'
+            : 'Critic disabled via agent.config.graph_enable_critic.',
+        });
+      }
+      // Critic disabled/skipped or approved by Jev — stream the responder buffer directly
       if (streamCallback) {
         streamCallback(finalResponse);
       }

@@ -19,7 +19,19 @@
  */
 
 const OpenAIService = require('../openaiService');
+const jevService = require('../jevService');
 const { isHardBounceAddress, isNoReplyOnlyAddress, hasUsableReplyTo } = require('./emailSenderGuards');
+
+const DEFAULT_TOPICS = {
+  support: 'Help with a product, service, order or account.',
+  sales: 'Interest in buying, pricing or a quote.',
+  billing: 'Invoices, payments, refunds or subscriptions.',
+  complaint: 'Dissatisfaction with a product or service.',
+  spam: 'Unsolicited, irrelevant or malicious mail.',
+  newsletter: 'Marketing or newsletter content.',
+  bounce: 'Delivery failure or automated bounce.',
+  other: 'None of the above.',
+};
 
 class EmailTriageService {
   constructor() {
@@ -54,6 +66,59 @@ class EmailTriageService {
   getModelForProvider(providerName) {
     const key = (providerName || '').toLowerCase();
     return this.modelByProvider[key] || 'gpt-5.4-nano';
+  }
+
+  /** Topic options for the Jev classifier: the mailbox's allow/deny lists, or the default taxonomy. */
+  getTopicCriteria(account) {
+    const allow = account.triage?.allow_topics || [];
+    const deny = account.triage?.deny_topics || [];
+    const criteria = allow.length > 0 ? {} : { ...DEFAULT_TOPICS };
+    for (const topic of [...allow, ...deny]) {
+      if (!(topic in criteria)) criteria[topic] = null;
+    }
+    if (!('other' in criteria)) criteria.other = 'None of the above.';
+    return criteria;
+  }
+
+  /**
+   * Apply allow/deny topic lists and the mailbox confidence floor server-side
+   * as a safety net, whichever classifier produced `parsed`.
+   */
+  finalizeDecision(parsed, account, minConfidence, usage) {
+    // Case-insensitive, substring-tolerant: the classifier may vary capitalisation or pick a close synonym.
+    const allow = (account.triage?.allow_topics || []).map(t => t.toLowerCase());
+    const deny  = (account.triage?.deny_topics  || []).map(t => t.toLowerCase());
+    const topicLower = (parsed.topic || '').toLowerCase();
+
+    const topicInList = list =>
+      list.some(t => t === topicLower || topicLower.includes(t) || t.includes(topicLower));
+
+    let inScope = parsed.in_scope === true;
+    let decision = 'classified';
+    if (inScope && allow.length > 0 && !topicInList(allow)) {
+      inScope = false;
+      decision = 'topic_not_allowed';
+    }
+    if (inScope && deny.length > 0 && topicInList(deny)) {
+      inScope = false;
+      decision = 'topic_denied';
+    }
+    if (inScope && parsed.confidence < minConfidence) {
+      inScope = false;
+      decision = 'low_confidence';
+    }
+
+    return {
+      in_scope: inScope,
+      topic: parsed.topic || 'other',
+      intent: parsed.intent || 'other',
+      confidence: Number(parsed.confidence) || 0,
+      language: parsed.language || null,
+      decision,
+      reasons: parsed.reasons || '',
+      used_llm: true,
+      usage,
+    };
   }
 
   /**
@@ -269,6 +334,19 @@ class EmailTriageService {
     // 2. LLM classification
     const minConfidence = account.triage?.min_confidence_to_process ?? 0.6;
 
+    if (jevService.isEnabled(agent, 'email_triage')) {
+      const jev = await jevService.triageEmail(agent, {
+        email,
+        topics: this.getTopicCriteria(account),
+        allowTopics: account.triage?.allow_topics || [],
+        denyTopics: account.triage?.deny_topics || [],
+        guidance: account.triage?.custom_prompt || null,
+      });
+      if (jev) {
+        return this.finalizeDecision(jev, account, minConfidence, jev.usage);
+      }
+    }
+
     try {
       const apiKey = agent.api_key.getDecryptedKey();
       const openai = new OpenAIService(apiKey, agent.api_key.provider.name);
@@ -309,43 +387,7 @@ class EmailTriageService {
         };
       }
 
-      // Apply allow/deny topic lists server-side as a safety net.
-      // Use case-insensitive matching — the LLM may vary capitalisation or
-      // pick a close synonym, so we also check whether any allow_topic is a
-      // substring of the returned topic or vice-versa.
-      const allow = (account.triage?.allow_topics || []).map(t => t.toLowerCase());
-      const deny  = (account.triage?.deny_topics  || []).map(t => t.toLowerCase());
-      const topicLower = (parsed.topic || '').toLowerCase();
-
-      const topicInList = list =>
-        list.some(t => t === topicLower || topicLower.includes(t) || t.includes(topicLower));
-
-      let inScope = parsed.in_scope === true;
-      let decision = 'classified';
-      if (inScope && allow.length > 0 && !topicInList(allow)) {
-        inScope = false;
-        decision = 'topic_not_allowed';
-      }
-      if (inScope && deny.length > 0 && topicInList(deny)) {
-        inScope = false;
-        decision = 'topic_denied';
-      }
-      if (inScope && parsed.confidence < minConfidence) {
-        inScope = false;
-        decision = 'low_confidence';
-      }
-
-      return {
-        in_scope: inScope,
-        topic: parsed.topic || 'other',
-        intent: parsed.intent || 'other',
-        confidence: Number(parsed.confidence) || 0,
-        language: parsed.language || null,
-        decision,
-        reasons: parsed.reasons || '',
-        used_llm: true,
-        usage: llmResponse.usage,
-      };
+      return this.finalizeDecision(parsed, account, minConfidence, llmResponse.usage);
     } catch (e) {
       // Fail closed — when the classifier itself errors we do NOT auto-reply.
       console.error('[EmailTriage] classifier error:', e.message);

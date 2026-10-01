@@ -4,7 +4,12 @@ const defaultProviders = [
   {
     name: 'openai',
     models: [
-      // GPT-5.6 series (latest, Daybreak generation)
+      // GPT-6 series (latest)
+      'gpt-6-astra', // Top-tier flagship model
+      'gpt-6.1-sol', // Balanced flagship tier
+      'gpt-6-luna', // Fastest, most cost-efficient tier
+
+      // GPT-5.6 series (Daybreak generation)
       'gpt-5.6-sol', // Flagship model for complex reasoning and agentic tasks (daybreak-blue-latest alias)
       'gpt-5.6-terra', // Balanced speed/intelligence tier
       'gpt-5.6-luna', // Fastest, most cost-efficient tier
@@ -191,6 +196,11 @@ const defaultProviders = [
       'grok-beta',
       'grok-vision-beta',
     ],
+  },
+  {
+    // Classifier-only provider (Jev); not usable as an agent's main LLM key.
+    name: 'typesafe',
+    models: ['jev-latest', 'jev-preview', 'jev-1.13.0'],
   },
 ];
 

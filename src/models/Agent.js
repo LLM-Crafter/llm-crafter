@@ -298,6 +298,24 @@ const agentSchema = new mongoose.Schema(
           default: null,
         },
       },
+      // Optional TypeSafe Jev classifier: fast yes/no/choice decisions that replace
+      // or short-circuit LLM calls. Every feature falls back to the LLM path when
+      // Jev errors or is below min_confidence.
+      jev: {
+        api_key: { type: String, ref: 'ApiKey', default: null }, // provider must be "typesafe"
+        model: { type: String, default: 'jev-latest' },
+        min_confidence: { type: Number, default: 0.85, min: 0.5, max: 1 },
+        critic_precheck: { type: Boolean, default: false },
+        planner_gate: { type: Boolean, default: false },
+        language_detection: { type: Boolean, default: false },
+        procedure_matching: { type: Boolean, default: false },
+        email_triage: { type: Boolean, default: false },
+        responder_routing: {
+          enabled: { type: Boolean, default: false },
+          fast_model: { type: String, default: null },
+          powerful_model: { type: String, default: null }, // null = graph responder model
+        },
+      },
       // Optional structured prompt sections for graph agents.
       // When any field is non-empty the graph pipeline derives role-specific
       // prompts from these sections instead of the raw system_prompt.

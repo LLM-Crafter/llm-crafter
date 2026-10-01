@@ -1,4 +1,5 @@
 const OpenAIService = require('./openaiService');
+const jevService = require('./jevService');
 
 /**
  * Language Detection Service
@@ -74,19 +75,8 @@ class LanguageDetectionService {
     // Include URL / locale hints from the page context so the model can
     // resolve ambiguous short messages like "hallo" (Dutch vs German) when
     // the page URL or locale makes the intended language obvious.
-    const contextHints = [];
-    for (const [key, value] of Object.entries(dynamicContext)) {
-      const lk = key.toLowerCase();
-      if (
-        lk.includes('url') ||
-        lk.includes('lang') ||
-        lk.includes('locale') ||
-        lk.includes('region') ||
-        lk.includes('country')
-      ) {
-        contextHints.push(`${key}: ${JSON.stringify(value)}`);
-      }
-    }
+    const contextHints = Object.entries(this.getContextHints(dynamicContext))
+      .map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
     if (contextHints.length > 0) {
       prompt += 'Page context (strong hint for language detection):\n';
       prompt += contextHints.join('\n') + '\n\n';
@@ -94,9 +84,7 @@ class LanguageDetectionService {
 
     // Add recent conversation context (last 4 messages, excluding the current one)
     if (conversationMessages.length > 0) {
-      const recentMessages = conversationMessages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .slice(-4);
+      const recentMessages = this.getRecentMessages(conversationMessages);
 
       if (recentMessages.length > 0) {
         prompt += 'Conversation history:\n';
@@ -114,6 +102,29 @@ class LanguageDetectionService {
     return prompt;
   }
 
+  getContextHints(dynamicContext = {}) {
+    const hints = {};
+    for (const [key, value] of Object.entries(dynamicContext || {})) {
+      const lk = key.toLowerCase();
+      if (
+        lk.includes('url') ||
+        lk.includes('lang') ||
+        lk.includes('locale') ||
+        lk.includes('region') ||
+        lk.includes('country')
+      ) {
+        hints[key] = value;
+      }
+    }
+    return hints;
+  }
+
+  getRecentMessages(conversationMessages = []) {
+    return conversationMessages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-4);
+  }
+
   /**
    * Detect the language of a text message.
    *
@@ -122,12 +133,13 @@ class LanguageDetectionService {
    * @param {string} providerName - Provider name (e.g. "openai", "anthropic", "google", …)
    * @param {Array} [conversationMessages=[]] - Recent conversation messages for context
    * @param {string|null} [previousLanguage=null] - Language detected on the previous turn
+   * @param {Object|null} [agent=null] - Agent document; enables the Jev classifier when config.jev.language_detection is on
    * @returns {Promise<{ language: string, confidence: string, usage: Object|null }>}
    *   language  — ISO 639-1 code (lowercase), e.g. "en"
    *   confidence — "high" when the detector produced a clean code, "low" otherwise
    *   usage — token/cost usage when an LLM call was actually made, else null
    */
-  async detectLanguage(text, decryptedApiKey, providerName, conversationMessages = [], previousLanguage = null, dynamicContext = {}) {
+  async detectLanguage(text, decryptedApiKey, providerName, conversationMessages = [], previousLanguage = null, dynamicContext = {}, agent = null) {
     // Guard: empty input → use previous language or default to "en"
     if (!text || text.trim().length === 0) {
       return { language: previousLanguage || 'en', confidence: 'low', usage: null };
@@ -153,6 +165,19 @@ class LanguageDetectionService {
     // language switch.
     if (previousLanguage && !/\s/.test(stripped)) {
       return { language: previousLanguage, confidence: 'low', usage: null };
+    }
+
+    if (jevService.isEnabled(agent, 'language_detection')) {
+      const jev = await jevService.detectLanguage(agent, {
+        text,
+        recentMessages: this.getRecentMessages(conversationMessages),
+        contextHints: this.getContextHints(dynamicContext),
+        extraCodes: [previousLanguage, ...(agent.config?.required_languages || [])],
+      });
+      if (jev) {
+        console.log(`[LanguageDetection] Jev detected "${jev.language}" (confidence=${jev.confidence.toFixed(2)})`);
+        return { language: jev.language, confidence: 'high', usage: jev.usage };
+      }
     }
 
     try {

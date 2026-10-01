@@ -274,7 +274,8 @@ class EmailAgentService {
         agent.api_key.provider.name,
         conversation.getDecryptedMessages(),
         conversation.current_turn_language || null,
-        dynamicContext
+        dynamicContext,
+        agent
       );
       conversation.current_turn_language = detection.language;
       this._foldLlmUsage(conversation, detection.usage);
