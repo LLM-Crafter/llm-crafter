@@ -202,6 +202,17 @@ class AgentService {
     }
     await conversation.addMessage(userMessageData);
 
+    // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter.
+    // Started now so it runs in parallel with the agent instead of delaying the response;
+    // generateAIConversationTitle never rejects (returns null on error).
+    const userMessageCount = conversation.messages.filter(
+      msg => msg.role === 'user'
+    ).length;
+    const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
+    const titlePromise = shouldGenerateTitle
+      ? this.generateAIConversationTitle(conversation, agent)
+      : null;
+
     // Fire message hooks in agent-controlled mode (non-blocking)
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
       console.error('[Hook] message hook error:', err.message);
@@ -252,17 +263,9 @@ class AgentService {
       });
     }
 
-    // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter
-    const userMessageCount = conversation.messages.filter(
-      msg => msg.role === 'user'
-    ).length;
-    
-    const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
-    if (shouldGenerateTitle) {
-      const titleResult = await this.generateAIConversationTitle(
-        conversation,
-        agent
-      );
+    // Apply the title generated in parallel with the agent (started after the user message was added)
+    if (titlePromise) {
+      const titleResult = await titlePromise;
       if (titleResult) {
         conversation.title = titleResult.title;
         if (titleResult.titleTranslations.length > 0) {
@@ -478,6 +481,17 @@ class AgentService {
     }
     await conversation.addMessage(userMessageData);
 
+    // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter.
+    // Started now so it runs in parallel with the agent instead of delaying the response;
+    // generateAIConversationTitle never rejects (returns null on error).
+    const userMessageCount = conversation.messages.filter(
+      msg => msg.role === 'user'
+    ).length;
+    const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
+    const titlePromise = shouldGenerateTitle
+      ? this.generateAIConversationTitle(conversation, agent)
+      : null;
+
     // Fire message hooks in agent-controlled mode (non-blocking)
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
       console.error('[Hook] message hook error:', err.message);
@@ -531,17 +545,9 @@ class AgentService {
       assistantMessageId = lastMsg?._id || null;
     }
 
-    // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter
-    const userMessageCount = conversation.messages.filter(
-      msg => msg.role === 'user'
-    ).length;
-    
-    const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
-    if (shouldGenerateTitle) {
-      const titleResult = await this.generateAIConversationTitle(
-        conversation,
-        agent
-      );
+    // Apply the title generated in parallel with the agent (started after the user message was added)
+    if (titlePromise) {
+      const titleResult = await titlePromise;
       if (titleResult) {
         conversation.title = titleResult.title;
         if (titleResult.titleTranslations.length > 0) {
