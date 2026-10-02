@@ -60,7 +60,10 @@ class ChannelTurnBufferService {
         },
         { upsert: true }
       );
-    });
+      // Always resolve truthy: findByIdAndUpdate resolves null when the upsert inserts, and
+      // withLock also returns null on lock contention — conflating the two re-ran the merge
+      // and duplicated the first message of every turn ("hey" → "hey\nhey").
+    }).then(() => true);
 
     for (let attempt = 1; attempt <= LOCK_RETRY_ATTEMPTS; attempt++) {
       const result = await lockService.withLock(`channel_turn:${conversationId}`, LOCK_TTL_MS, merge);
