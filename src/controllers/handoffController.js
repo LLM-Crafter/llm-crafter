@@ -970,7 +970,14 @@ const getLatestMessages = async (req, res) => {
       },
     ]);
 
-    if (!rawConversation) {
+    // Session tokens are issued per agent: only let them read that agent's
+    // conversations. (JWT / API key callers are unaffected.)
+    const sessionAgent = req.sessionToken?.agent;
+    const sessionAgentId = sessionAgent?._id ?? sessionAgent;
+    if (
+      !rawConversation ||
+      (sessionAgentId && String(rawConversation.agent) !== String(sessionAgentId))
+    ) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 

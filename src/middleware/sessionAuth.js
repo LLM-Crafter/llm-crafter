@@ -6,9 +6,13 @@ const crypto = require('crypto');
  * This is used for agent execution after a session token has been generated
  * @param {Object} options - Configuration options
  * @param {boolean} options.skipInteractionCount - If true, don't count this request against interaction limits
+ * @param {boolean} options.lightweight - If true, run the same validity checks but skip
+ *   populating user/organization/agent (hot polling routes). Only req.sessionToken is set
+ *   (with `agent` as a plain id); req.user, req.organization, req.apiKey and req.agent are
+ *   left undefined, so only use this on routes whose handlers don't read them.
  */
 const sessionAuth = (options = {}) => {
-  const { skipInteractionCount = false } = options;
+  const { skipInteractionCount = false, lightweight = false } = options;
 
   return async (req, res, next) => {
     try {
@@ -30,19 +34,27 @@ const sessionAuth = (options = {}) => {
       const tokenHash = SessionToken.hashSessionToken(sessionToken);
 
       // Find and validate the session
-      const session = await SessionToken.findOne({
+      const sessionQuery = SessionToken.findOne({
         token_hash: tokenHash,
         is_revoked: false,
         expires_at: { $gt: new Date() },
-      }).populate([
-        {
-          path: 'user_api_key',
-          populate: {
-            path: 'user organization',
-          },
-        },
-        'agent',
-      ]);
+      });
+      const session = lightweight
+        ? await sessionQuery
+            .select(
+              'user_api_key agent expires_at is_revoked max_interactions interactions_used client_ip'
+            )
+            // Only what the API key validity checks below need
+            .populate({ path: 'user_api_key', select: 'is_active expires_at' })
+        : await sessionQuery.populate([
+            {
+              path: 'user_api_key',
+              populate: {
+                path: 'user organization',
+              },
+            },
+            'agent',
+          ]);
 
       if (!session) {
         return res.status(401).json({
@@ -105,6 +117,10 @@ const sessionAuth = (options = {}) => {
 
       // Attach session data to request
       req.sessionToken = session;
+      if (lightweight) {
+        req.remainingInteractions = remainingInteractions;
+        return next();
+      }
       req.user = session.user_api_key.user;
       req.organization = session.user_api_key.organization;
       req.apiKey = session.user_api_key;
@@ -138,6 +154,7 @@ const sessionAuth = (options = {}) => {
  * @param {boolean} options.allowApiKey - Allow API key authentication
  * @param {Array} options.requiredScopes - Required scopes for API key authentication
  * @param {boolean} options.skipInteractionCount - If true, don't count this request against interaction limits
+ * @param {boolean} options.lightweight - Passed to sessionAuth (session tokens only; API key auth is unaffected)
  */
 const flexibleSessionAuth = (options = {}) => {
   const {
@@ -145,6 +162,7 @@ const flexibleSessionAuth = (options = {}) => {
     allowApiKey = true,
     requiredScopes = [],
     skipInteractionCount = false,
+    lightweight = false,
   } = options;
 
   return async (req, res, next) => {
@@ -154,12 +172,12 @@ const flexibleSessionAuth = (options = {}) => {
 
     // Try session token first if provided
     if (allowSessionToken && sessionTokenHeader) {
-      return sessionAuth({ skipInteractionCount })(req, res, next);
+      return sessionAuth({ skipInteractionCount, lightweight })(req, res, next);
     }
 
     // Try session token in Authorization header
     if (allowSessionToken && authHeader?.startsWith('Session ')) {
-      return sessionAuth({ skipInteractionCount })(req, res, next);
+      return sessionAuth({ skipInteractionCount, lightweight })(req, res, next);
     }
 
     // Try API key if provided and no session token

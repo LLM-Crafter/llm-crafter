@@ -219,7 +219,9 @@ router.get(
 router.get(
   '/conversations/:conversationId/messages/latest',
   generalLimiter, // Rate limit: 100 requests per 15 minutes
-  flexibleSessionAuth({ skipInteractionCount: true }),
+  // lightweight: polled every few seconds by the widget/SDK; the handler
+  // doesn't need the populated user/organization/agent.
+  flexibleSessionAuth({ skipInteractionCount: true, lightweight: true }),
   handoffController.getLatestMessages
 );
 
