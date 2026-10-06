@@ -920,14 +920,61 @@ const getLatestMessages = async (req, res) => {
     const { conversationId } = req.params;
     const { since, include_system = 'true' } = req.query;
 
-    const conversation = await Conversation.findById(conversationId).populate(
-      'agent',
-      'name type'
-    );
+    // Get messages since timestamp
+    let sinceDate;
+    if (since) {
+      sinceDate = new Date(since);
+      if (Number.isNaN(sinceDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid `since` timestamp' });
+      }
+    } else {
+      // Default to last 30 seconds if no timestamp provided
+      sinceDate = new Date(Date.now() - 30000);
+    }
 
-    if (!conversation) {
+    // This endpoint is polled every few seconds, so filter messages inside
+    // Mongo and only ship the new ones (without heavy per-message fields)
+    // instead of loading and hydrating the whole conversation each time.
+    const messageConditions = [{ $gt: ['$$m.timestamp', sinceDate] }];
+    if (include_system !== 'true') {
+      messageConditions.push({ $ne: ['$$m.role', 'system'] });
+    }
+
+    const [rawConversation] = await Conversation.aggregate([
+      // aggregate() doesn't cast; _id is a UUID string so match it as-is.
+      { $match: { _id: String(conversationId) } },
+      {
+        $project: {
+          agent: 1,
+          channel: 1,
+          status: 1,
+          current_handler: 1,
+          handoff_info: 1,
+          last_customer_message_at: 1,
+          gdpr: 1,
+          messages: {
+            $filter: {
+              input: '$messages',
+              as: 'm',
+              cond: { $and: messageConditions },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          'messages.thinking_process': 0,
+          'messages.tools_used': 0,
+          'messages.token_usage': 0,
+        },
+      },
+    ]);
+
+    if (!rawConversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
+
+    const conversation = Conversation.hydrate(rawConversation);
 
     // TODO: Add access control - check if user has permission to view this conversation
     // This could be based on:
@@ -935,30 +982,11 @@ const getLatestMessages = async (req, res) => {
     // - User is a human operator assigned to this conversation
     // - User has appropriate role/permissions
 
-    // Get messages since timestamp
-    let sinceDate;
-    if (since) {
-      sinceDate = new Date(since);
-    } else {
-      // Default to last 30 seconds if no timestamp provided
-      sinceDate = new Date(Date.now() - 30000);
-    }
-
-    // Filter messages (use decrypted view for GDPR-encrypted conversations).
-    // Attachment analysis text is meant for the agent only, not this consumer-facing feed.
-    const allMessages = conversation.getDecryptedMessages({
+    // Messages were already filtered by timestamp/role in the query; decrypt
+    // only those (GDPR-encrypted conversations). Attachment analysis text is
+    // meant for the agent only, not this consumer-facing feed.
+    const newMessages = conversation.getDecryptedMessages({
       includeAttachmentContext: false,
-    });
-    let newMessages = allMessages.filter(msg => {
-      const msgDate = new Date(msg.timestamp);
-      const matchesTime = msgDate > sinceDate;
-
-      // Include/exclude system messages based on query parameter
-      if (include_system !== 'true' && msg.role === 'system') {
-        return false;
-      }
-
-      return matchesTime;
     });
 
     // Sort by timestamp (oldest first)
