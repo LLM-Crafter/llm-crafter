@@ -615,6 +615,9 @@ const getOrganizationConversations = async (req, res) => {
     }
 
     const conversations = await Conversation.find(filter)
+      .select(
+        '-messages.token_usage -messages.thinking_process -messages.tools_used'
+      )
       .populate('agent', 'name type')
       .sort({ 'metadata.last_activity': -1 })
       .skip(skip)
