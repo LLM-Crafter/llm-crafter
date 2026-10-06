@@ -477,6 +477,11 @@ conversationSchema.index({ agent: 1, channel: 1, status: 1 }); // New index for 
 conversationSchema.index({ channel: 1, 'metadata.last_activity': 1 }); // New index for channel analytics
 conversationSchema.index({ archived: 1 });
 conversationSchema.index({ agent: 1, archived: 1 });
+// Conversation list (handoffController.getOrganizationConversations): agent $in [+ status],
+// sorted by last activity — lets Mongo walk the index in order instead of fetching every
+// matching conversation (with all its messages) and sorting in memory.
+conversationSchema.index({ agent: 1, 'metadata.last_activity': -1 });
+conversationSchema.index({ agent: 1, status: 1, 'metadata.last_activity': -1 });
 // Support server-side filtering of conversations by third-party annotations.
 // Compound with `agent` so the org/project scoping stays part of the index scan.
 conversationSchema.index({
