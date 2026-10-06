@@ -99,11 +99,22 @@ const getPendingHandoffs = async (req, res) => {
       filter['handoff_info.urgency'] = urgency;
     }
 
-    const conversations = await Conversation.find(filter)
+    const conversationDocs = await Conversation.find(filter)
+      .select(
+        '-procedure_state -dynamic_context -messages.token_usage -messages.thinking_process -messages.tools_used'
+      )
       .populate('agent', 'name type')
       .sort({ 'handoff_info.requested_at': -1 })
       .skip(skip)
       .limit(parseInt(limit));
+
+    // gdpr is still loaded so the toJSON transform can decrypt message
+    // content; strip it from the response afterwards.
+    const conversations = conversationDocs.map(doc => {
+      const json = doc.toJSON();
+      delete json.gdpr;
+      return json;
+    });
 
     const total = await Conversation.countDocuments(filter);
 
