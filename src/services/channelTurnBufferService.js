@@ -33,7 +33,7 @@ class ChannelTurnBufferService {
    * Merge an incoming message into the conversation's pending turn (creating
    * it if absent) and push `run_at` to `debounceMs` from now.
    * @param {string} conversationId
-   * @param {Object} turn - { agentId, channel, userIdentifier, content, channelMetadata, storedMedia, options }
+   * @param {Object} turn - { agentId, channel, userIdentifier, content, messageId, channelMetadata, storedMedia, options }
    * @param {number} debounceMs
    */
   async bufferTurn(conversationId, turn, debounceMs) {
@@ -53,6 +53,8 @@ class ChannelTurnBufferService {
           channel: turn.channel,
           user_identifier: turn.userIdentifier,
           content: mergedContent,
+          // A merged burst is stored as one message — keep the latest platform ID for it
+          message_id: turn.messageId || existing?.message_id || null,
           channel_metadata: turn.channelMetadata,
           stored_media: mergedMedia,
           options: turn.options || {},

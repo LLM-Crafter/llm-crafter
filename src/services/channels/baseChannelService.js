@@ -67,6 +67,27 @@ class BaseChannelService {
   }
 
   /**
+   * Normalize a reaction event. Reactions update an existing message instead
+   * of being stored as a new one.
+   * @param {Object} rawMessage - Raw event (used for sender and timestamp)
+   * @param {string} targetMessageId - Platform ID of the message reacted to
+   * @param {string|null} emoji - Reaction emoji, or null when it was removed
+   * @returns {Object} - Normalized reaction
+   */
+  normalizeReaction(rawMessage, targetMessageId, emoji) {
+    return {
+      type: 'reaction',
+      channel: this.channel,
+      user_identifier: this.extractUserIdentifier(rawMessage),
+      timestamp: this.extractTimestamp(rawMessage) || new Date(),
+      reaction: {
+        message_id: targetMessageId,
+        emoji: emoji || null,
+      },
+    };
+  }
+
+  /**
    * Extract user identifier from raw message
    * Must be implemented by each channel
    * @param {Object} rawMessage

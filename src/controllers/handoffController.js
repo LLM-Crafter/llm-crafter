@@ -282,17 +282,24 @@ const takeoverConversation = async (req, res) => {
         timestamp: new Date(),
         handler_info: handlerInfo,
       });
+      const operatorMessageId = conversation.messages[conversation.messages.length - 1]._id;
       await conversation.save();
 
       // Send message through the appropriate channel
       if (conversation.channel && conversation.channel !== 'website') {
         try {
-          await channelOrchestrator.sendChannelMessage(
+          const platformMessageId = await channelOrchestrator.sendChannelMessage(
             conversation.agent,
             conversation.channel,
             conversation.user_identifier,
             message,
             conversation.channel_metadata
+          );
+          await channelOrchestrator.recordPlatformMessageId(
+            conversation._id,
+            operatorMessageId,
+            conversation.channel,
+            platformMessageId
           );
           console.log(
             `[Handoff] Takeover message sent via ${conversation.channel}`
@@ -409,18 +416,25 @@ const sendHumanMessage = async (req, res) => {
       timestamp: new Date(),
       handler_info: handlerInfo,
     });
+    const operatorMessageId = conversation.messages[conversation.messages.length - 1]._id;
 
     await conversation.save();
 
     // Send message through the appropriate channel
     if (conversation.channel && conversation.channel !== 'website') {
       try {
-        await channelOrchestrator.sendChannelMessage(
+        const platformMessageId = await channelOrchestrator.sendChannelMessage(
           conversation.agent,
           conversation.channel,
           conversation.user_identifier,
           message,
           conversation.channel_metadata
+        );
+        await channelOrchestrator.recordPlatformMessageId(
+          conversation._id,
+          operatorMessageId,
+          conversation.channel,
+          platformMessageId
         );
         console.log(
           `[Handoff] Human message sent via ${conversation.channel} to ${conversation.user_identifier}`

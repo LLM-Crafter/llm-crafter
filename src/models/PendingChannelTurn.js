@@ -21,6 +21,8 @@ const pendingChannelTurnSchema = new mongoose.Schema(
     channel: { type: String, required: true },
     user_identifier: { type: String, required: true },
     content: { type: String, default: '' },
+    // Platform message ID of the latest buffered message (used to match reactions)
+    message_id: { type: String, default: null },
     channel_metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
     stored_media: { type: [mongoose.Schema.Types.Mixed], default: [] },
     options: { type: mongoose.Schema.Types.Mixed, default: {} },

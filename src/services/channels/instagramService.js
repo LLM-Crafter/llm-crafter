@@ -136,7 +136,9 @@ class InstagramService extends BaseChannelService {
       // 1. changes[] array (field: "messages") — most common for Instagram
       // 2. messaging[] array — older/alternative format
       if (entry.changes) {
-        const messageChange = entry.changes.find(c => c.field === 'messages');
+        const messageChange = entry.changes.find(
+          c => c.field === 'messages' || c.field === 'message_reactions'
+        );
         if (!messageChange) return null;
         messaging = messageChange.value;
       } else if (entry.messaging) {
@@ -152,6 +154,16 @@ class InstagramService extends BaseChannelService {
 
       // Ignore delivery/read receipts
       if (messaging.delivery || messaging.read) return null;
+
+      // Reactions (react/unreact) update the original message
+      if (messaging.reaction) {
+        const { mid, action, emoji, reaction } = messaging.reaction;
+        return this.normalizeReaction(
+          messaging,
+          mid,
+          action === 'unreact' ? null : emoji || reaction
+        );
+      }
 
       return this.normalizeMessage(messaging);
     } catch (error) {

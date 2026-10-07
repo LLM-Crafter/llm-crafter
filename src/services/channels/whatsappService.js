@@ -737,6 +737,10 @@ class WhatsAppService extends BaseChannelService {
       messageId: message.id,
     });
 
+    if (message.type === 'reaction') {
+      return this.normalizeWhatsAppReaction(message);
+    }
+
     const normalized = this.normalizeMessage(message);
     normalized.metaContact = change?.value?.contacts?.[0];
     return normalized;
@@ -751,8 +755,24 @@ class WhatsAppService extends BaseChannelService {
       messageId: rawMessage.id,
     });
 
+    if (rawMessage.type === 'reaction') {
+      return this.normalizeWhatsAppReaction(rawMessage);
+    }
+
     const normalized = this.normalizeMessage(rawMessage);
     return normalized;
+  }
+
+  /**
+   * Normalize a Cloud API reaction message (Meta/360Dialog).
+   * An empty emoji means the user removed their reaction.
+   */
+  normalizeWhatsAppReaction(message) {
+    return this.normalizeReaction(
+      message,
+      message.reaction?.message_id,
+      message.reaction?.emoji
+    );
   }
 
   /**

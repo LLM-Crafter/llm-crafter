@@ -109,6 +109,13 @@ const messageSchema = new mongoose.Schema({
     // See channel_info.email schema in docs/api/individual-api-endpoints.md.
     email: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },
+  // Emoji reaction the end user left on this message from their channel
+  // (WhatsApp, Instagram, Messenger). Matched via channel_info.message_id;
+  // removed when the user takes the reaction back.
+  reaction: {
+    emoji: String,
+    timestamp: Date,
+  },
   // Free-form metadata for channel-specific annotations (e.g. outbound_id,
   // outbound_state for email drafts/sent tracking).
   metadata: {

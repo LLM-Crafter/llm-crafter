@@ -228,6 +228,16 @@ class MessengerService extends BaseChannelService {
       // Ignore delivery/read receipts
       if (messaging.delivery || messaging.read) return null;
 
+      // Reactions (react/unreact) update the original message
+      if (messaging.reaction) {
+        const { mid, action, emoji, reaction } = messaging.reaction;
+        return this.normalizeReaction(
+          messaging,
+          mid,
+          action === 'unreact' ? null : emoji || reaction
+        );
+      }
+
       // Handle postback (button clicks)
       if (messaging.postback) {
         // Treat postback as a text message with the payload as content

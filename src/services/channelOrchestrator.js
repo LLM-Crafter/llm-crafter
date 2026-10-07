@@ -92,6 +92,7 @@ class ChannelOrchestrator {
     const normalizedMessage = {
       user_identifier: claimed.user_identifier,
       content: claimed.content || '',
+      message_id: claimed.message_id || null,
       channel_metadata: claimed.channel_metadata || {},
     };
     const storedMedia = claimed.stored_media || [];
@@ -283,6 +284,11 @@ class ChannelOrchestrator {
         if (!normalizedMessage) {
           return { success: true, status: 'ignored', reason: 'non_message_webhook' };
         }
+
+        // Reactions update the message they target — never a new message or an agent turn
+        if (normalizedMessage.type === 'reaction') {
+          return this._applyReaction(agentId, channel, normalizedMessage);
+        }
       }
 
       // Show typing indicator for channels that support it
@@ -390,6 +396,7 @@ class ChannelOrchestrator {
             channel,
             userIdentifier: normalizedMessage.user_identifier,
             content: normalizedMessage.content,
+            messageId: normalizedMessage.message_id,
             channelMetadata: normalizedMessage.channel_metadata,
             storedMedia,
             options,
@@ -427,11 +434,67 @@ class ChannelOrchestrator {
       timestamp: new Date(),
       channel_info: {
         channel,
-        message_id: normalizedMessage.channel_metadata?.message_id,
+        message_id: normalizedMessage.message_id || undefined,
         media: storedMedia.length > 0 ? storedMedia : undefined,
       },
     });
     await conversation.save();
+  }
+
+  /**
+   * Applies (or removes) an end-user reaction on the message it targets, matched by the
+   * platform message ID stored in channel_info.message_id. Reactions to messages we can't
+   * match (e.g. sent before IDs were recorded) are dropped.
+   */
+  async _applyReaction(agentId, channel, normalizedReaction) {
+    const { message_id: targetId, emoji } = normalizedReaction.reaction;
+    if (!targetId) {
+      return { success: true, status: 'ignored', reason: 'reaction_without_target' };
+    }
+
+    const update = emoji
+      ? { $set: { 'messages.$[m].reaction': { emoji, timestamp: normalizedReaction.timestamp } } }
+      : { $unset: { 'messages.$[m].reaction': '' } };
+
+    const result = await Conversation.updateOne(
+      {
+        agent: agentId,
+        channel,
+        user_identifier: normalizedReaction.user_identifier,
+        'messages.channel_info.message_id': targetId,
+      },
+      update,
+      { arrayFilters: [{ 'm.channel_info.message_id': targetId }] }
+    );
+
+    if (result.matchedCount === 0) {
+      console.log(`[ChannelOrchestrator] ${channel} reaction target ${targetId} not found — ignoring`);
+      return { success: true, status: 'ignored', reason: 'reaction_target_not_found' };
+    }
+
+    console.log(`[ChannelOrchestrator] ${channel} reaction ${emoji ? `"${emoji}" applied to` : 'removed from'} ${targetId}`);
+    return { success: true, status: emoji ? 'reaction_applied' : 'reaction_removed' };
+  }
+
+  /**
+   * Stores the platform message ID returned by a send on the conversation message it
+   * corresponds to, so later reactions to it can be matched. Non-fatal.
+   */
+  async recordPlatformMessageId(conversationId, messageId, channel, platformMessageId) {
+    if (!conversationId || !messageId || !platformMessageId) return;
+    try {
+      await Conversation.updateOne(
+        { _id: conversationId, 'messages._id': messageId },
+        {
+          $set: {
+            'messages.$.channel_info.channel': channel,
+            'messages.$.channel_info.message_id': platformMessageId,
+          },
+        }
+      );
+    } catch (error) {
+      console.error(`[ChannelOrchestrator] Failed to record ${channel} message ID (non-fatal):`, error.message);
+    }
   }
 
   /**
@@ -455,10 +518,13 @@ class ChannelOrchestrator {
           filename: m.filename || null,
           stored: m.stored,
         }));
+      }
+      // Persist the platform message ID (so reactions can find it) and any media on the user message
+      if (storedMedia.length > 0 || normalizedMessage.message_id) {
         dynamicContext.channel_info_for_message = {
           channel,
-          message_id: normalizedMessage.channel_metadata?.message_id,
-          media: storedMedia,
+          message_id: normalizedMessage.message_id || undefined,
+          media: storedMedia.length > 0 ? storedMedia : undefined,
         };
       }
 
@@ -516,7 +582,7 @@ class ChannelOrchestrator {
       }
 
       // Send response back through the correct channel
-      await this.sendResponse(
+      const platformMessageId = await this.sendResponse(
         agentId,
         channelService,
         normalizedMessage.user_identifier,
@@ -525,6 +591,7 @@ class ChannelOrchestrator {
         normalizedMessage.channel_metadata,
         { ...options, conversationId: conversation._id }
       );
+      await this.recordPlatformMessageId(conversation._id, agentResponse.message_id, channel, platformMessageId);
 
       // Update channel analytics
       await this.updateChannelAnalytics(agentId, channel);
@@ -655,7 +722,7 @@ class ChannelOrchestrator {
         }));
         dynamicContext.channel_info_for_message = {
           channel,
-          message_id: normalizedMessage.channel_metadata?.message_id,
+          message_id: normalizedMessage.message_id || undefined,
           media: storedMedia,
         };
       }
@@ -914,6 +981,7 @@ class ChannelOrchestrator {
    * @param {string} channel - Channel name
    * @param {Object} channelMetadata - Channel metadata
    * @param {Object} options - Additional options
+   * @returns {Promise<string|null>} - Platform message ID of the first message sent, if any
    */
   async sendResponse(
     agentId,
@@ -1000,21 +1068,28 @@ class ChannelOrchestrator {
         // Fall through with original text
       }
 
+      // Rich cards return { results: [...] } instead of a single message_id
+      const sentIds = [];
+      const trackSent = result => {
+        const id = result?.message_id ?? result?.results?.[0]?.message_id;
+        if (id) sentIds.push(String(id));
+      };
+
       // 1. Send the plain text (if any remains after pattern removal)
       if (textToSend && textToSend.trim()) {
-        await channelService.sendMessage(recipient, textToSend, sendOptions);
+        trackSent(await channelService.sendMessage(recipient, textToSend, sendOptions));
       }
 
       // 2. Send each rich card via the channel's native format
       for (const card of cards) {
         try {
-          await channelService.sendRichCard(recipient, card, sendOptions);
+          trackSent(await channelService.sendRichCard(recipient, card, sendOptions));
         } catch (cardErr) {
           console.error(`[ChannelOrchestrator] Failed to send rich card via ${channel}:`, cardErr.message);
           // Fallback: send a text-only version of the card
           const fallbackText = this._cardToFallbackText(card);
           if (fallbackText) {
-            await channelService.sendMessage(recipient, fallbackText, sendOptions);
+            trackSent(await channelService.sendMessage(recipient, fallbackText, sendOptions));
           }
         }
       }
@@ -1023,6 +1098,8 @@ class ChannelOrchestrator {
         `[ChannelOrchestrator] Response sent via ${channel} to ${recipient}` +
           (cards.length > 0 ? ` (${cards.length} card${cards.length > 1 ? 's' : ''})` : '')
       );
+
+      return sentIds[0] || null;
     } catch (error) {
       console.error(
         `[ChannelOrchestrator] Error sending response via ${channel}:`,
@@ -1200,7 +1277,7 @@ class ChannelOrchestrator {
       const messageObject =
         typeof message === 'string' ? { response: message } : message;
 
-      await this.sendResponse(
+      const platformMessageId = await this.sendResponse(
         agentId,
         channelService,
         userIdentifier,
@@ -1212,6 +1289,8 @@ class ChannelOrchestrator {
       console.log(
         `[ChannelOrchestrator] Message sent via ${channel} to ${userIdentifier}`
       );
+
+      return platformMessageId;
     } catch (error) {
       console.error(
         `[ChannelOrchestrator] Error sending message via ${channel}:`,

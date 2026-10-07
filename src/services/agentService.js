@@ -252,8 +252,9 @@ class AgentService {
       : await this.executeAgentReasoning(agent, conversation, dynamicContext, cancellationToken);
 
     // Add assistant response to conversation (skip if handoff occurred - message already added by tool)
+    let assistantMessageId = null;
     if (response.content) {
-      await conversation.addMessage({
+      const savedConversation = await conversation.addMessage({
         role: 'assistant',
         content: response.content,
         thinking_process: response.thinking_process,
@@ -261,6 +262,8 @@ class AgentService {
         token_usage: response.token_usage,
         timestamp: new Date(),
       });
+      const lastMsg = savedConversation.messages[savedConversation.messages.length - 1];
+      assistantMessageId = lastMsg?._id || null;
     }
 
     // Apply the title generated in parallel with the agent (started after the user message was added)
@@ -309,6 +312,7 @@ class AgentService {
 
     const result = {
       conversation_id: conversation._id,
+      message_id: assistantMessageId,
       response: response.content,
       thinking_process: response.thinking_process,
       tools_used: response.tools_used,
