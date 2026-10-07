@@ -1,4 +1,5 @@
 const Agent = require('../models/Agent');
+const ChannelConfig = require('../models/ChannelConfig');
 const Conversation = require('../models/Conversation');
 const AgentExecution = require('../models/AgentExecution');
 const Project = require('../models/Project');
@@ -7,6 +8,7 @@ const FileUpload = require('../models/FileUpload');
 const Organization = require('../models/Organization');
 const KnowledgeBase = require('../models/KnowledgeBase');
 const agentService = require('../services/agentService');
+const channelOrchestrator = require('../services/channelOrchestrator');
 const toolService = require('../services/toolService');
 const summarizationService = require('../services/summarizationService');
 const { v4: uuidv4 } = require('uuid');
@@ -797,6 +799,11 @@ const deleteAgent = async (req, res) => {
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found' });
     }
+
+    // Free the agent's channel accounts — a leftover config would keep shared
+    // webhooks (WhatsApp/Instagram/Messenger) routing to the deleted agent.
+    await ChannelConfig.deleteOne({ agent: agent._id });
+    channelOrchestrator.clearAgentCache(agent._id);
 
     res.json({ message: 'Agent deleted successfully' });
   } catch (error) {

@@ -8,6 +8,57 @@ const ChannelConfig = require('../models/ChannelConfig');
 const Agent = require('../models/Agent');
 const encryption = require('../utils/encryption');
 
+// Channels whose shared Meta webhook is routed by an account ID stored in the config.
+// An account can only be connected to one agent at a time (see updateChannelConfig).
+const SHARED_WEBHOOK_ACCOUNTS = [
+  { channel: 'whatsapp', key: 'phone_number_id' },
+  { channel: 'instagram', key: 'page_id' },
+  { channel: 'messenger', key: 'page_id' },
+];
+
+/**
+ * Enabled configs for an account whose agent still exists (configs left behind by
+ * deleted agents are skipped), most recently updated first.
+ * @returns {Promise<Array<{agent, organization, agent_name}>>}
+ */
+const findConfigsForAccount = async (channel, key, accountId, excludeAgentId = null) => {
+  const filter = {
+    [`${channel}.credentials.${key}`]: accountId,
+    [`${channel}.enabled`]: true,
+  };
+  if (excludeAgentId) filter.agent = { $ne: excludeAgentId };
+
+  const configs = await ChannelConfig.find(filter)
+    .sort({ updatedAt: -1 })
+    .select('agent organization')
+    .lean();
+  if (configs.length === 0) return [];
+
+  const agents = await Agent.find({ _id: { $in: configs.map(c => c.agent) } })
+    .select('name')
+    .lean();
+  const names = new Map(agents.map(a => [String(a._id), a.name]));
+  return configs
+    .filter(c => names.has(String(c.agent)))
+    .map(c => ({ ...c, agent_name: names.get(String(c.agent)) }));
+};
+
+/**
+ * Resolve which agent a shared webhook for `accountId` belongs to. Configs saved before
+ * duplicate connections were rejected can still share an account, so prefer the most
+ * recently updated one.
+ * @returns {Promise<string|null>} agent ID
+ */
+const findAgentForAccount = async (channel, key, accountId) => {
+  const configs = await findConfigsForAccount(channel, key, accountId);
+  if (configs.length > 1) {
+    console.warn(
+      `[${channel}] ${configs.length} enabled configs share ${key} ${accountId} — routing to ${configs[0].agent}`
+    );
+  }
+  return configs[0]?.agent || null;
+};
+
 // ===== WEBHOOK HANDLERS =====
 
 /**
@@ -102,19 +153,14 @@ const handleWhatsAppSharedWebhook = async (req, res) => {
     }
 
     // Look up which agent owns this WhatsApp phone number
-    const channelConfig = await ChannelConfig.findOne({
-      'whatsapp.credentials.phone_number_id': phoneNumberId,
-      'whatsapp.enabled': true,
-    }).lean();
+    const agentId = await findAgentForAccount('whatsapp', 'phone_number_id', phoneNumberId);
 
-    if (!channelConfig) {
+    if (!agentId) {
       console.warn(
         `[WhatsApp] No agent configured for phone_number_id: ${phoneNumberId}`
       );
       return res.status(200).json({ success: true });
     }
-
-    const agentId = channelConfig.agent;
 
     // Process message asynchronously
     channelOrchestrator
@@ -233,7 +279,9 @@ const handleInstagramWebhook = async (req, res) => {
     if (entry?.messaging?.[0]) {
       recipientId = entry.messaging[0].recipient?.id;
     } else if (entry?.changes) {
-      const messageChange = entry.changes.find(c => c.field === 'messages');
+      const messageChange = entry.changes.find(
+        c => c.field === 'messages' || c.field === 'message_reactions'
+      );
       recipientId = messageChange?.value?.recipient?.id;
     }
 
@@ -243,12 +291,9 @@ const handleInstagramWebhook = async (req, res) => {
     }
 
     // Look up which agent owns this Instagram account
-    const channelConfig = await ChannelConfig.findOne({
-      'instagram.credentials.page_id': recipientId,
-      'instagram.enabled': true,
-    }).lean();
+    const agentId = await findAgentForAccount('instagram', 'page_id', recipientId);
 
-    if (!channelConfig) {
+    if (!agentId) {
       // Debug: log all instagram configs to help identify the mismatch
       const allInstagramConfigs = await ChannelConfig.find({
         'instagram.enabled': true,
@@ -262,8 +307,6 @@ const handleInstagramWebhook = async (req, res) => {
       );
       return res.status(200).json({ success: true });
     }
-
-    const agentId = channelConfig.agent;
 
     // Process message asynchronously
     channelOrchestrator
@@ -325,19 +368,14 @@ const handleMessengerWebhook = async (req, res) => {
     }
 
     // Look up which agent owns this Facebook Page
-    const channelConfig = await ChannelConfig.findOne({
-      'messenger.credentials.page_id': recipientId,
-      'messenger.enabled': true,
-    }).lean();
+    const agentId = await findAgentForAccount('messenger', 'page_id', recipientId);
 
-    if (!channelConfig) {
+    if (!agentId) {
       console.warn(
         `[Messenger] No agent configured for page ID: ${recipientId}`
       );
       return res.status(200).json({ success: true });
     }
-
-    const agentId = channelConfig.agent;
 
     // Process message asynchronously
     channelOrchestrator
@@ -695,6 +733,28 @@ const updateChannelConfig = async (req, res) => {
         ...channelConfig.global_settings,
         ...updates.global_settings,
       };
+    }
+
+    // Shared webhooks route by account ID, so an account can only be connected to one
+    // agent. Reject rather than silently taking it over — it must be disconnected (or its
+    // agent deleted) first.
+    for (const { channel, key } of SHARED_WEBHOOK_ACCOUNTS) {
+      const accountId = channelConfig[channel]?.credentials?.[key];
+      if (!updates[channel] || !channelConfig[channel]?.enabled || !accountId) continue;
+
+      const [existing] = await findConfigsForAccount(channel, key, accountId, agentId);
+      if (existing) {
+        // Only name the other agent when it's in the caller's own organization
+        const sameOrg = String(existing.organization) === String(orgId);
+        return res.status(409).json({
+          error: `This ${channel} account is already connected to another agent. Disconnect it there first.`,
+          code: 'CHANNEL_ACCOUNT_IN_USE',
+          channel,
+          ...(sameOrg && {
+            connected_agent: { id: existing.agent, name: existing.agent_name },
+          }),
+        });
+      }
     }
 
     await channelConfig.save();

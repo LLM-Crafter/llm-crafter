@@ -1212,9 +1212,9 @@ class ChannelOrchestrator {
    * @param {string} agentId - Agent ID
    */
   clearAgentCache(agentId) {
-    this.channelServices.delete(`${agentId}_whatsapp`);
-    this.channelServices.delete(`${agentId}_telegram`);
-    this.channelServices.delete(`${agentId}_email`);
+    for (const key of this.channelServices.keys()) {
+      if (key.startsWith(`${agentId}_`)) this.channelServices.delete(key);
+    }
     this.initialized.delete(agentId);
     console.log(`[ChannelOrchestrator] Cleared cache for agent ${agentId}`);
   }
