@@ -110,8 +110,9 @@ const messageSchema = new mongoose.Schema({
     email: { type: mongoose.Schema.Types.Mixed, default: undefined },
   },
   // Emoji reaction the end user left on this message from their channel
-  // (WhatsApp, Instagram, Messenger). Matched via channel_info.message_id;
-  // removed when the user takes the reaction back.
+  // (WhatsApp, Instagram, Messenger). Matched via channel_info.message_id.
+  // emoji is null once the user takes the reaction back; timestamp is server
+  // time of the last change so pollers can pick it up via `since`.
   reaction: {
     emoji: String,
     timestamp: Date,

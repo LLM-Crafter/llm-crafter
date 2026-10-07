@@ -973,6 +973,24 @@ const getLatestMessages = async (req, res) => {
               cond: { $and: messageConditions },
             },
           },
+          // Reactions set/removed since the last poll, on messages of any age
+          reactions: {
+            $map: {
+              input: {
+                $filter: {
+                  input: '$messages',
+                  as: 'm',
+                  cond: { $gt: ['$$m.reaction.timestamp', sinceDate] },
+                },
+              },
+              as: 'm',
+              in: {
+                message_id: '$$m._id',
+                emoji: '$$m.reaction.emoji',
+                timestamp: '$$m.reaction.timestamp',
+              },
+            },
+          },
         },
       },
       {
@@ -1042,9 +1060,17 @@ const getLatestMessages = async (req, res) => {
       }
     }
 
+    // emoji: null means the user removed their reaction
+    const reactions = (rawConversation.reactions || []).map(r => ({
+      message_id: String(r.message_id),
+      emoji: r.emoji ?? null,
+      timestamp: r.timestamp,
+    }));
+
     res.json({
       conversation_id: conversationId,
       new_messages: newMessages,
+      reactions,
       current_handler: currentHandler,
       conversation_status: conversationStatus,
       messaging_window: messagingWindow,

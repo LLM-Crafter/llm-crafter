@@ -445,16 +445,16 @@ class ChannelOrchestrator {
    * Applies (or removes) an end-user reaction on the message it targets, matched by the
    * platform message ID stored in channel_info.message_id. Reactions to messages we can't
    * match (e.g. sent before IDs were recorded) are dropped.
+   *
+   * Removal is stored as emoji: null rather than unsetting the field so pollers
+   * (getLatestMessages) can see it, and the timestamp is server time — not the webhook's
+   * event time — so a late-delivered webhook still lands after the poller's `since`.
    */
   async _applyReaction(agentId, channel, normalizedReaction) {
     const { message_id: targetId, emoji } = normalizedReaction.reaction;
     if (!targetId) {
       return { success: true, status: 'ignored', reason: 'reaction_without_target' };
     }
-
-    const update = emoji
-      ? { $set: { 'messages.$[m].reaction': { emoji, timestamp: normalizedReaction.timestamp } } }
-      : { $unset: { 'messages.$[m].reaction': '' } };
 
     const result = await Conversation.updateOne(
       {
@@ -463,7 +463,7 @@ class ChannelOrchestrator {
         user_identifier: normalizedReaction.user_identifier,
         'messages.channel_info.message_id': targetId,
       },
-      update,
+      { $set: { 'messages.$[m].reaction': { emoji: emoji || null, timestamp: new Date() } } },
       { arrayFilters: [{ 'm.channel_info.message_id': targetId }] }
     );
 
