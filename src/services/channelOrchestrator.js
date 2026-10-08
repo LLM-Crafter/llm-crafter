@@ -1080,8 +1080,16 @@ class ChannelOrchestrator {
         trackSent(await channelService.sendMessage(recipient, textToSend, sendOptions));
       }
 
-      // 2. Send each rich card via the channel's native format
-      for (const card of cards) {
+      // 2. Send each rich card via the channel's native format.
+      // Carousels are native on Instagram/Messenger; elsewhere each element goes as its own card.
+      const supportsCarousel = channel === 'instagram' || channel === 'messenger';
+      const cardsToSend = cards.flatMap(card =>
+        card.type === 'carousel' && !supportsCarousel
+          ? (card.elements || []).map(element => ({ ...element, type: 'card' }))
+          : [card]
+      );
+
+      for (const card of cardsToSend) {
         try {
           trackSent(await channelService.sendRichCard(recipient, card, sendOptions));
         } catch (cardErr) {
@@ -1113,10 +1121,19 @@ class ChannelOrchestrator {
    * Build a plain-text fallback from a rich card when sending fails.
    */
   _cardToFallbackText(card) {
+    if (card.type === 'carousel') {
+      const items = (card.elements || []).map(e => this._cardToFallbackText(e)).filter(Boolean);
+      return items.length > 0 ? items.join('\n\n') : null;
+    }
     const parts = [];
     if (card.title) parts.push(`*${card.title}*`);
     if (card.subtitle) parts.push(card.subtitle);
     if (card.body) parts.push(card.body);
+    for (const section of card.sections || []) {
+      for (const row of section.rows || []) {
+        parts.push(`• ${row.title}${row.description ? ` — ${row.description}` : ''}`);
+      }
+    }
     if (card.actions?.length > 0) {
       for (const action of card.actions) {
         if (action.type === 'url' && action.url) {

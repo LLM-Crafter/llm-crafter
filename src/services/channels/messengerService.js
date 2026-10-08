@@ -7,6 +7,7 @@ const BaseChannelService = require('./baseChannelService');
 const axios = require('axios');
 const crypto = require('crypto');
 const encryption = require('../../utils/encryption');
+const { buildRichCardMessage } = require('./metaTemplateBuilder');
 
 class MessengerService extends BaseChannelService {
   constructor(channelConfig) {
@@ -123,7 +124,8 @@ class MessengerService extends BaseChannelService {
   }
 
   /**
-   * Send a rich message with buttons or templates
+   * Send a rich message from a transformer webhook response
+   * (generic template, carousel or quick replies — see metaTemplateBuilder)
    */
   async sendRichCard(recipient, card, options = {}) {
     try {
@@ -138,60 +140,11 @@ class MessengerService extends BaseChannelService {
         this.messengerConfig.credentials.access_token
       );
 
-      let payload;
-
-      if (card.type === 'card') {
-        // Generic template (card with image, title, buttons)
-        const buttons = (card.actions || []).slice(0, 3).map(action => {
-          if (action.type === 'url') {
-            return {
-              type: 'web_url',
-              url: action.url,
-              title: (action.label || 'View').substring(0, 20),
-            };
-          }
-          return {
-            type: 'postback',
-            title: (action.label || 'Select').substring(0, 20),
-            payload: action.payload || action.label,
-          };
-        });
-
-        payload = {
-          recipient: { id: recipient },
-          message: {
-            attachment: {
-              type: 'template',
-              payload: {
-                template_type: 'generic',
-                elements: [
-                  {
-                    title: (card.title || '').substring(0, 80),
-                    subtitle: (card.body || card.subtitle || '').substring(0, 80),
-                    image_url: card.image_url || undefined,
-                    buttons: buttons.length > 0 ? buttons : undefined,
-                  },
-                ],
-              },
-            },
-          },
-          messaging_type: 'RESPONSE',
-        };
-      } else {
-        // Quick replies or plain text fallback
-        payload = {
-          recipient: { id: recipient },
-          message: {
-            text: card.body || card.title || 'Choose an option:',
-            quick_replies: (card.actions || []).slice(0, 13).map(action => ({
-              content_type: 'text',
-              title: (action.label || 'Option').substring(0, 20),
-              payload: action.payload || action.label,
-            })),
-          },
-          messaging_type: 'RESPONSE',
-        };
-      }
+      const payload = {
+        recipient: { id: recipient },
+        message: buildRichCardMessage(card),
+        messaging_type: 'RESPONSE',
+      };
 
       const response = await axios.post(url, payload, {
         headers: {

@@ -7,6 +7,7 @@ const BaseChannelService = require('./baseChannelService');
 const axios = require('axios');
 const crypto = require('crypto');
 const encryption = require('../../utils/encryption');
+const { buildRichCardMessage } = require('./metaTemplateBuilder');
 
 const IG_API_BASE = 'https://graph.instagram.com/v25.0';
 
@@ -123,6 +124,51 @@ class InstagramService extends BaseChannelService {
   }
 
   /**
+   * Send a rich message from a transformer webhook response
+   * (generic template, carousel or quick replies — see metaTemplateBuilder)
+   */
+  async sendRichCard(recipient, card, options = {}) {
+    try {
+      if (!this.isEnabled()) {
+        throw new Error('Instagram channel is not enabled');
+      }
+
+      const igId = this.instagramConfig.credentials.page_id;
+      const url = `${IG_API_BASE}/${igId}/messages`;
+
+      const accessToken = this.safeDecrypt(
+        this.instagramConfig.credentials.access_token
+      );
+
+      const payload = {
+        recipient: { id: recipient },
+        message: buildRichCardMessage(card),
+      };
+
+      const response = await axios.post(url, payload, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      this.log('Rich card sent', {
+        to: recipient,
+        type: card.type,
+        messageId: response.data.message_id,
+      });
+
+      return {
+        success: true,
+        message_id: response.data.message_id,
+        provider: 'instagram',
+      };
+    } catch (error) {
+      this.handleError(error, 'sendRichCard');
+    }
+  }
+
+  /**
    * Handle incoming message from Instagram webhook
    */
   async handleIncomingMessage(rawMessage) {
@@ -137,7 +183,10 @@ class InstagramService extends BaseChannelService {
       // 2. messaging[] array — older/alternative format
       if (entry.changes) {
         const messageChange = entry.changes.find(
-          c => c.field === 'messages' || c.field === 'message_reactions'
+          c =>
+            c.field === 'messages' ||
+            c.field === 'message_reactions' ||
+            c.field === 'messaging_postbacks'
         );
         if (!messageChange) return null;
         messaging = messageChange.value;
@@ -163,6 +212,19 @@ class InstagramService extends BaseChannelService {
           mid,
           action === 'unreact' ? null : emoji || reaction
         );
+      }
+
+      // Handle postback (generic template button taps)
+      if (messaging.postback) {
+        // Treat postback as a text message with the payload as content
+        const postbackMessage = {
+          ...messaging,
+          message: {
+            mid: messaging.postback.mid || `postback_${messaging.timestamp}`,
+            text: messaging.postback.payload || messaging.postback.title,
+          },
+        };
+        return this.normalizeMessage(postbackMessage);
       }
 
       return this.normalizeMessage(messaging);

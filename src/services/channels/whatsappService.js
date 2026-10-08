@@ -809,6 +809,9 @@ class WhatsAppService extends BaseChannelService {
     if (rawMessage.interactive?.button_reply?.title) {
       return rawMessage.interactive.button_reply.title;
     }
+    if (rawMessage.interactive?.list_reply?.title) {
+      return rawMessage.interactive.list_reply.title;
+    }
 
     // Media captions (Meta sends caption inside the media object, not in text.body)
     if (rawMessage.image?.caption) return rawMessage.image.caption;
