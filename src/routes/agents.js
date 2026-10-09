@@ -320,6 +320,13 @@ router.delete(
   agentController.deleteAllConversations
 );
 
+router.delete(
+  '/:agentId/conversations/:conversationId',
+  auth,
+  orgAuth.hasRole('admin'),
+  agentController.deleteConversation
+);
+
 // ===== EXECUTION HISTORY ROUTES =====
 
 router.get(

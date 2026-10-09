@@ -3054,6 +3054,29 @@ const deleteAllConversations = async (req, res) => {
   }
 };
 
+const deleteConversation = async (req, res) => {
+  try {
+    const { agentId, conversationId } = req.params;
+
+    const conversation = await Conversation.findOneAndDelete({
+      _id: conversationId,
+      agent: agentId,
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    res.json({
+      message: 'Conversation deleted successfully',
+      conversationId: conversation._id,
+    });
+  } catch (error) {
+    console.error('Delete conversation error:', error);
+    res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+};
+
 // ===== HOOKS CONFIGURATION =====
 
 const configureHooks = async (req, res) => {
@@ -3209,6 +3232,7 @@ module.exports = {
   removeToolFromAgent,
   getAgentTools,
   deleteAllConversations,
+  deleteConversation,
   configureHooks,
   getHooks,
 };
