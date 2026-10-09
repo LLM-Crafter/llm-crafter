@@ -6,14 +6,21 @@ const auth = require('../middleware/auth');
 const orgAuth = require('../middleware/organizationAuth');
 const validate = require('../middleware/validate');
 
+const embeddingApiKeyValidation = body('embedding_api_key_id')
+  .optional({ nullable: true })
+  .isString()
+  .withMessage('embedding_api_key_id must be a string');
+
 const createValidation = [
   body('name').trim().notEmpty().isLength({ max: 200 }).withMessage('Name is required (max 200 chars)'),
   body('description').optional().isString().isLength({ max: 2000 }),
+  embeddingApiKeyValidation,
 ];
 
 const updateValidation = [
   body('name').optional().trim().notEmpty().isLength({ max: 200 }),
   body('description').optional().isString().isLength({ max: 2000 }),
+  embeddingApiKeyValidation,
 ];
 
 const kbIdValidation = param('kbId').isString().notEmpty();

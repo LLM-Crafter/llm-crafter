@@ -48,14 +48,18 @@ class RAGController {
         });
       }
 
-      if (!api_key_id) {
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+      const embeddingApiKeyId = await ragService.resolveEmbeddingApiKeyId(
+        api_key_id,
+        knowledgeBaseId
+      );
+
+      if (!embeddingApiKeyId) {
         return res.status(400).json({
           success: false,
           error: 'API key ID is required',
         });
       }
-
-      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
 
       // Check if background processing is requested (default: true)
       if (process_in_background) {
@@ -65,7 +69,7 @@ class RAGController {
           documents,
           orgId,
           projectId,
-          api_key_id,
+          embeddingApiKeyId,
           {
             type: 'single',
             knowledgeBaseId,
@@ -92,7 +96,7 @@ class RAGController {
           documents,
           orgId,
           projectId,
-          api_key_id,
+          embeddingApiKeyId,
           knowledgeBaseId
         );
 
@@ -149,14 +153,18 @@ class RAGController {
         });
       }
 
-      if (!api_key_id) {
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+      const embeddingApiKeyId = await ragService.resolveEmbeddingApiKeyId(
+        api_key_id,
+        knowledgeBaseId
+      );
+
+      if (!embeddingApiKeyId) {
         return res.status(400).json({
           success: false,
           error: 'API key ID is required',
         });
       }
-
-      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
 
       let results;
 
@@ -166,7 +174,7 @@ class RAGController {
             query,
             organizationId,
             projectId,
-            api_key_id,
+            embeddingApiKeyId,
             {
               limit,
               brands,
@@ -205,7 +213,7 @@ class RAGController {
             query,
             organizationId,
             projectId,
-            api_key_id,
+            embeddingApiKeyId,
             {
               limit,
               threshold,
@@ -306,6 +314,17 @@ class RAGController {
       }
 
       const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+      const embeddingApiKeyId = await ragService.resolveEmbeddingApiKeyId(
+        api_key_id,
+        knowledgeBaseId
+      );
+
+      if (!embeddingApiKeyId) {
+        return res.status(400).json({
+          success: false,
+          error: 'API key ID is required',
+        });
+      }
 
       // Check if background processing is requested (default: true for batch operations)
       if (process_in_background) {
@@ -315,7 +334,7 @@ class RAGController {
           document_batches,
           orgId,
           projectId,
-          api_key_id,
+          embeddingApiKeyId,
           {
             type: 'batch',
             knowledgeBaseId,
@@ -353,7 +372,7 @@ class RAGController {
               batch.documents,
               orgId,
               projectId,
-              api_key_id,
+              embeddingApiKeyId,
               knowledgeBaseId
             );
 

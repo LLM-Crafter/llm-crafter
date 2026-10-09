@@ -31,6 +31,13 @@ const knowledgeBaseSchema = new mongoose.Schema(
       trim: true,
       maxlength: 2000,
     },
+    // Used for indexing and query embeddings instead of the caller's/agent's key,
+    // so agents on providers without an embeddings API can still search this KB
+    embedding_api_key_id: {
+      type: String,
+      ref: 'ApiKey',
+      default: null,
+    },
     created_by: {
       type: String,
       ref: 'User',

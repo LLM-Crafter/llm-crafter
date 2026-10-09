@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const OpenAIService = require('./openaiService');
 const ApiKey = require('../models/ApiKey');
+const KnowledgeBase = require('../models/KnowledgeBase');
 const VectorDatabaseConfig = require('../models/VectorDatabaseConfig');
 const { createVectorDatabase } = require('./vectorDatabaseService');
 
@@ -111,6 +112,10 @@ class RAGService {
     const startTime = Date.now();
     const indexed = [];
     const scopeKey = knowledgeBaseId || 'project';
+    const embeddingApiKeyId = await this.resolveEmbeddingApiKeyId(
+      apiKeyId,
+      knowledgeBaseId
+    );
 
     try {
       // Get vector database instance
@@ -123,7 +128,10 @@ class RAGService {
             organizationId,
             projectId
           );
-          const embeddings = await this.generateEmbeddings(chunks, apiKeyId);
+          const embeddings = await this.generateEmbeddings(
+            chunks,
+            embeddingApiKeyId
+          );
           const documentId = this.resolveDocumentId(doc);
 
           for (let i = 0; i < chunks.length; i++) {
@@ -437,34 +445,62 @@ class RAGService {
   }
 
   /**
-   * Generate embeddings for text chunks
+   * The KB's own embedding key wins over the caller's key, so a KB is always
+   * indexed and queried with the same key regardless of which agent searches it
    */
-  async generateEmbeddings(chunks, apiKeyId) {
+  async resolveEmbeddingApiKeyId(apiKeyId, knowledgeBaseId = null) {
+    if (knowledgeBaseId) {
+      const knowledgeBase = await KnowledgeBase.findById(knowledgeBaseId)
+        .select('embedding_api_key_id')
+        .lean();
+      if (knowledgeBase?.embedding_api_key_id) {
+        return knowledgeBase.embedding_api_key_id;
+      }
+    }
+    return apiKeyId || null;
+  }
+
+  async getEmbeddingClient(apiKeyId) {
+    if (!apiKeyId) {
+      throw new Error('No API key available for embeddings');
+    }
+
     const apiKey = await ApiKey.findById(apiKeyId).populate('provider');
     if (!apiKey || !apiKey.is_active) {
       throw new Error('Invalid or inactive API key');
     }
 
-    const decryptedKey = apiKey.getDecryptedKey();
-    const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
+    return new OpenAIService(apiKey.getDecryptedKey(), apiKey.provider.name);
+  }
 
+  /**
+   * text-embedding-3-small is only served by OpenAI's endpoint, which is also
+   * where unknown provider names are routed
+   */
+  supportsEmbeddings(providerName) {
+    return (
+      OpenAIService.prototype.getBaseUrl(providerName || 'openai') ===
+      OpenAIService.prototype.getBaseUrl('openai')
+    );
+  }
+
+  /**
+   * Generate embeddings for text chunks
+   */
+  async generateEmbeddings(chunks, apiKeyId) {
+    const openai = await this.getEmbeddingClient(apiKeyId);
+
+    // No zero-vector fallback: it would index the document as unsearchable
+    // while reporting success, so let the document fail instead
     const embeddings = [];
     for (const chunk of chunks) {
-      try {
-        const result = await openai.createEmbedding({
-          input: chunk.content,
-          model: 'text-embedding-3-small',
-        });
-        const embedding = result.data[0].embedding;
-        console.log(
-          `  📊 Generated embedding with ${embedding.length} dimensions`
-        );
-        embeddings.push(embedding);
-      } catch (error) {
-        console.error('Error generating embedding:', error);
-        // Use zero vector as fallback
-        embeddings.push(new Array(1536).fill(0));
-      }
+      const result = await openai.createEmbedding({
+        input: chunk.content,
+        model: 'text-embedding-3-small',
+      });
+      const embedding = result.data[0].embedding;
+      console.log(`  📊 Generated embedding with ${embedding.length} dimensions`);
+      embeddings.push(embedding);
     }
 
     return embeddings;
@@ -474,15 +510,7 @@ class RAGService {
    * Generate an embedding for a search query
    */
   async embedQuery(query, apiKeyId) {
-    const apiKey = await ApiKey.findById(apiKeyId).populate('provider');
-    if (!apiKey || !apiKey.is_active) {
-      throw new Error('Invalid or inactive API key');
-    }
-
-    const openai = new OpenAIService(
-      apiKey.getDecryptedKey(),
-      apiKey.provider.name
-    );
+    const openai = await this.getEmbeddingClient(apiKeyId);
     const response = await openai.createEmbedding({
       input: query,
       model: 'text-embedding-3-small',
@@ -537,7 +565,11 @@ class RAGService {
 
     try {
       const vectorDB = await this.getVectorDatabase(organizationId, projectId);
-      const queryEmbedding = await this.embedQuery(query, apiKeyId);
+      const embeddingApiKeyId = await this.resolveEmbeddingApiKeyId(
+        apiKeyId,
+        knowledgeBaseId
+      );
+      const queryEmbedding = await this.embedQuery(query, embeddingApiKeyId);
 
       const matches = await vectorDB.search(
         query,

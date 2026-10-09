@@ -1,5 +1,6 @@
 const KnowledgeBase = require('../models/KnowledgeBase');
 const Agent = require('../models/Agent');
+const ApiKey = require('../models/ApiKey');
 const ragService = require('../services/ragService');
 
 function findScoped(req) {
@@ -8,6 +9,24 @@ function findScoped(req) {
     organization_id: req.params.orgId,
     project_id: req.params.projectId,
   });
+}
+
+// Returns an error message, or null when the key can be used for this project's embeddings
+async function validateEmbeddingApiKey(apiKeyId, projectId) {
+  const apiKey = await ApiKey.findOne({
+    _id: String(apiKeyId),
+    project: projectId,
+  }).populate('provider');
+  if (!apiKey) {
+    return 'Embedding API key not found in this project';
+  }
+  if (!apiKey.is_active) {
+    return 'Embedding API key is inactive';
+  }
+  if (!ragService.supportsEmbeddings(apiKey.provider?.name)) {
+    return `Provider '${apiKey.provider?.name}' does not support embeddings, use an OpenAI key`;
+  }
+  return null;
 }
 
 function agentsUsingKnowledgeBase(orgId, projectId, kbId) {
@@ -41,11 +60,24 @@ const listKnowledgeBases = async (req, res) => {
 const createKnowledgeBase = async (req, res) => {
   try {
     const { name, description } = req.body;
+    const embeddingApiKeyId = req.body.embedding_api_key_id || null;
+
+    if (embeddingApiKeyId) {
+      const keyError = await validateEmbeddingApiKey(
+        embeddingApiKeyId,
+        req.params.projectId
+      );
+      if (keyError) {
+        return res.status(400).json({ success: false, error: keyError });
+      }
+    }
+
     const knowledgeBase = await KnowledgeBase.create({
       organization_id: req.params.orgId,
       project_id: req.params.projectId,
       name,
       description,
+      embedding_api_key_id: embeddingApiKeyId,
       created_by: req.user._id,
     });
 
@@ -99,6 +131,20 @@ const updateKnowledgeBase = async (req, res) => {
     }
     if (req.body.description !== undefined) {
       knowledgeBase.description = req.body.description;
+    }
+    if (req.body.embedding_api_key_id !== undefined) {
+      // null or '' clears the override, falling back to the caller's key
+      const embeddingApiKeyId = req.body.embedding_api_key_id || null;
+      if (embeddingApiKeyId) {
+        const keyError = await validateEmbeddingApiKey(
+          embeddingApiKeyId,
+          req.params.projectId
+        );
+        if (keyError) {
+          return res.status(400).json({ success: false, error: keyError });
+        }
+      }
+      knowledgeBase.embedding_api_key_id = embeddingApiKeyId;
     }
     await knowledgeBase.save();
 

@@ -1956,10 +1956,8 @@ class ToolService {
       );
     }
 
-    const apiKeyId = config._agent_api_key_id;
-    if (!apiKeyId) {
-      throw new Error('Agent API key not configured for RAG search');
-    }
+    // Fallback only: ragService prefers each knowledge base's own embedding key
+    const apiKeyId = config._agent_api_key_id || null;
 
     console.log('🔍 RAG Search Handler', {
       search_type,
