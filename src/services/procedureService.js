@@ -502,11 +502,18 @@ class ProcedureService {
     }
 
     const next = this.getNextRequiredStep(state, procedureDef);
-    lines.push(
-      next
-        ? `Next action: ask the user for — ${next.name}. ${next.description || ''}`
-        : 'All required steps satisfied — you may proceed with the resolution/answer and any gated actions.'
-    );
+    if (!next) {
+      lines.push('All required steps satisfied — you may proceed with the resolution/answer and any gated actions.');
+    } else if (['tool_action', 'escalate'].includes(next.type)) {
+      // Action steps are completed by a tool call, not by the user — tell the model to act now
+      lines.push(
+        next.gated_tool
+          ? `Next action: call the '${next.gated_tool}' tool now — ${next.name}. ${next.description || ''} All information it depends on has been collected; do not ask the user for anything else first.`
+          : `Next action: ${next.name}. ${next.description || ''}`
+      );
+    } else {
+      lines.push(`Next action: ask the user for — ${next.name}. ${next.description || ''}`);
+    }
 
     return lines.join('\n');
   }
