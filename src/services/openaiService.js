@@ -300,73 +300,78 @@ const PRICING = {
     },
   },
   xai: {
-    // Grok 4 series (prices per 1M tokens divided by 1000 for per 1K tokens)
-    'grok-4': {
-      input: 0.003, // $3.00 per million tokens input
-      output: 0.015, // $15.00 per million tokens output
+    // Prices per 1M tokens divided by 1000 for per 1K tokens.
+    // Short-context rates (<200k prompt tokens); at >=200k the whole request is
+    // billed at 2x — not modeled here.
+    // Grok 4.5+ series
+    'grok-4.7': {
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.006, // $6.00 per million tokens output
     },
-    'grok-4-fast-reasoning': {
-      input: 0.0002, // $0.20 per million tokens input
-      output: 0.0005, // $0.50 per million tokens output
+    'grok-4.6': {
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.006, // $6.00 per million tokens output
     },
-    'grok-4-fast-non-reasoning': {
-      input: 0.0002, // $0.20 per million tokens input
-      output: 0.0005, // $0.50 per million tokens output
+    'grok-4.5': {
+      input: 0.002, // $2.00 per million tokens input
+      output: 0.006, // $6.00 per million tokens output
+    },
+    // Grok 4.3 / 4.20 series
+    'grok-4.3': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.0025, // $2.50 per million tokens output
+    },
+    'grok-4.20-0309-reasoning': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.0025, // $2.50 per million tokens output
+    },
+    'grok-4.20-0309-non-reasoning': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.0025, // $2.50 per million tokens output
+    },
+    'grok-4.20-multi-agent-0309': {
+      input: 0.00125, // $1.25 per million tokens input
+      output: 0.0025, // $2.50 per million tokens output
     },
     // Specialized coding model
-    'grok-code-fast-1': {
-      input: 0.0002, // $0.20 per million tokens input
-      output: 0.0015, // $1.50 per million tokens output
+    'grok-build-0.1': {
+      input: 0.001, // $1.00 per million tokens input
+      output: 0.002, // $2.00 per million tokens output
     },
-    // Grok 3 series
+    // Image generation (per image, not per token)
+    'grok-imagine-image-2.0': {
+      input: 0, // Text input has no cost
+      output: 0.04, // $0.04 per image
+    },
+    'grok-imagine-image': {
+      input: 0, // Text input has no cost
+      output: 0.02, // $0.02 per image
+    },
+    // Retired May 15, 2026 — redirected requests are billed at grok-4.3 rates
+    'grok-4-fast-reasoning': {
+      input: 0.00125,
+      output: 0.0025,
+    },
+    'grok-4-fast-non-reasoning': {
+      input: 0.00125,
+      output: 0.0025,
+    },
+    'grok-code-fast-1': {
+      input: 0.00125,
+      output: 0.0025,
+    },
     'grok-3': {
+      input: 0.00125,
+      output: 0.0025,
+    },
+    // Legacy — no longer on xAI's model list; last published pricing
+    'grok-4': {
       input: 0.003, // $3.00 per million tokens input
       output: 0.015, // $15.00 per million tokens output
     },
     'grok-3-mini': {
       input: 0.0003, // $0.30 per million tokens input
       output: 0.0005, // $0.50 per million tokens output
-    },
-    // Image generation (per image, not per token)
-    'grok-2-image-1212': {
-      input: 0, // Text input has no cost
-      output: 0.07, // $0.07 per image
-    },
-    // Grok 2 series (using Grok 3 pricing as fallback)
-    'grok-2': {
-      input: 0.003,
-      output: 0.015,
-    },
-    'grok-2-1212': {
-      input: 0.003,
-      output: 0.015,
-    },
-    'grok-2-mini': {
-      input: 0.0003,
-      output: 0.0005,
-    },
-    // Grok 1.5 series (using Grok 3 pricing as fallback)
-    'grok-1.5': {
-      input: 0.003,
-      output: 0.015,
-    },
-    'grok-1.5-vision': {
-      input: 0.003,
-      output: 0.015,
-    },
-    // Grok 1 series (legacy, using Grok 3 pricing as fallback)
-    'grok-1': {
-      input: 0.003,
-      output: 0.015,
-    },
-    // Beta models (using Grok 3 pricing as fallback)
-    'grok-beta': {
-      input: 0.003,
-      output: 0.015,
-    },
-    'grok-vision-beta': {
-      input: 0.003,
-      output: 0.015,
     },
   },
 };

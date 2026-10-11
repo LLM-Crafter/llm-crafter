@@ -41,7 +41,7 @@ class EmailTriageService {
       anthropic: 'claude-haiku-5-5',
       google: 'gemini-2.0-flash',
       deepseek: 'deepseek-chat',
-      xai: 'grok-3-mini',
+      xai: 'grok-4.20-0309-non-reasoning',
       openrouter: 'deepseek/deepseek-chat',
     };
 

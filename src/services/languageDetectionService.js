@@ -25,7 +25,7 @@ class LanguageDetectionService {
       anthropic: 'claude-haiku-5-5',      // cheapest Anthropic model
       google: 'gemini-2.0-flash',        // cheapest Google model
       deepseek: 'deepseek-chat',         // DeepSeek V3 chat, very cheap
-      xai: 'grok-3-mini',               // cheapest xAI model
+      xai: 'grok-4.20-0309-non-reasoning', // cheapest xAI model (no reasoning tokens)
       openrouter: 'deepseek/deepseek-chat', // cheapest openrouter route
     };
 

@@ -170,36 +170,34 @@ const defaultProviders = [
   {
     name: 'xai',
     models: [
-      // Grok 4 series (latest - July 2025)
-      'grok-4', // Flagship model with 256k context, advanced reasoning, coding, and vision
-      'grok-4-fast-reasoning', // Cost-efficient with 2M context, released September 2025
-      'grok-4-fast-non-reasoning', // Fast variant with 2M context
+      // Grok 4.5+ series (latest)
+      'grok-4.7', // Flagship model, 500k context, released September 2026
+      'grok-4.6', // 500k context
+      'grok-4.5', // 500k context
+
+      // Grok 4.3 / 4.20 series
+      'grok-4.3', // Cost-efficient general model, 1M context
+      'grok-4.20-0309-reasoning', // 1M context
+      'grok-4.20-0309-non-reasoning', // 1M context
+      'grok-4.20-multi-agent-0309', // 1M context
 
       // Specialized coding model
-      'grok-code-fast-1', // Lightning-fast reasoning model for agentic coding, 256k context, released August 2025
-
-      // Grok 3 series (February 2025)
-      'grok-3', // Flagship model with superior reasoning, 132k context
-      'grok-3-mini', // Lightweight model excelling at math and reasoning, 132k context
+      'grok-build-0.1', // Agentic coding model, 256k context
 
       // Image generation
-      'grok-2-image-1212', // Latest image generation model (Aurora), December 2024
+      'grok-imagine-image-2.0',
+      'grok-imagine-image',
 
-      // Grok 2 series (August 2024)
-      'grok-2',
-      'grok-2-1212', // December 2024 release with improved multilingual support
-      'grok-2-mini',
+      // Retired May 15, 2026 — slugs still resolve but redirect to grok-4.3
+      // (grok-code-fast-1 redirects to grok-build-0.1)
+      'grok-4-fast-reasoning',
+      'grok-4-fast-non-reasoning',
+      'grok-code-fast-1',
+      'grok-3',
 
-      // Grok 1.5 series (March-April 2024)
-      'grok-1.5', // 128k context
-      'grok-1.5-vision', // First multimodal model
-
-      // Grok 1 series (legacy)
-      'grok-1', // 314B parameter MoE model (open-sourced March 2024)
-
-      // Beta/experimental models
-      'grok-beta',
-      'grok-vision-beta',
+      // Legacy — no longer on xAI's model list
+      'grok-4',
+      'grok-3-mini',
     ],
   },
   {
