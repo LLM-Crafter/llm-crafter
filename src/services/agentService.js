@@ -3710,6 +3710,20 @@ Your response:`;
     return overrides[key] || agent.llm_settings.model;
   }
 
+  /**
+   * Fallback for models without structured outputs (e.g. xAI, Google, DeepSeek):
+   * describe the expected JSON in the system prompt so the model knows which
+   * fields to return.
+   */
+  _withJsonOutputInstructions(systemPrompt, schemaFormat) {
+    const schema = JSON.stringify(schemaFormat.json_schema.schema, null, 2);
+    return (
+      `${systemPrompt}\n\n## Output Format\n\n` +
+      `Respond with ONLY a single JSON object that matches this JSON schema, with the fields in the order listed. ` +
+      `Do not wrap it in markdown code fences and do not add any text before or after it.\n\n${schema}`
+    );
+  }
+
   /** Accumulate usage from an LLM response into a running total object. */
   _accumulateUsage(total, usage) {
     total.prompt_tokens += usage.prompt_tokens;
@@ -3854,11 +3868,13 @@ Your response:`;
     }
 
     // Build static parts once (cached per agent)
-    const plannerSystemPrompt = this.buildGraphPlannerSystemPrompt(agent);
     const plannerModel = this._getGraphModel(agent, 'planner');
     const plannerResponseFormat = openai.supportsStructuredOutputs(plannerModel)
       ? this.getGraphPlannerSchema()
       : null;
+    const plannerSystemPrompt = plannerResponseFormat
+      ? this.buildGraphPlannerSystemPrompt(agent)
+      : this._withJsonOutputInstructions(this.buildGraphPlannerSystemPrompt(agent), this.getGraphPlannerSchema());
     // Reasoning-style models (o1/o3, gpt-5.6 family) spend hidden reasoning
     // tokens out of the same completion budget, so a small cap can leave 0
     // tokens for the actual JSON output. Give them a lot more headroom.
@@ -3897,11 +3913,11 @@ Your response:`;
       this._accumulateUsage(totalTokenUsage, plannerLLM.usage);
 
       // Parse planner output
-      let plannerOutput;
-      try {
-        plannerOutput = JSON.parse(plannerLLM.content);
-      } catch {
-        console.warn(`[Graph Planner] Round ${roundNumber}: failed to parse JSON, stopping.`);
+      let plannerOutput = procedureService.parseJsonResponse(plannerLLM.content);
+      if (!plannerOutput) {
+        console.warn(
+          `[Graph Planner] Round ${roundNumber}: failed to parse JSON (finish_reason=${plannerLLM.finish_reason}), stopping.`
+        );
         plannerOutput = {
           funnel_state: 'general',
           needs_tools: false,
@@ -4167,7 +4183,6 @@ Your response:`;
       : false;
 
     if (criticEnabled && finalResponse && !jevApproved) {
-      const criticSystemPrompt = this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language);
       const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, finalResponse);
 
       const criticModel = this._getGraphModel(agent, 'critic');
@@ -4175,6 +4190,12 @@ Your response:`;
       const criticResponseFormat = openai.supportsStructuredOutputs(criticModel)
         ? this.getGraphCriticSchema()
         : null;
+      const criticSystemPrompt = criticResponseFormat
+        ? this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language)
+        : this._withJsonOutputInstructions(
+          this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language),
+          this.getGraphCriticSchema()
+        );
 
       // The critic may return a corrected_response as long as the original reply,
       // plus JSON overhead (approved, issues, reasoning). Derive from agent config.
@@ -4196,11 +4217,11 @@ Your response:`;
 
       this._accumulateUsage(totalTokenUsage, criticLLM.usage);
 
-      let criticOutput;
-      try {
-        criticOutput = JSON.parse(criticLLM.content);
-      } catch {
-        console.warn('[Graph Critic] Failed to parse critic JSON, approving by default.');
+      let criticOutput = procedureService.parseJsonResponse(criticLLM.content);
+      if (!criticOutput) {
+        console.warn(
+          `[Graph Critic] Failed to parse critic JSON (finish_reason=${criticLLM.finish_reason}), approving by default.`
+        );
         criticOutput = { approved: true, reasoning: 'Critic output was not valid JSON; approved by default.' };
       }
 
@@ -4380,12 +4401,17 @@ Your response:`;
       : false;
 
     if (criticEnabled && responderBuffer && !jevApproved) {
-      const criticSystemPrompt = this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language);
       const criticUserPrompt = this.buildGraphCriticUserPrompt(context, toolsUsed, responderBuffer);
       const criticModel = this._getGraphModel(agent, 'critic');
       const criticResponseFormat = openai.supportsStructuredOutputs(criticModel)
         ? this.getGraphCriticSchema()
         : null;
+      const criticSystemPrompt = criticResponseFormat
+        ? this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language)
+        : this._withJsonOutputInstructions(
+          this.buildGraphCriticSystemPrompt(agent, conversation.current_turn_language),
+          this.getGraphCriticSchema()
+        );
 
       let criticBuffer = '';
       let approvalDetected = false;
@@ -4492,11 +4518,9 @@ Your response:`;
       this._accumulateUsage(totalTokenUsage, criticLLM.usage);
 
       // Parse the full critic response for accurate logging and return value
-      let criticOutput;
+      let criticOutput = procedureService.parseJsonResponse(criticLLM.content);
       let criticParseFailed = false;
-      try {
-        criticOutput = JSON.parse(criticLLM.content);
-      } catch {
+      if (!criticOutput) {
         criticParseFailed = true;
         console.warn('[Graph Critic] Failed to parse critic JSON, approving by default.');
         criticOutput = { approved: true, reasoning: 'Critic output was not valid JSON; approved by default.' };

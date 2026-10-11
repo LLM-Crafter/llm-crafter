@@ -1,4 +1,26 @@
 const OpenAI = require('openai');
+const { Anthropic } = require('@anthropic-ai/sdk');
+
+// Claude models that reject non-default sampling params (temperature/top_p)
+// and support the "xhigh" effort level.
+const ANTHROPIC_CURRENT_GEN_MODELS = /^claude-(fable|mythos|opus-5|opus-4-[78]|sonnet-5|haiku-5)/i;
+// Claude models that support structured outputs (output_config.format).
+const ANTHROPIC_STRUCTURED_OUTPUT_MODELS = /^claude-(fable|mythos|opus-(5|4-[5-9])|sonnet-(5|4-[5-9])|haiku-(5|4-5))/i;
+// Claude models that accept output_config.effort.
+const ANTHROPIC_EFFORT_MODELS = /^claude-(fable|mythos|opus-(5|4-[5-9])|sonnet-(5|4-6)|haiku-5)/i;
+// Claude models with server-side refusal fallback (fallbacks: "default").
+const ANTHROPIC_FALLBACK_MODELS = /^claude-(fable-5-1|opus-5|sonnet-5-5)/i;
+const ANTHROPIC_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+
+// Anthropic stop_reason -> OpenAI finish_reason
+const ANTHROPIC_FINISH_REASONS = {
+  end_turn: 'stop',
+  stop_sequence: 'stop',
+  pause_turn: 'stop',
+  max_tokens: 'length',
+  tool_use: 'tool_calls',
+  refusal: 'content_filter',
+};
 
 // Price per 1K tokens (as of current OpenAI pricing)
 const PRICING = {
@@ -197,15 +219,18 @@ const PRICING = {
     },
   },
   anthropic: {
-    // Claude Fable 5.1 — $10 / MTok input, $50 / MTok output
+    // Cache reads default to 10% of input (cachedInput overrides it).
+    // Claude Fable 5.1 — $10 / MTok input, $50 / MTok output, $0.25 / MTok cache reads
     'claude-fable-5-1': {
       input: 0.01,
       output: 0.05,
+      cachedInput: 0.00025,
     },
-    // Claude Mythos 5.1 (Project Glasswing only) — $10 / MTok input, $50 / MTok output
+    // Claude Mythos 5.1 (Project Glasswing only) — same pricing as Fable 5.1
     'claude-mythos-5-1': {
       input: 0.01,
       output: 0.05,
+      cachedInput: 0.00025,
     },
     // Claude Fable 5 — $10 / MTok input, $50 / MTok output
     'claude-fable-5': {
@@ -217,10 +242,11 @@ const PRICING = {
       input: 0.01,
       output: 0.05,
     },
-    // Claude Opus 5.5 — $4 / MTok input, $20 / MTok output
+    // Claude Opus 5.5 — $4 / MTok input, $20 / MTok output, $0.20 / MTok cache reads
     'claude-opus-5-5': {
       input: 0.004,
       output: 0.02,
+      cachedInput: 0.0002,
     },
     // Claude Opus 5 — $5 / MTok input, $25 / MTok output
     'claude-opus-5': {
@@ -385,6 +411,12 @@ class OpenAIService {
 
     this.client = new OpenAI(configuration);
     this.provider = provider;
+
+    // Claude completions go through Anthropic's native SDK: the OpenAI-compatible
+    // endpoint ignores response_format and doesn't support prompt caching.
+    if (provider.toLowerCase() === 'anthropic') {
+      this.anthropicClient = new Anthropic({ apiKey });
+    }
   }
 
   getBaseUrl(provider) {
@@ -405,7 +437,7 @@ class OpenAIService {
     }
   }
 
-  calculateCost(model, promptTokens, completionTokens, cachedTokens = 0) {
+  calculateCost(model, promptTokens, completionTokens, cachedTokens = 0, cacheWriteTokens = 0) {
     console.log(this.provider);
     console.log(model);
     const pricing = PRICING[this.provider]?.[model];
@@ -413,15 +445,20 @@ class OpenAIService {
       return 0;
     }
 
-    // For OpenAI, cached tokens use the model's cachedInput rate, or 10% of the normal input cost
+    // For OpenAI and Anthropic, cached tokens use the model's cachedInput rate, or
+    // 10% of the normal input cost. Anthropic cache writes cost 1.25x input.
     let inputCost = (promptTokens / 1000) * pricing.input;
-    if (this.provider === 'openai' && cachedTokens > 0) {
+    if (
+      (this.provider === 'openai' || this.provider === 'anthropic') &&
+      (cachedTokens > 0 || cacheWriteTokens > 0)
+    ) {
       // Calculate cost for non-cached tokens at full price
-      const nonCachedTokens = promptTokens - cachedTokens;
+      const nonCachedTokens = promptTokens - cachedTokens - cacheWriteTokens;
       const nonCachedCost = (nonCachedTokens / 1000) * pricing.input;
       const cachedRate = pricing.cachedInput ?? pricing.input * 0.1;
       const cachedCost = (cachedTokens / 1000) * cachedRate;
-      inputCost = nonCachedCost + cachedCost;
+      const cacheWriteCost = (cacheWriteTokens / 1000) * pricing.input * 1.25;
+      inputCost = nonCachedCost + cachedCost + cacheWriteCost;
     }
 
     const outputCost = (completionTokens / 1000) * pricing.output;
@@ -431,10 +468,13 @@ class OpenAIService {
 
   /**
    * Check if a model supports structured outputs
-   * Currently only OpenAI models gpt-4o-mini and later support this
+   * Supported on OpenAI gpt-4o-mini and later, and on Claude 4.5 and later
+   * (via the native Anthropic SDK)
    */
   supportsStructuredOutputs(model) {
-    // Only OpenAI provider supports structured outputs for now
+    if (this.provider === 'anthropic') {
+      return ANTHROPIC_STRUCTURED_OUTPUT_MODELS.test(model || '');
+    }
     if (this.provider !== 'openai') {
       return false;
     }
@@ -481,7 +521,7 @@ class OpenAIService {
       return false;
     }
     if (this.provider === 'anthropic') {
-      return /^claude-(fable|mythos|opus-5|opus-4-[78]|sonnet-5|haiku-5)/i.test(model);
+      return ANTHROPIC_CURRENT_GEN_MODELS.test(model);
     }
     if (this.provider !== 'openai') {
       return false;
@@ -527,10 +567,6 @@ class OpenAIService {
       delete mappedParams.presence_penalty;
     }
 
-    if (this.provider === 'anthropic') {
-      delete mappedParams.top_p;
-    }
-
     if (this.isFixedTemperatureModel(model)) {
       delete mappedParams.temperature;
     }
@@ -546,6 +582,12 @@ class OpenAIService {
     responseFormat = null,
     extraOptions = {}
   ) {
+    if (this.anthropicClient) {
+      return this.generateAnthropicCompletion(
+        model, prompt, parameters, systemPrompt, null, responseFormat, extraOptions
+      );
+    }
+
     const mappedParams = this.mapParameters(parameters, model);
 
     // Build messages array
@@ -633,6 +675,12 @@ class OpenAIService {
     responseFormat = null,
     extraOptions = {}
   ) {
+    if (this.anthropicClient) {
+      return this.generateAnthropicCompletion(
+        model, prompt, parameters, systemPrompt, onChunk, responseFormat, extraOptions
+      );
+    }
+
     const mappedParams = this.mapParameters(parameters, model);
 
     // Build messages array
@@ -720,6 +768,237 @@ class OpenAIService {
     } catch (error) {
       throw new Error(`${this.provider} API Error: ${error.message}`);
     }
+  }
+
+  /**
+   * Completion via Anthropic's native Messages API. Always streams (even when
+   * onChunk is null) to avoid HTTP timeouts on large max_tokens, and returns the
+   * same shape as the OpenAI-compatible path.
+   */
+  async generateAnthropicCompletion(
+    model,
+    prompt,
+    parameters = {},
+    systemPrompt = null,
+    onChunk = null,
+    responseFormat = null,
+    extraOptions = {}
+  ) {
+    const params = {
+      model,
+      max_tokens: parameters.max_tokens || parameters.max_completion_tokens || 16000,
+      messages: [{ role: 'user', content: this.toAnthropicContent(prompt) }],
+    };
+
+    if (systemPrompt && systemPrompt.trim()) {
+      params.system = systemPrompt.trim();
+    }
+
+    // Native API rejects temperature > 1; current-gen models reject anything but the default.
+    if (parameters.temperature != null && !this.isFixedTemperatureModel(model)) {
+      params.temperature = Math.min(parameters.temperature, 1);
+    }
+
+    if (parameters.stop) {
+      params.stop_sequences = [].concat(parameters.stop);
+    }
+
+    const outputConfig = {};
+    const effort = this.toAnthropicEffort(model, parameters.reasoning_effort);
+    if (effort) {
+      outputConfig.effort = effort;
+    }
+
+    // Free-form objects in the schema are requested as JSON strings; these are
+    // the paths to decode back into objects once the response arrives.
+    const jsonStringPaths = [];
+    if (responseFormat?.json_schema?.schema && this.supportsStructuredOutputs(model)) {
+      outputConfig.format = {
+        type: 'json_schema',
+        schema: this.toAnthropicSchema(responseFormat.json_schema.schema, [], jsonStringPaths),
+      };
+    }
+
+    if (Object.keys(outputConfig).length > 0) {
+      params.output_config = outputConfig;
+    }
+
+    // Callers pass prompt_cache_key for stable, repeated prompts — enable automatic caching.
+    if (extraOptions.prompt_cache_key) {
+      params.cache_control = { type: 'ephemeral' };
+    }
+
+    // Retry safety-classifier refusals on Anthropic's recommended fallback model.
+    let messagesApi = this.anthropicClient.messages;
+    if (ANTHROPIC_FALLBACK_MODELS.test(model)) {
+      params.betas = [ANTHROPIC_FALLBACK_BETA];
+      params.fallbacks = 'default';
+      messagesApi = this.anthropicClient.beta.messages;
+    }
+
+    try {
+      const stream = messagesApi.stream(params);
+      if (onChunk) {
+        stream.on('text', onChunk);
+      }
+      const message = await stream.finalMessage();
+
+      if (message.stop_reason === 'refusal') {
+        console.warn(
+          `[Anthropic] ${model} declined the request (category=${message.stop_details?.category ?? 'unknown'})`
+        );
+      }
+
+      const text = message.content
+        .filter(block => block.type === 'text')
+        .map(block => block.text)
+        .join('');
+
+      const usage = message.usage;
+      const cachedTokens = usage.cache_read_input_tokens || 0;
+      const cacheWriteTokens = usage.cache_creation_input_tokens || 0;
+      const promptTokens = usage.input_tokens + cachedTokens + cacheWriteTokens;
+      const completionTokens = usage.output_tokens;
+
+      return {
+        content: this.decodeJsonStringPaths(text, jsonStringPaths),
+        finish_reason: ANTHROPIC_FINISH_REASONS[message.stop_reason] || 'stop',
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
+          cached_tokens: cachedTokens,
+          // A fallback may have served the request, so price by the model that answered.
+          cost: this.calculateCost(
+            message.model || model,
+            promptTokens,
+            completionTokens,
+            cachedTokens,
+            cacheWriteTokens
+          ),
+        },
+      };
+    } catch (error) {
+      throw new Error(`${this.provider} API Error: ${error.message}`);
+    }
+  }
+
+  /** Convert OpenAI-style content parts (text / image_url) to Anthropic content blocks. */
+  toAnthropicContent(prompt) {
+    if (!Array.isArray(prompt)) {
+      return prompt;
+    }
+    return prompt.map(part => {
+      if (part.type !== 'image_url') {
+        return part; // text parts share the same shape
+      }
+      const url = part.image_url?.url || '';
+      const dataUrl = url.match(/^data:([^;]+);base64,(.*)$/s);
+      return dataUrl
+        ? { type: 'image', source: { type: 'base64', media_type: dataUrl[1], data: dataUrl[2] } }
+        : { type: 'image', source: { type: 'url', url } };
+    });
+  }
+
+  /** Map the agent's reasoning_effort onto the levels each Claude model accepts. */
+  toAnthropicEffort(model, reasoningEffort) {
+    if (!reasoningEffort || !ANTHROPIC_EFFORT_MODELS.test(model)) {
+      return null;
+    }
+    if (reasoningEffort === 'none' || reasoningEffort === 'minimal') {
+      return 'low';
+    }
+    if (reasoningEffort === 'xhigh' && !ANTHROPIC_CURRENT_GEN_MODELS.test(model)) {
+      return 'high';
+    }
+    return reasoningEffort;
+  }
+
+  /**
+   * Convert an OpenAI-style JSON schema into one Claude structured outputs accept:
+   * every object needs additionalProperties: false and type arrays become anyOf.
+   * Free-form objects (no properties, e.g. tool_parameters) can't be expressed, so
+   * they are requested as JSON-encoded strings and their paths recorded in
+   * jsonStringPaths for decodeJsonStringPaths.
+   */
+  toAnthropicSchema(node, path = [], jsonStringPaths = []) {
+    if (!node || typeof node !== 'object') {
+      return node;
+    }
+
+    if (Array.isArray(node.type)) {
+      const { type, description, ...rest } = node;
+      return {
+        ...(description && { description }),
+        anyOf: type.map(t => this.toAnthropicSchema({ ...rest, type: t }, path, jsonStringPaths)),
+      };
+    }
+
+    if (node.type === 'object') {
+      const entries = Object.entries(node.properties || {});
+      if (entries.length === 0 && path.length > 0) {
+        jsonStringPaths.push(path);
+        return {
+          type: 'string',
+          description: `${node.description ? `${node.description} ` : ''}Encode as a JSON object string.`,
+        };
+      }
+      return {
+        ...node,
+        properties: Object.fromEntries(
+          entries.map(([key, value]) => [
+            key,
+            this.toAnthropicSchema(value, [...path, key], jsonStringPaths),
+          ])
+        ),
+        additionalProperties: false,
+      };
+    }
+
+    if (node.type === 'array' && node.items) {
+      return {
+        ...node,
+        items: this.toAnthropicSchema(node.items, [...path, '[]'], jsonStringPaths),
+      };
+    }
+
+    return node;
+  }
+
+  /** Decode the JSON-string fields recorded by toAnthropicSchema back into objects. */
+  decodeJsonStringPaths(text, jsonStringPaths) {
+    if (jsonStringPaths.length === 0) {
+      return text;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return text;
+    }
+
+    const decodeAt = (container, path) => {
+      if (!container || typeof container !== 'object') {
+        return;
+      }
+      const [head, ...rest] = path;
+      const keys = head === '[]' ? [...container.keys?.() ?? []] : [head];
+      for (const key of keys) {
+        if (rest.length > 0) {
+          decodeAt(container[key], rest);
+        } else if (typeof container[key] === 'string') {
+          try {
+            container[key] = JSON.parse(container[key]);
+          } catch {
+            // Leave the raw string; callers already handle bad tool parameters.
+          }
+        }
+      }
+    };
+
+    jsonStringPaths.forEach(path => decodeAt(parsed, path));
+    return JSON.stringify(parsed);
   }
 
   async createEmbedding(options) {
