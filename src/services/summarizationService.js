@@ -1,6 +1,7 @@
 const OpenAIService = require('./openaiService');
 const APIKey = require('../models/ApiKey');
 const { getActiveGuidance } = require('../utils/operatorGuidance');
+const languageDetectionService = require('./languageDetectionService');
 
 class SummarizationService {
   /**
@@ -23,7 +24,7 @@ class SummarizationService {
       const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
 
       // Select a fast, cost-effective model for summarization
-      const summaryModel = this.selectSummaryModel(agent.llm_settings.model);
+      const summaryModel = this.selectSummaryModel(agent.llm_settings.model, apiKey.provider.name);
 
       const prompt = this.buildSummarizationPrompt(messages, existingSummary);
       const systemPrompt = this.buildSummarizationSystemPrompt();
@@ -61,7 +62,7 @@ class SummarizationService {
   /**
    * Select the most appropriate model for summarization
    */
-  selectSummaryModel(agentModel) {
+  selectSummaryModel(agentModel, providerName = 'openai') {
     // Map to faster/cheaper models for summarization
     const summaryModelMap = {
       'gpt-4o': 'gpt-4o-mini',
@@ -75,7 +76,13 @@ class SummarizationService {
       'deepseek-reasoner': 'deepseek-chat',
     };
 
-    return summaryModelMap[agentModel] || 'gpt-4o-mini'; // Default to efficient model
+    if (summaryModelMap[agentModel]) {
+      return summaryModelMap[agentModel];
+    }
+    // Default to an efficient model from the agent's own provider
+    return providerName === 'openai'
+      ? 'gpt-4o-mini'
+      : languageDetectionService.getModelForProvider(providerName);
   }
 
   /**
@@ -302,7 +309,7 @@ Guidelines:
       const decryptedKey = apiKey.getDecryptedKey();
       const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
 
-      const model = this.selectSummaryModel(agent.llm_settings.model);
+      const model = this.selectSummaryModel(agent.llm_settings.model, apiKey.provider.name);
 
       const langList = languages.join(', ');
       const prompt = `Translate the following text into these languages: ${langList}.\nReturn a JSON object where each key is an ISO 639-1 language code and the value is the translated text.\nOnly return the JSON object, no other text.\n\nText to translate:\n${text}`;
@@ -346,7 +353,7 @@ Guidelines:
       const decryptedKey = apiKey.getDecryptedKey();
       const openai = new OpenAIService(decryptedKey, apiKey.provider.name);
 
-      const model = this.selectSummaryModel(agent.llm_settings.model);
+      const model = this.selectSummaryModel(agent.llm_settings.model, apiKey.provider.name);
 
       // Build conversation excerpt from messages (truncate to avoid excessive tokens)
       let conversationExcerpt = '';

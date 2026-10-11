@@ -2777,8 +2777,14 @@ Your response:`;
         agent.api_key.provider.name
       );
 
-      // Use a cost-effective model unless the caller overrides it (e.g. hook config)
-      const model = modelOverride || 'gpt-5.6-luna';
+      // Use a cost-effective model for the agent's provider unless the caller
+      // overrides it (e.g. hook config)
+      const providerName = agent.api_key.provider.name;
+      const model =
+        modelOverride ||
+        (providerName === 'openai'
+          ? 'gpt-5.6-luna'
+          : languageDetectionService.getModelForProvider(providerName));
 
       const customTitlePrompt = agent.config?.title_generation_prompt;
       const prompt = customTitlePrompt
