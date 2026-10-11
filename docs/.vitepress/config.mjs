@@ -39,6 +39,7 @@ export default defineConfig({
           text: 'Features',
           items: [
             { text: 'Agent Types', link: '/features/agent-types' },
+            { text: 'Graph Agents', link: '/features/graph-agents' },
             { text: 'System Tools', link: '/features/system-tools' },
             { text: 'API Caller Tool', link: '/features/api-caller' },
             { text: 'Procedures', link: '/features/procedures' },

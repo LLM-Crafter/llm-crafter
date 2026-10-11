@@ -278,6 +278,15 @@ const agentSchema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      // How the graph planner calls tools. "native" uses the provider's tool
+      // calling and re-plans after every batch of results; "json" uses the
+      // older JSON-plan rounds. Native falls back to JSON automatically when
+      // the provider rejects tool calling.
+      graph_planner_mode: {
+        type: String,
+        enum: ['native', 'json'],
+        default: 'native',
+      },
       // Per-step model overrides for the small agent graph.
       // Each field is optional — when omitted the agent's main llm_settings.model is used.
       // Example for OpenAI:

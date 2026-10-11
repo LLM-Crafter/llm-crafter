@@ -74,9 +74,14 @@ All fields marked **required** apply to `POST`. For `PUT` every field is optiona
 | ------------------------------ | ------- | ------- | ------------------------------------------------------------------------------------------------ |
 | `enable_small_agent_graph`     | boolean | `false` | Route reasoning through a planner → responder → critic pipeline instead of the single ReAct loop |
 | `graph_enable_critic`          | boolean | `true`  | Run the critic validation step after the responder (only relevant when graph mode is on)         |
+| `graph_planner_mode`           | string  | `native` | `native`: the planner uses the provider's tool calling and sees every batch of tool results before deciding what to do next. `json`: the older JSON-plan rounds. Native falls back to JSON automatically if the provider rejects tool calling |
 | `graph_models.planner_model`   | string  | `null`  | Model override for the planner step. Falls back to `llm_settings.model` when `null`              |
 | `graph_models.responder_model` | string  | `null`  | Model override for the responder step                                                            |
 | `graph_models.critic_model`    | string  | `null`  | Model override for the critic step                                                               |
+
+When the critic rejects a reply it lists the issues, and the responder rewrites the reply once using them; the rewrite is not checked again. The critic is skipped on greeting turns that used no tools.
+
+In graph mode the streaming endpoints also send progress events before the reply text, for example `data: {"type": "status", "stage": "searching_knowledge_base"}`. Stages: `planning`, `searching_knowledge_base`, `searching_web`, `reading_webpage`, `looking_up_data`, `checking_calendar`, `contacting_team`, `working`, `writing`, `reviewing`, `revising`. Clients that don't handle them can ignore them.
 
 ##### `config.prompt_sections` (graph mode)
 

@@ -1031,6 +1031,13 @@ const executeChatbotAgentStream = async (req, res) => {
       }
     };
 
+    // Progress events (graph-mode agents only), e.g. { stage: 'searching_knowledge_base' }
+    const statusCallback = status => {
+      if (!isResponseComplete) {
+        res.write(`data: ${JSON.stringify({ type: 'status', ...status })}\n\n`);
+      }
+    };
+
     try {
       // Execute agent with streaming
       const result = await agentService.executeChatbotAgentStream(
@@ -1039,7 +1046,9 @@ const executeChatbotAgentStream = async (req, res) => {
         message,
         user_identifier,
         context,
-        streamCallback
+        streamCallback,
+        null,
+        statusCallback
       );
 
       isResponseComplete = true;
@@ -2172,6 +2181,13 @@ const executeChatbotAgentWithSessionStream = async (req, res) => {
       }
     };
 
+    // Progress events (graph-mode agents only), e.g. { stage: 'searching_knowledge_base' }
+    const statusCallback = status => {
+      if (!isResponseComplete) {
+        res.write(`data: ${JSON.stringify({ type: 'status', ...status })}\n\n`);
+      }
+    };
+
     try {
       // Execute agent with streaming
       const result = await agentService.executeChatbotAgentStream(
@@ -2180,7 +2196,9 @@ const executeChatbotAgentWithSessionStream = async (req, res) => {
         message,
         userIdentifier || `session_${req.sessionID}`,
         resolvedContext,
-        streamCallback
+        streamCallback,
+        null,
+        statusCallback
       );
 
       isResponseComplete = true;

@@ -883,6 +883,204 @@ class OpenAIService {
     }
   }
 
+  /**
+   * One step of a native tool-calling loop. `tools` are provider-neutral
+   * { name, description, parameters } definitions. `rounds` replays the earlier
+   * steps of the same turn as { assistantMessage, results: [{ id, content, is_error }] },
+   * where assistantMessage is exactly what a previous call returned (kept
+   * provider-native so reasoning/signature fields survive the round trip).
+   *
+   * @returns {Promise<{content: string, tool_calls: Array<{id: string, name: string, arguments: string}>,
+   *   assistantMessage: Object, finish_reason: string, usage: Object}>}
+   *   tool_calls[].arguments is the model's raw JSON string.
+   */
+  async generateToolCompletion(
+    model,
+    prompt,
+    tools,
+    rounds = [],
+    parameters = {},
+    systemPrompt = null,
+    extraOptions = {}
+  ) {
+    if (this.anthropicClient) {
+      return this.generateAnthropicToolCompletion(
+        model, prompt, tools, rounds, parameters, systemPrompt, extraOptions
+      );
+    }
+
+    const messages = [];
+    if (systemPrompt && systemPrompt.trim()) {
+      messages.push({ role: 'system', content: systemPrompt.trim() });
+    }
+    messages.push({ role: 'user', content: prompt });
+    for (const round of rounds) {
+      messages.push(round.assistantMessage);
+      for (const result of round.results) {
+        messages.push({ role: 'tool', tool_call_id: result.id, content: result.content });
+      }
+    }
+
+    const completionOptions = {
+      model,
+      messages,
+      tools: tools.map(tool => ({
+        type: 'function',
+        function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+      })),
+      tool_choice: 'auto',
+      ...this.mapParameters(parameters, model),
+      ...extraOptions,
+    };
+
+    try {
+      let completion;
+      try {
+        completion = await this.client.chat.completions.create(completionOptions);
+      } catch (err) {
+        if (this.isTemperatureUnsupportedError(err) && 'temperature' in completionOptions) {
+          delete completionOptions.temperature;
+          completion = await this.client.chat.completions.create(completionOptions);
+        } else {
+          throw err;
+        }
+      }
+
+      if (!completion.choices || completion.choices.length === 0) {
+        throw new Error('No completion choices returned');
+      }
+
+      const message = completion.choices[0].message;
+      // Some OpenAI-compatible providers omit tool call ids; assign stable ones so
+      // the tool results we send back can reference them.
+      const rawCalls = (message.tool_calls || []).map((call, i) => ({
+        ...call,
+        id: call.id || `call_${rounds.length}_${i}`,
+      }));
+      const assistantMessage = rawCalls.length > 0 ? { ...message, tool_calls: rawCalls } : message;
+
+      const usage = completion.usage;
+      const cachedTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+
+      return {
+        content: message.content || '',
+        tool_calls: rawCalls.map(call => ({
+          id: call.id,
+          name: call.function?.name,
+          arguments: call.function?.arguments || '{}',
+        })),
+        assistantMessage,
+        finish_reason: completion.choices[0].finish_reason,
+        usage: {
+          prompt_tokens: usage.prompt_tokens,
+          completion_tokens: usage.completion_tokens,
+          total_tokens: usage.total_tokens,
+          cached_tokens: cachedTokens,
+          cost: this.calculateCost(model, usage.prompt_tokens, usage.completion_tokens, cachedTokens),
+        },
+      };
+    } catch (error) {
+      throw new Error(`${this.provider} API Error: ${error.message}`);
+    }
+  }
+
+  /** Anthropic variant of generateToolCompletion (native Messages API tool use). */
+  async generateAnthropicToolCompletion(
+    model,
+    prompt,
+    tools,
+    rounds = [],
+    parameters = {},
+    systemPrompt = null,
+    extraOptions = {}
+  ) {
+    const messages = [{ role: 'user', content: this.toAnthropicContent(prompt) }];
+    for (const round of rounds) {
+      messages.push(round.assistantMessage);
+      messages.push({
+        role: 'user',
+        content: round.results.map(result => ({
+          type: 'tool_result',
+          tool_use_id: result.id,
+          content: result.content,
+          ...(result.is_error && { is_error: true }),
+        })),
+      });
+    }
+
+    const params = {
+      model,
+      max_tokens: parameters.max_tokens || parameters.max_completion_tokens || 16000,
+      messages,
+      tools: tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.parameters,
+      })),
+    };
+
+    if (systemPrompt && systemPrompt.trim()) {
+      params.system = systemPrompt.trim();
+    }
+    if (parameters.temperature != null && !this.isFixedTemperatureModel(model)) {
+      params.temperature = Math.min(parameters.temperature, 1);
+    }
+    if (parameters.stop) {
+      params.stop_sequences = [].concat(parameters.stop);
+    }
+    const effort = this.toAnthropicEffort(model, parameters.reasoning_effort);
+    if (effort) {
+      params.output_config = { effort };
+    }
+    if (extraOptions.prompt_cache_key) {
+      params.cache_control = { type: 'ephemeral' };
+    }
+
+    let messagesApi = this.anthropicClient.messages;
+    if (ANTHROPIC_FALLBACK_MODELS.test(model)) {
+      params.betas = [ANTHROPIC_FALLBACK_BETA];
+      params.fallbacks = 'default';
+      messagesApi = this.anthropicClient.beta.messages;
+    }
+
+    try {
+      const message = await messagesApi.stream(params).finalMessage();
+
+      const usage = message.usage;
+      const cachedTokens = usage.cache_read_input_tokens || 0;
+      const cacheWriteTokens = usage.cache_creation_input_tokens || 0;
+      const promptTokens = usage.input_tokens + cachedTokens + cacheWriteTokens;
+      const completionTokens = usage.output_tokens;
+
+      return {
+        content: message.content
+          .filter(block => block.type === 'text')
+          .map(block => block.text)
+          .join(''),
+        tool_calls: message.content
+          .filter(block => block.type === 'tool_use')
+          .map(block => ({ id: block.id, name: block.name, arguments: JSON.stringify(block.input ?? {}) })),
+        assistantMessage: { role: 'assistant', content: message.content },
+        finish_reason: ANTHROPIC_FINISH_REASONS[message.stop_reason] || 'stop',
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
+          cached_tokens: cachedTokens,
+          cost: this.calculateCost(
+            message.model || model,
+            promptTokens,
+            completionTokens,
+            cachedTokens,
+            cacheWriteTokens
+          ),
+        },
+      };
+    } catch (error) {
+      throw new Error(`${this.provider} API Error: ${error.message}`);
+    }
+  }
+
   /** Convert OpenAI-style content parts (text / image_url) to Anthropic content blocks. */
   toAnthropicContent(prompt) {
     if (!Array.isArray(prompt)) {
