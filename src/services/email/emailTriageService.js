@@ -38,7 +38,7 @@ class EmailTriageService {
     // Mirror languageDetectionService — same providers, same cheapest models.
     this.modelByProvider = {
       openai: 'gpt-5.4-nano',
-      anthropic: 'claude-3-5-haiku-20241022',
+      anthropic: 'claude-haiku-5-5',
       google: 'gemini-2.0-flash',
       deepseek: 'deepseek-chat',
       xai: 'grok-3-mini',
@@ -359,7 +359,8 @@ class EmailTriageService {
       const llmResponse = await openai.generateCompletion(
         model,
         this.buildClassificationPrompt(email, account),
-        { temperature: 0, max_tokens: 200 },
+        // Cap leaves room for models that think by default (e.g. claude-haiku-5-5).
+        { temperature: 0, max_tokens: 1024 },
         this.systemPrompt,
         responseFormat,
         { prompt_cache_key: `email_triage_${account._id}` }

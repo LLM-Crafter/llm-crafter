@@ -90,11 +90,14 @@ const defaultProviders = [
     name: 'anthropic',
     models: [
       // Top-tier (latest)
-      'claude-fable-5', // Top-tier flagship model
+      'claude-fable-5-1', // Most capable widely released model, 1M context
+      'claude-mythos-5-1', // Project Glasswing only
+      'claude-fable-5',
       'claude-mythos-5', // Limited availability research preview tier
 
-      // Claude Opus 5
-      'claude-opus-5', // Most intelligent model for complex agents & coding, 1M context
+      // Claude Opus 5.x
+      'claude-opus-5-5', // Current Opus, 1M context
+      'claude-opus-5',
 
       // Claude Opus 4.x (active)
       'claude-opus-4-8',
@@ -102,15 +105,17 @@ const defaultProviders = [
       'claude-opus-4-6',
       'claude-opus-4-5-20251101',
 
-      // Claude Sonnet 5
-      'claude-sonnet-5', // Best speed/intelligence balance, 1M context
+      // Claude Sonnet 5.x
+      'claude-sonnet-5-5', // Current Sonnet, best speed/intelligence balance, 1M context
+      'claude-sonnet-5',
 
       // Claude Sonnet 4.x (active)
       'claude-sonnet-4-6',
       'claude-sonnet-4-5-20250929',
 
-      // Claude Haiku 4.5 (active)
-      'claude-haiku-4-5-20251001', // Fastest, most affordable, 200k context
+      // Claude Haiku
+      'claude-haiku-5-5', // Current Haiku, fastest & most affordable, 1M context
+      'claude-haiku-4-5-20251001', // 200k context
     ],
   },
   {

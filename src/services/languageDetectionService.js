@@ -22,7 +22,7 @@ class LanguageDetectionService {
     // falls back gracefully to the previous turn language or "en".
     this.modelByProvider = {
       openai: 'gpt-5.4-nano',           // newest cheapest OpenAI model
-      anthropic: 'claude-3-5-haiku-20241022', // cheapest Anthropic model
+      anthropic: 'claude-haiku-5-5',      // cheapest Anthropic model
       google: 'gemini-2.0-flash',        // cheapest Google model
       deepseek: 'deepseek-chat',         // DeepSeek V3 chat, very cheap
       xai: 'grok-3-mini',               // cheapest xAI model
@@ -189,7 +189,8 @@ class LanguageDetectionService {
       const response = await openai.generateCompletion(
         model,
         prompt,
-        { temperature: 0, max_tokens: 5 },
+        // Cap leaves room for models that think by default (e.g. claude-haiku-5-5).
+        { temperature: 0, max_tokens: 1024 },
         this.systemPrompt
       );
 

@@ -197,6 +197,16 @@ const PRICING = {
     },
   },
   anthropic: {
+    // Claude Fable 5.1 — $10 / MTok input, $50 / MTok output
+    'claude-fable-5-1': {
+      input: 0.01,
+      output: 0.05,
+    },
+    // Claude Mythos 5.1 (Project Glasswing only) — $10 / MTok input, $50 / MTok output
+    'claude-mythos-5-1': {
+      input: 0.01,
+      output: 0.05,
+    },
     // Claude Fable 5 — $10 / MTok input, $50 / MTok output
     'claude-fable-5': {
       input: 0.01,
@@ -206,6 +216,11 @@ const PRICING = {
     'claude-mythos-5': {
       input: 0.01,
       output: 0.05,
+    },
+    // Claude Opus 5.5 — $4 / MTok input, $20 / MTok output
+    'claude-opus-5-5': {
+      input: 0.004,
+      output: 0.02,
     },
     // Claude Opus 5 — $5 / MTok input, $25 / MTok output
     'claude-opus-5': {
@@ -232,6 +247,11 @@ const PRICING = {
       input: 0.005,
       output: 0.025,
     },
+    // Claude Sonnet 5.5 — $2 / MTok input, $10 / MTok output
+    'claude-sonnet-5-5': {
+      input: 0.002,
+      output: 0.01,
+    },
     // Claude Sonnet 5 — $2 / MTok input, $10 / MTok output (standard pricing)
     'claude-sonnet-5': {
       input: 0.002,
@@ -246,6 +266,12 @@ const PRICING = {
     'claude-sonnet-4-5-20250929': {
       input: 0.003,
       output: 0.015,
+    },
+    // Claude Haiku 5.5 — $0.10 / MTok input, $0.50 / MTok output
+    // (prompts up to 100K tokens; $0.50 / $2.50 beyond — not modeled here)
+    'claude-haiku-5-5': {
+      input: 0.0001,
+      output: 0.0005,
     },
     // Claude Haiku 4.5 — $1 / MTok input, $5 / MTok output
     'claude-haiku-4-5-20251001': {
@@ -442,10 +468,17 @@ class OpenAIService {
   /**
    * Reasoning-style models (o1/o3 family, "-pro" variants, and the gpt-5.6
    * family) only accept the default temperature (1) and reject any other
-   * value with a 400 error.
+   * value with a 400 error. Newer Claude models (Fable, Mythos, Opus 4.7+,
+   * Sonnet 5+, Haiku 5.5) behave the same way.
    */
   isFixedTemperatureModel(model) {
-    if (this.provider !== 'openai' || !model) {
+    if (!model) {
+      return false;
+    }
+    if (this.provider === 'anthropic') {
+      return /^claude-(fable|mythos|opus-5|opus-4-[78]|sonnet-5|haiku-5)/i.test(model);
+    }
+    if (this.provider !== 'openai') {
       return false;
     }
     return (
