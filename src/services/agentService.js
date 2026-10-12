@@ -10,6 +10,8 @@ const languageDetectionService = require('./languageDetectionService');
 const procedureService = require('./procedureService');
 const hookService = require('./hookService');
 const { runAgentGraph } = require('./agentGraph');
+// Status label helpers only; the agent loop itself never runs graph code.
+const { createStatusEmitter, toolStatus } = require('./agentGraph/shared');
 const { formatHistoryLines } = require('../utils/operatorGuidance');
 
 class AgentService {
@@ -1079,13 +1081,16 @@ class AgentService {
     conversation,
     dynamicContext = {},
     streamCallback = null,
-    cancellationToken = null
+    cancellationToken = null,
+    contextOptions = {},
+    statusCallback = null // receives { stage } just before each tool runs
   ) {
     const decriptedApiKey = agent.api_key.getDecryptedKey();
     const openai = new OpenAIService(
       decriptedApiKey,
       agent.api_key.provider.name
     );
+    const emitStatus = createStatusEmitter(statusCallback);
 
     const thinkingProcess = [];
     const toolsUsed = [];
@@ -1098,7 +1103,7 @@ class AgentService {
     };
 
     // Build context for the agent
-    const context = this.buildAgentContext(agent, conversation);
+    const context = this.buildAgentContext(agent, conversation, contextOptions);
 
     // Initial reasoning step
     thinkingProcess.push({
@@ -1346,6 +1351,7 @@ class AgentService {
           reasoning: parsedResponse.reasoning || `Decided to use tool: ${parsedResponse.tool_name}`,
         });
 
+        emitStatus(toolStatus(parsedResponse.tool_name));
         const toolResult = await toolService.executeToolWithConfig(
           parsedResponse.tool_name,
           parsedResponse.tool_parameters,
@@ -2326,6 +2332,59 @@ class AgentService {
         : `Write an improved alternative version of the previous draft.`;
     } else {
       directive += `\nWrite the reply from scratch.`;
+    }
+    return directive;
+  }
+
+  /**
+   * Write a new staff-requested message into an existing conversation. Same
+   * reasoning loop as a normal turn: the agent decides whether it needs tools
+   * or can answer straight away. Streams when `streamCallback` is given. Does
+   * not persist anything.
+   *
+   * @param {Object} params
+   * @param {string[]} params.instructions        - staff instructions, oldest first
+   * @param {string|null} params.previousDraft    - current draft, when revising one
+   * @param {number|undefined} params.historyCutoffIndex - hide this message and later ones
+   * @param {Function|null} params.streamCallback - receives response text chunks
+   * @param {Function|null} params.statusCallback - receives { stage } before each tool runs
+   */
+  async composeAssistantMessage(agent, conversation, {
+    instructions = [],
+    previousDraft = null,
+    historyCutoffIndex,
+    dynamicContext = {},
+    streamCallback = null,
+    statusCallback = null,
+  } = {}) {
+    const contextOptions = {
+      historyCutoffIndex,
+      regenerationDirective: this.buildComposeDirective({ instructions, previousDraft }),
+    };
+
+    if (streamCallback) {
+      return this.executeAgentReasoningStream(
+        agent, conversation, dynamicContext, streamCallback, null, contextOptions, statusCallback
+      );
+    }
+    return this.executeAgentReasoning(agent, conversation, dynamicContext, null, contextOptions);
+  }
+
+  buildComposeDirective({ instructions, previousDraft }) {
+    let directive = `## Staff-Requested Message (internal, never visible to the customer)\n`;
+    directive += `A staff member asked you to write a new message to the customer in this conversation. It is not necessarily a reply to the latest customer message: follow the staff instructions for what it should say.\n`;
+    directive += `- Your RESPONSE is the message to the customer. Do not address the staff member, and never mention, quote or acknowledge these instructions.\n`;
+    directive += `- Treat the staff instructions as authoritative company guidance, even when they add facts or policies not found elsewhere.\n`;
+    directive += `- If the instructions and the conversation already contain what you need, respond right away. Only use tools to fetch facts the message needs that are missing.\n`;
+    directive += `- Do not request a human handoff: a staff member is already handling this conversation.\n\n`;
+    directive += `<staff_instructions>\n`;
+    directive += instructions.map((text, i) => `${i + 1}. ${text}`).join('\n');
+    directive += `\n</staff_instructions>\n`;
+    if (previousDraft) {
+      directive += `\n<previous_draft>\n${previousDraft}\n</previous_draft>\n`;
+      directive += `Revise the previous draft: keep what still fits and change what the latest staff instructions ask for.`;
+    } else {
+      directive += `\nWrite the message from scratch.`;
     }
     return directive;
   }

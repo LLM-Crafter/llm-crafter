@@ -44,13 +44,14 @@ const { isNoReplyOnlyAddress, hasUsableReplyTo } = require('./emailSenderGuards'
 const emailUtils = require('./emailUtils');
 const draftService = require('./draftService');
 const languageDetectionService = require('../languageDetectionService');
+const outboundAttachmentService = require('./outboundAttachmentService');
 const lockService = require('../distributedLockService');
 const encryptionUtil = require('../../utils/encryption');
 const { getActiveGuidance } = require('../../utils/operatorGuidance');
 // (require paths are relative to src/services/email/)
 
 // Long enough to cover a full reasoning loop with tool calls.
-const REGENERATE_LOCK_TTL_MS = 3 * 60 * 1000;
+const DRAFT_LOCK_TTL_MS = 3 * 60 * 1000;
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -467,7 +468,7 @@ class EmailAgentService {
 
     const result = await lockService.withLock(
       `email_regenerate:${outbound._id}`,
-      REGENERATE_LOCK_TTL_MS,
+      DRAFT_LOCK_TTL_MS,
       async () => ({
         value: await this._regenerateDraftLocked({ account, outbound, guidance, mode, requestedBy }),
       })
@@ -491,37 +492,37 @@ class EmailAgentService {
 
     const messages = conversation.getDecryptedMessages({ includeAttachmentContext: false });
     const target = messages[messageIndex];
-    const inbound = messages.slice(0, messageIndex).reverse().find(m => m.role === 'user');
-    const inboundEmail = inbound?.channel_info?.email || {};
-    const triage = outbound.metadata?.triage || {};
-
-    // Same shape processIncomingEmail passes to the reasoning engine.
-    const dynamicContext = {
-      channel: 'email',
-      email_context: {
-        subject: inboundEmail.subject,
-        from: inboundEmail.from_email,
-        triage_topic: triage.topic,
-        triage_intent: triage.intent,
-        triage_confidence: triage.confidence,
-        attachments: (inbound?.channel_info?.media || []).map(attachment => ({
-          filename: attachment.filename,
-          mime_type: attachment.mime_type,
-          description: attachment.description || null,
-          interpretation_status: attachment.interpretation_status,
-        })),
-      },
-    };
+    const dynamicContext = this._buildEmailDynamicContext(
+      messages.slice(0, messageIndex),
+      outbound.metadata?.triage
+    );
 
     const send = account.send_profile || {};
-    const reasoning = await agentService.regenerateAssistantResponse(agent, conversation, messageIndex, {
-      guidance,
-      priorGuidance: getActiveGuidance(target),
-      previousDraft: this._stripSignature(target.content, send.signature_text),
-      mode,
-      dynamicContext,
-    });
-    if (!reasoning.content) throw httpError(502, 'The agent did not produce a new draft');
+    const previousDraft = this._stripSignature(target.content, send.signature_text);
+    let reasoning;
+    if (target.metadata?.compose) {
+      // Staff-composed draft: rewrite it as a composed message, not as a reply.
+      // getActiveGuidance always starts with the original compose instructions.
+      const priorGuidance = getActiveGuidance(target);
+      reasoning = await agentService.composeAssistantMessage(agent, conversation, {
+        instructions: mode === 'revise'
+          ? [...priorGuidance, guidance].filter(Boolean)
+          : [priorGuidance[0], guidance].filter(Boolean),
+        previousDraft: mode === 'revise' ? previousDraft : null,
+        historyCutoffIndex: messageIndex,
+        dynamicContext,
+      });
+      this._assertAgentWroteDraft(reasoning);
+    } else {
+      reasoning = await agentService.regenerateAssistantResponse(agent, conversation, messageIndex, {
+        guidance,
+        priorGuidance: getActiveGuidance(target),
+        previousDraft,
+        mode,
+        dynamicContext,
+      });
+      if (!reasoning.content) throw httpError(502, 'The agent did not produce a new draft');
+    }
 
     const draftText = emailUtils.renderText(reasoning.content, send.signature_text);
     const draftHtml = emailUtils.renderHtml(reasoning.content, send.signature_html);
@@ -604,6 +605,278 @@ class EmailAgentService {
       return body.slice(0, -signature.length).trim();
     }
     return body;
+  }
+
+  /**
+   * Have the agent write a new staff-requested email into an existing thread
+   * and store it as a draft. The agent runs its normal reasoning loop, so it
+   * only calls tools when the message needs facts it doesn't have yet.
+   * Errors carry an HTTP `status` (400 / 404 / 409 / 422 / 502).
+   *
+   * @param {Object} params
+   * @param {Object} params.account         - MailAccount document
+   * @param {string} params.conversationId
+   * @param {string} params.instructions    - what the staff member wants the email to say
+   * @param {Object} [params.overrides]     - { to, cc, bcc, subject, attachment_file_ids }
+   * @param {Object|null} [params.requestedBy] - { user_id, name, email }
+   * @param {Function|null} [params.onStart]  - called once the request is accepted, right
+   *   before the agent runs. Errors thrown before this point are plain HTTP errors.
+   * @param {Function|null} [params.onChunk]  - streams the email body as it is written
+   * @param {Function|null} [params.onStatus] - receives { stage } before each tool runs
+   * @returns {Promise<{ outbound: Object, message: Object }>}
+   */
+  async composeInThread({
+    account,
+    conversationId,
+    instructions,
+    overrides = {},
+    requestedBy = null,
+    onStart = null,
+    onChunk = null,
+    onStatus = null,
+  }) {
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      agent: account.agent,
+      channel: 'email',
+    });
+    if (!conversation) throw httpError(404, 'Thread not found');
+
+    const result = await lockService.withLock(
+      `email_compose:${conversation._id}`,
+      DRAFT_LOCK_TTL_MS,
+      async () => ({
+        value: await this._composeInThreadLocked({
+          account, conversation, instructions, overrides, requestedBy, onStart, onChunk, onStatus,
+        }),
+      })
+    );
+    if (!result) throw httpError(409, 'An email is already being composed for this thread');
+    return result.value;
+  }
+
+  async _composeInThreadLocked({
+    account, conversation, instructions, overrides, requestedBy, onStart, onChunk, onStatus,
+  }) {
+    const agent = await Agent.findById(account.agent).populate({
+      path: 'api_key',
+      populate: { path: 'provider' },
+    });
+    if (!agent) throw httpError(404, 'Agent not found');
+
+    const thread = this.buildThreadOutboundFields({
+      conversation,
+      to: overrides.to,
+      subject: overrides.subject,
+    });
+    if (!thread.to.length) {
+      throw httpError(400, 'Cannot determine recipient — provide a `to` address.');
+    }
+
+    let attachments;
+    try {
+      attachments = await outboundAttachmentService.resolve(overrides.attachment_file_ids || [], {
+        organizationId: account.organization,
+        agentId: agent._id,
+        conversationId: conversation._id,
+      });
+    } catch (err) {
+      throw httpError(400, err.message);
+    }
+
+    if (onStart) onStart();
+
+    const messages = conversation.getDecryptedMessages({ includeAttachmentContext: false });
+    const reasoning = await agentService.composeAssistantMessage(agent, conversation, {
+      instructions: [instructions],
+      dynamicContext: this._buildEmailDynamicContext(messages),
+      streamCallback: onChunk,
+      statusCallback: onStatus,
+    });
+    this._assertAgentWroteDraft(reasoning);
+
+    const send = account.send_profile || {};
+    const draftText = emailUtils.renderText(reasoning.content, send.signature_text);
+    const draftHtml = emailUtils.renderHtml(reasoning.content, send.signature_html);
+    const messageId = emailUtils.generateMessageId(send.from_email);
+    const now = new Date();
+    const compose = {
+      instructions,
+      requested_by: requestedBy,
+      created_at: now,
+    };
+
+    const outbound = await OutboundEmail.create({
+      mail_account: account._id,
+      agent: agent._id,
+      conversation: conversation._id,
+      to: thread.to,
+      cc: overrides.cc || send.default_cc || [],
+      bcc: overrides.bcc || send.default_bcc || [],
+      from_email: send.from_email,
+      from_name: send.from_name || null,
+      reply_to: send.reply_to || null,
+      subject: thread.subject,
+      text: draftText,
+      html: draftHtml,
+      original_draft: {
+        subject: thread.subject,
+        text: draftText,
+        html: draftHtml,
+        generated_at: now,
+      },
+      reply_context: thread.replyContext,
+      attachments,
+      message_id: messageId,
+      in_reply_to: thread.inReplyTo,
+      references: thread.references,
+      provider_thread_id: thread.providerThreadId,
+      provider_parent_message_id: thread.providerParentMessageId,
+      state: 'drafted',
+      reason: 'manual',
+      metadata: { composed_by: requestedBy?.user_id || 'api', compose },
+    });
+
+    await conversation.addMessage({
+      role: 'assistant',
+      content: draftText,
+      thinking_process: reasoning.thinking_process,
+      tools_used: reasoning.tools_used,
+      token_usage: reasoning.token_usage,
+      timestamp: now,
+      channel_info: {
+        channel: 'email',
+        media: outboundAttachmentService.toConversationMedia(attachments),
+        email: {
+          message_id: messageId,
+          in_reply_to: thread.inReplyTo,
+          subject: thread.subject,
+          body_html: draftHtml,
+        },
+      },
+      metadata: {
+        outbound_id: outbound._id,
+        outbound_state: 'drafted',
+        // Never shown to the customer; formatHistoryLines labels it as staff guidance.
+        compose,
+        draft_audit: {
+          was_edited: null,
+          original_text: draftText,
+          original_html: draftHtml,
+        },
+      },
+    });
+
+    draftService.create(account, outbound).catch(err =>
+      console.error(`[EmailAgent] remote draft create failed for ${outbound._id}:`, err.message)
+    );
+
+    hookService.executeHooks(
+      agent,
+      conversation,
+      draftText,
+      'assistant',
+      'email_draft_ready',
+      {
+        email_draft: {
+          outbound_id: outbound._id,
+          mail_account_id: account._id,
+          to: outbound.to,
+          cc: outbound.cc,
+          subject: outbound.subject,
+          text: outbound.text,
+          html: outbound.html,
+          state: outbound.state,
+          reason: outbound.reason,
+          confidence: outbound.confidence,
+          in_reply_to: outbound.in_reply_to,
+        },
+      }
+    ).catch(err => {
+      console.error(`[EmailAgent] email_draft_ready hooks failed for ${outbound._id}:`, err.message);
+    });
+
+    const message = conversation
+      .getDecryptedMessages({ includeAttachmentContext: false })
+      .find(m => String(m.metadata?.outbound_id) === String(outbound._id)) || null;
+
+    console.log(
+      `[EmailAgent] email composed outbound=${outbound._id} conversation=${conversation._id} ` +
+      `tools=${reasoning.tools_used?.length ?? 0} streamed=${!!onChunk}`
+    );
+
+    return { outbound, message };
+  }
+
+  /**
+   * Addressing and threading for a new message in an existing thread: reply
+   * to whoever started it, under `Re: <subject>`, quoting the message being
+   * replied to. Callers may override `to` and `subject`. `to` is empty when
+   * no recipient can be determined.
+   */
+  buildThreadOutboundFields({ conversation, to = null, subject = null }) {
+    const meta = conversation.channel_metadata?.email || {};
+    const inReplyTo = meta.message_id || null;
+
+    const inboundMessages = conversation
+      .getDecryptedMessages({ includeAttachmentContext: false })
+      .filter(message => message.role === 'user' && message.channel_info?.channel === 'email');
+    const repliedToMessage = inboundMessages.find(message =>
+      message.channel_info?.email?.message_id === inReplyTo
+    ) || inboundMessages[0];
+
+    return {
+      to: Array.isArray(to) && to.length > 0
+        ? to
+        : [meta.from_email || conversation.user_identifier].filter(Boolean),
+      subject: subject || emailUtils.buildReplySubject(meta.subject || ''),
+      inReplyTo,
+      references: inReplyTo ? [inReplyTo] : [],
+      replyContext: repliedToMessage
+        ? {
+          text: repliedToMessage.content || '',
+          html: repliedToMessage.channel_info?.email?.body_html || null,
+          from_email: repliedToMessage.channel_info?.email?.from_email || null,
+          from_name: repliedToMessage.channel_info?.email?.from_name || null,
+          received_at: repliedToMessage.timestamp || null,
+        }
+        : undefined,
+      providerThreadId: meta.provider_thread_id || null,
+      providerParentMessageId: meta.provider_message_id || null,
+    };
+  }
+
+  /**
+   * Same shape processIncomingEmail passes to the reasoning engine, built
+   * from the latest inbound message in `messages`.
+   */
+  _buildEmailDynamicContext(messages, triage = {}) {
+    const inbound = [...messages].reverse().find(m => m.role === 'user');
+    const inboundEmail = inbound?.channel_info?.email || {};
+    return {
+      channel: 'email',
+      email_context: {
+        subject: inboundEmail.subject,
+        from: inboundEmail.from_email,
+        triage_topic: triage?.topic,
+        triage_intent: triage?.intent,
+        triage_confidence: triage?.confidence,
+        attachments: (inbound?.channel_info?.media || []).map(attachment => ({
+          filename: attachment.filename,
+          mime_type: attachment.mime_type,
+          description: attachment.description || null,
+          interpretation_status: attachment.interpretation_status,
+        })),
+      },
+    };
+  }
+
+  /** Reject results that aren't a usable staff-requested email. */
+  _assertAgentWroteDraft(reasoning) {
+    if (reasoning.thinking_process?.some(step => step.step === 'human_handoff_requested')) {
+      throw httpError(422, 'The agent requested a human handoff instead of writing the email');
+    }
+    if (!reasoning.content) throw httpError(502, 'The agent did not produce a draft');
   }
 
   // ────────────────────────────────────────────────────────────────────────

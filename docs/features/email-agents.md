@@ -402,6 +402,85 @@ Retry a failed send (only allowed when `state='failed'`):
 
 `POST /…/mail-accounts/{accountId}/outbound/{outboundId}/retry`
 
+### Step 6b — Have the agent write a new email in a thread
+
+Staff can ask the agent to write a new email into an existing thread, for
+example a follow-up when the customer hasn't written anything new. The agent
+writes it from the staff member's instructions:
+
+`POST /…/mail-accounts/{accountId}/threads/{conversationId}/compose`
+
+```json
+{
+  "instructions": "Tell Alice her refund was processed today and should arrive within 5 business days."
+}
+```
+
+| Field                 | Required | Default                                     |
+| --------------------- | -------- | ------------------------------------------- |
+| `instructions`        | yes      | —                                           |
+| `to`                  | no       | whoever started the thread                  |
+| `cc` / `bcc`          | no       | the account's `default_cc` / `default_bcc`  |
+| `subject`             | no       | `Re: <thread subject>`                      |
+| `attachment_file_ids` | no       | none (max 5, see [Outbound Email Attachments](/api/email-attachments)) |
+
+The agent runs its normal reasoning loop with its own system prompt, tools
+and knowledge base. If the instructions and the thread already contain
+everything the email needs, it answers in a single LLM call. It only calls
+tools for facts that are missing, for example looking up an order status.
+
+The result is always a draft (`state: "drafted"`, `reason: "manual"`), with
+the account signature added. Review, edit, regenerate and send it like any
+other draft. The response is `201` with `{ outbound, message }`.
+
+The instructions are never sent to the customer. They are stored on the
+draft's conversation message as `metadata.compose` and on the outbound row as
+`metadata.compose`. On later turns, the agent sees them as staff guidance next
+to the email they produced.
+
+**Regenerating a composed draft** with `/outbound/{outboundId}/regenerate`
+keeps the original instructions. `revise` adds the new guidance to them;
+`fresh` writes the email again from the original instructions plus the new
+guidance.
+
+| Error | Meaning |
+| ----- | ------- |
+| `400` | Missing instructions, no recipient could be determined, or an invalid attachment |
+| `404` | Thread not found for this agent |
+| `409` | Another compose is already running on this thread |
+| `422` | The agent requested a human handoff instead of writing the email |
+| `502` | The agent returned no text |
+
+#### Streaming
+
+`POST /…/mail-accounts/{accountId}/threads/{conversationId}/compose/stream`
+takes the same body and returns Server-Sent Events, so the UI can show the
+email as it is written. Request errors (the table above, apart from `422` and
+`502`) still come back as normal JSON responses before the stream opens.
+
+```
+data: {"type":"connected"}
+data: {"type":"status","stage":"looking_up_data"}
+data: {"type":"response_chunk","content":"Hi Alice, "}
+data: {"type":"response_chunk","content":"your refund was processed today..."}
+data: {"type":"complete","outbound":{...},"message":{...}}
+```
+
+| Event            | Meaning |
+| ---------------- | ------- |
+| `status`         | The agent is about to run a tool. `stage` is a generic label (`searching_knowledge_base`, `searching_web`, `reading_webpage`, `looking_up_data`, `checking_calendar`, `working`), so tool names never reach the client. |
+| `response_chunk` | The next piece of the email body. |
+| `complete`       | The stored draft, signature included. |
+| `error`          | Generation failed after the stream opened. No draft was stored. |
+
+Treat the chunks as a live preview. When `complete` arrives, replace the
+preview with `outbound.text` / `outbound.html`: they include the signature,
+and in rare cases (the model returns a tool call and the email together) the
+body arrives in one chunk at the end.
+
+If the client disconnects, the agent still finishes and the draft is saved,
+so it appears in the drafts list.
+
 ### Step 7 — Graduate to auto-send (when ready)
 
 Update the mail account once you trust the agent on this inbox:
@@ -608,9 +687,20 @@ All endpoints are mounted under `/api/v1` and require `Authorization: Bearer <jw
 | `GET`  | `/…/mail-accounts/{accountId}/outbound/{outboundId}`                           | viewer |
 | `POST` | `/…/mail-accounts/{accountId}/attachments`                                     | member |
 | `PUT`  | `/…/mail-accounts/{accountId}/outbound/{outboundId}` (only when state=drafted) | member |
+| `POST` | `/…/mail-accounts/{accountId}/outbound/{outboundId}/regenerate`                | member |
 | `POST` | `/…/mail-accounts/{accountId}/outbound/{outboundId}/send`                      | member |
 | `POST` | `/…/mail-accounts/{accountId}/outbound/{outboundId}/cancel`                    | member |
 | `POST` | `/…/mail-accounts/{accountId}/outbound/{outboundId}/retry`                     | member |
+
+### Threads
+
+| Method | Path                                                                  | Role   |
+| ------ | --------------------------------------------------------------------- | ------ |
+| `GET`  | `/…/mail-accounts/{accountId}/threads`                                | viewer |
+| `GET`  | `/…/mail-accounts/{accountId}/threads/{conversationId}`               | viewer |
+| `POST` | `/…/mail-accounts/{accountId}/threads/{conversationId}/send`          | member |
+| `POST` | `/…/mail-accounts/{accountId}/threads/{conversationId}/compose`       | member |
+| `POST` | `/…/mail-accounts/{accountId}/threads/{conversationId}/compose/stream` | member |
 
 ---
 

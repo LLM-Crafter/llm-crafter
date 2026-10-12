@@ -24,6 +24,7 @@ const ProcessedEmail = require('../models/ProcessedEmail');
 const emailUtils = require('../services/email/emailUtils');
 const draftService = require('../services/email/draftService');
 const outboundAttachmentService = require('../services/email/outboundAttachmentService');
+const emailAgentService = require('../services/email/emailAgentService');
 const { uploadFiles } = require('./uploadController');
 const gmailOAuthService = require('../services/email/gmailOAuthService');
 const gmailApiService = require('../services/email/gmailApiService');
@@ -591,23 +592,18 @@ const sendToThread = async (req, res) => {
     const body = req.body || {};
     const send = account.send_profile || {};
 
-    // Derive threading headers from the conversation's email metadata.
-    const meta = conversation.channel_metadata?.email || {};
-    const inReplyTo = meta.message_id || null;
-    const references = inReplyTo ? [inReplyTo] : [];
-
-    // Resolve recipients — caller can override, otherwise reply to whoever
-    // started the thread.
-    const to = (body.to && body.to.length > 0)
-      ? body.to
-      : [meta.from_email || conversation.user_identifier].filter(Boolean);
+    // Recipients default to whoever started the thread; threading headers
+    // come from the conversation's email metadata.
+    const thread = emailAgentService.buildThreadOutboundFields({
+      conversation,
+      to: body.to,
+      subject: body.subject,
+    });
+    const { to, subject, inReplyTo, references } = thread;
 
     if (!to.length) {
       return res.status(400).json({ error: 'Cannot determine recipient — provide a `to` address.' });
     }
-
-    const subject = body.subject
-      || emailUtils.buildReplySubject(meta.subject || '');
 
     const textContent = String(body.text || '').trim();
     if (!textContent) {
@@ -621,21 +617,6 @@ const sendToThread = async (req, res) => {
 
     const messageId = emailUtils.generateMessageId(send.from_email);
     const state = body.send === true ? 'queued' : 'drafted';
-    const inboundMessages = conversation.messages.filter(message =>
-      message.role === 'user' && message.channel_info?.channel === 'email'
-    );
-    const repliedToMessage = inboundMessages.find(message =>
-      message.channel_info?.email?.message_id === inReplyTo
-    ) || inboundMessages[0];
-    const replyContext = repliedToMessage
-      ? {
-        text: repliedToMessage.content || '',
-        html: repliedToMessage.channel_info?.email?.body_html || null,
-        from_email: repliedToMessage.channel_info?.email?.from_email || null,
-        from_name: repliedToMessage.channel_info?.email?.from_name || null,
-        received_at: repliedToMessage.timestamp || null,
-      }
-      : undefined;
     const attachments = await outboundAttachmentService.resolve(
       body.attachment_file_ids || [],
       {
@@ -658,13 +639,13 @@ const sendToThread = async (req, res) => {
       subject,
       text: textFinal,
       html: htmlFinal,
-      reply_context: replyContext,
+      reply_context: thread.replyContext,
       attachments,
       message_id: messageId,
       in_reply_to: inReplyTo,
       references,
-      provider_thread_id: meta.provider_thread_id || null,
-      provider_parent_message_id: meta.provider_message_id || null,
+      provider_thread_id: thread.providerThreadId,
+      provider_parent_message_id: thread.providerParentMessageId,
       state,
       reason: 'manual',
       metadata: { composed_by: req.user?._id || 'api' },
@@ -707,6 +688,115 @@ const sendToThread = async (req, res) => {
   } catch (err) {
     console.error('[MailAccount] sendToThread error:', err);
     res.status(400).json({ error: 'Failed to compose email', detail: err.message });
+  }
+};
+
+function composeParams(req, account) {
+  const body = req.body || {};
+  return {
+    account,
+    conversationId: req.params.conversationId,
+    instructions: body.instructions.trim(),
+    overrides: {
+      to: body.to,
+      cc: body.cc,
+      bcc: body.bcc,
+      subject: body.subject,
+      attachment_file_ids: body.attachment_file_ids,
+    },
+    requestedBy: req.user
+      ? { user_id: req.user._id, name: req.user.name || null, email: req.user.email || null }
+      : null,
+  };
+}
+
+/**
+ * Have the agent write a new email into an existing thread from staff
+ * instructions. Always stored as a draft; send it with the outbound `/send`
+ * endpoint. Synchronous: responds with the draft once reasoning finishes.
+ *
+ * Body params:
+ *   instructions        {string}   required — what the email should say
+ *   to / cc / bcc       {string[]} optional — same defaults as `/send`
+ *   subject             {string}   optional — defaults to Re: <original subject>
+ *   attachment_file_ids {string[]} optional
+ */
+const composeInThread = async (req, res) => {
+  try {
+    const agent = await getAgentOr404(req, res);
+    if (!agent) return;
+    const account = await getAccountOr404(req, res, agent._id);
+    if (!account) return;
+
+    const result = await emailAgentService.composeInThread(composeParams(req, account));
+    res.status(201).json(result);
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    console.error('[MailAccount] composeInThread error:', err);
+    res.status(500).json({ error: 'Failed to compose email' });
+  }
+};
+
+/**
+ * Streaming variant of composeInThread over Server-Sent Events. Request
+ * errors (validation, 404, 409 while another compose runs on the thread) are
+ * normal JSON responses; once the stream opens, events are:
+ *
+ *   { type: 'connected' }
+ *   { type: 'status', stage }            — before each tool the agent runs
+ *   { type: 'response_chunk', content }  — the email body as it is written
+ *   { type: 'complete', outbound, message }
+ *   { type: 'error', error }
+ *
+ * Chunks are a preview of the body only. `complete` carries the stored
+ * draft, signature included, and is what the client should keep. If the
+ * client disconnects, the agent still finishes and the draft is saved.
+ */
+const composeInThreadStream = async (req, res) => {
+  let streamOpen = false;
+  let clientGone = false;
+  res.on('close', () => {
+    if (!res.writableEnded) clientGone = true;
+  });
+
+  const write = event => {
+    if (streamOpen && !clientGone) res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  try {
+    const agent = await getAgentOr404(req, res);
+    if (!agent) return;
+    const account = await getAccountOr404(req, res, agent._id);
+    if (!account) return;
+
+    const result = await emailAgentService.composeInThread({
+      ...composeParams(req, account),
+      onStart: () => {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
+        streamOpen = true;
+        write({ type: 'connected' });
+      },
+      onChunk: content => write({ type: 'response_chunk', content }),
+      onStatus: status => write({ type: 'status', ...status }),
+    });
+
+    write({ type: 'complete', outbound: result.outbound, message: result.message });
+    res.end();
+  } catch (err) {
+    if (!streamOpen) {
+      if (err.status) return res.status(err.status).json({ error: err.message });
+      console.error('[MailAccount] composeInThreadStream error:', err);
+      return res.status(500).json({ error: 'Failed to compose email' });
+    }
+    if (!err.status) console.error('[MailAccount] composeInThreadStream error:', err);
+    write({ type: 'error', error: err.status ? err.message : 'Failed to compose email' });
+    res.end();
   }
 };
 
@@ -1066,6 +1156,8 @@ module.exports = {
   listEmailThreads,
   getEmailThread,
   sendToThread,
+  composeInThread,
+  composeInThreadStream,
   uploadAttachments,
   getGmailAuthorizeUrl,
   gmailOAuthCallback,

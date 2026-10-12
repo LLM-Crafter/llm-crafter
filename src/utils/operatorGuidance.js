@@ -4,17 +4,20 @@ const GUIDANCE_LABEL = 'operator_guidance (internal staff instruction applied to
 
 /**
  * Staff guidance that shaped a message's current content, oldest first.
- * A `fresh` regeneration discards guidance given on earlier versions.
+ * A `fresh` regeneration discards guidance given on earlier versions, but a
+ * staff-composed message always keeps the instructions it was composed from.
  */
 function getActiveGuidance(message) {
+  const composeInstructions = message?.metadata?.compose?.instructions;
+  const base = composeInstructions ? [composeInstructions] : [];
   const revisions = message?.metadata?.revisions;
-  if (!Array.isArray(revisions) || revisions.length === 0) return [];
+  if (!Array.isArray(revisions) || revisions.length === 0) return base;
   const active = [];
   for (const revision of revisions) {
     if (revision.mode === 'fresh') active.length = 0;
     if (revision.guidance) active.push(revision.guidance);
   }
-  return active;
+  return [...base, ...active];
 }
 
 /**

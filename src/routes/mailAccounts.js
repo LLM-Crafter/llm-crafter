@@ -321,6 +321,35 @@ router.post(
   mailAccountController.sendToThread
 );
 
+const composeValidators = [
+  ...threadParam,
+  body('instructions').isString().trim().notEmpty().isLength({ max: 4000 }),
+  body('subject').optional().isString(),
+  body('to').optional().isArray(),
+  body('cc').optional().isArray(),
+  body('bcc').optional().isArray(),
+  body('attachment_file_ids').optional().isArray({ max: 5 }),
+  body('attachment_file_ids.*').isString().notEmpty(),
+];
+
+router.post(
+  '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/:accountId/threads/:conversationId/compose',
+  auth,
+  organizationAuth.hasRole('member'),
+  composeValidators,
+  validate,
+  mailAccountController.composeInThread
+);
+
+router.post(
+  '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/:accountId/threads/:conversationId/compose/stream',
+  auth,
+  organizationAuth.hasRole('member'),
+  composeValidators,
+  validate,
+  mailAccountController.composeInThreadStream
+);
+
 router.post(
   '/organizations/:orgId/projects/:projectId/agents/:agentId/mail-accounts/:accountId/attachments',
   auth,
