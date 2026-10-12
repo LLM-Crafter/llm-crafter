@@ -85,6 +85,24 @@ describe('buildComposeDirective', () => {
   });
 });
 
+describe('buildRegenerationDirective', () => {
+  test('tells the agent to respond right away unless facts are missing', () => {
+    const withGuidance = agentService.buildRegenerationDirective({
+      instructions: ['Be warmer'],
+      previousDraft: 'Hi Alice',
+    });
+    const withoutGuidance = agentService.buildRegenerationDirective({
+      instructions: [],
+      previousDraft: null,
+    });
+
+    for (const directive of [withGuidance, withoutGuidance]) {
+      expect(directive).toContain('respond right away');
+      expect(directive).not.toContain('use your tools to fetch it before responding');
+    }
+  });
+});
+
 describe('getActiveGuidance with composed messages', () => {
   test('starts with the compose instructions', () => {
     const message = { metadata: { compose: { instructions: 'Follow up on the demo' } } };

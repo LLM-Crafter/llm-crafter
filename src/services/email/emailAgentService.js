@@ -579,8 +579,10 @@ class EmailAgentService {
       }
     );
 
+    // Background, like the draft create in composeInThread: the reviewer
+    // shouldn't wait on the provider round trips.
     if (['gmail', 'graph'].includes(account.provider)) {
-      await draftService.update(account, updated).catch(err =>
+      draftService.update(account, updated).catch(err =>
         console.error(`[EmailAgent] remote draft update failed for ${updated._id}:`, err.message)
       );
     }
