@@ -314,10 +314,21 @@ Guidelines:
       const langList = languages.join(', ');
       const prompt = `Translate the following text into these languages: ${langList}.\nReturn a JSON object where each key is an ISO 639-1 language code and the value is the translated text.\nOnly return the JSON object, no other text.\n\nText to translate:\n${text}`;
 
+      // Output grows with text length × language count (this also translates
+      // display summaries, not just titles), and reasoning models (e.g.
+      // claude-haiku-5-5, gpt-5-mini) spend hidden tokens from the same budget.
+      // A cut-off response is invalid JSON and drops every translation.
+      // ~1 token per 2 chars leaves headroom for non-Latin scripts. Capped at
+      // 8000 so it stays within the output limit of deepseek-chat / gemini-2.0-flash.
+      const maxTokens = Math.min(
+        8000,
+        2000 + languages.length * Math.ceil(text.length / 2)
+      );
+
       const response = await openai.generateCompletion(
         model,
         prompt,
-        { temperature: 0.3, max_tokens: 1000 },
+        { temperature: 0.3, max_tokens: maxTokens },
         'You are a professional translator. Translate accurately and naturally. Return only valid JSON.'
       );
 

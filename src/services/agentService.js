@@ -2873,12 +2873,6 @@ Your response:`;
         return null;
       }
 
-      // Ensure title is not too long (max 10 words)
-      const words = title.split(' ');
-      if (words.length > 10) {
-        title = words.slice(0, 10).join(' ') + '...';
-      }
-
       // Generate translations if required languages are configured
       const requiredLanguages = agent.config?.required_languages || [];
       let titleTranslations = [];
