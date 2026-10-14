@@ -349,8 +349,63 @@ GET    /api/v1/organizations/{orgId}/projects/{projectId}/rag/documents
 DELETE /api/v1/organizations/{orgId}/projects/{projectId}/rag/documents/{documentId}
 ```
 
-`PUT` indexes the document, or replaces it: chunks beyond the new chunk count
-are removed, and identical content is not re-embedded.
+Pass `knowledge_base_id` in the body for `PUT`, and as a query parameter for
+`GET` and `DELETE`. Leave it out to use the project-wide knowledge base.
+
+> **Response wrapping.** Every response has a top-level `success` boolean.
+> Single-document reads are wrapped in a `document` key, and job reads in a
+> `job` key. Read `body.document.status`, not `body.status`.
+
+#### The document object
+
+`GET .../rag/documents/{documentId}` returns this object under `document`.
+`GET .../rag/documents` returns a list of them under `documents`.
+
+```json
+{
+  "document_id": "3f9c2b1e-...",
+  "knowledge_base_id": null,
+  "status": "indexed",
+  "revision": 3,
+  "chunk_count": 12,
+  "metadata": { "file_name": "handbook.pdf", "type": "document" },
+  "job_id": "7d2e...-uuid",
+  "error": null,
+  "indexed_at": "2026-10-14T09:12:44.120Z",
+  "updated_at": "2026-10-14T09:12:44.131Z"
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `document_id` | string | Your ID, exactly as sent. |
+| `knowledge_base_id` | string \| null | `null` for the project-wide knowledge base. |
+| `status` | string | `pending`, `indexing`, `indexed`, `failed` or `deleting`. See below. |
+| `revision` | number | Goes up on every `PUT` and `DELETE`. |
+| `chunk_count` | number | Chunks in the last successfully indexed version. `0` until the first index finishes. |
+| `metadata` | object | Document-level metadata. |
+| `job_id` | string \| null | Background job of the latest `PUT`. `null` when it was processed inline. |
+| `error` | string \| null | Set only when `status` is `failed`. |
+| `indexed_at` | string \| null | ISO 8601 time of the last successful index. |
+| `updated_at` | string | ISO 8601 time of the last change to this document. |
+
+| `status` | Meaning | Final? |
+|---|---|---|
+| `pending` | Queued, not started yet | no |
+| `indexing` | Embedding and writing chunks | no |
+| `indexed` | Searchable | yes |
+| `failed` | Indexing failed; see `error`. Send the document again to retry | yes |
+| `deleting` | A delete is in progress | no |
+
+A deleted document isn't returned: `GET` responds `404`.
+
+#### `PUT .../rag/documents/{documentId}`: index or replace
+
+Indexes the document, or replaces it. Chunks past the new chunk count are
+removed, and identical content isn't re-embedded. Metadata values must be
+strings, numbers, booleans or string arrays; anything else is dropped.
+
+Request:
 
 ```json
 {
@@ -368,19 +423,200 @@ are removed, and identical content is not re-embedded.
 }
 ```
 
-In the background it returns `202` with `job_id`. Poll `GET .../rag/documents/{documentId}`
-until `status` is `indexed` or `failed`. Metadata values must be strings,
-numbers, booleans or string arrays; others are dropped.
+`202 Accepted`: queued for background indexing (the default):
 
-`DELETE` returns the real number of chunks removed in `deleted_count`. A second
-delete returns `200` with `deleted_count: 0`, and an unknown document returns
-`404`. A delete also stops an index job that is still running for the document.
-Pass `knowledge_base_id` as a query parameter for `GET` and `DELETE`.
+```json
+{
+  "success": true,
+  "document_id": "3f9c2b1e-...",
+  "knowledge_base_id": null,
+  "revision": 3,
+  "status": "pending",
+  "background_processing": true,
+  "job_id": "7d2e...-uuid",
+  "status_endpoint": "/api/v1/organizations/{orgId}/projects/{projectId}/rag/documents/3f9c2b1e-..."
+}
+```
+
+`200 OK`: the content is identical to what's already indexed, so no job is
+created and `job_id` is absent:
+
+```json
+{
+  "success": true,
+  "document_id": "3f9c2b1e-...",
+  "knowledge_base_id": null,
+  "revision": 2,
+  "status": "indexed",
+  "unchanged": true,
+  "chunk_count": 12,
+  "message": "Document content is unchanged; nothing to re-index"
+}
+```
+
+`200 OK`: processed inline (`"process_in_background": false`):
+
+```json
+{
+  "success": true,
+  "document_id": "3f9c2b1e-...",
+  "knowledge_base_id": null,
+  "revision": 3,
+  "status": "indexed",
+  "background_processing": false,
+  "chunk_count": 12,
+  "vector_ids": ["3f9c2b1e-...#0", "3f9c2b1e-...#1"]
+}
+```
+
+Here `status` can also be `superseded`: a newer `PUT` or a `DELETE` for the same
+document arrived while this one was running, and that newer request is the one
+that counts.
+
+#### `GET .../rag/documents/{documentId}`: document status
+
+`200 OK`:
+
+```json
+{
+  "success": true,
+  "document": { "document_id": "3f9c2b1e-...", "status": "indexed", "...": "see the document object" }
+}
+```
+
+`404 Not Found`: the document was never indexed, or it was deleted:
+
+```json
+{ "success": false, "error": "Document not found" }
+```
+
+To track a background `PUT`, poll this endpoint until `document.status` is
+`indexed` or `failed`. Polling the job (`GET .../rag/jobs/{jobId}`) also works,
+but the job only reports progress. The document's `status` is the source of
+truth.
+
+#### `GET .../rag/documents`: list documents
+
+Query parameters: `status` (one of the values above), `limit` (1–200, default
+50), `skip` (default 0). Deleted documents are never listed. The list is sorted
+by most recently updated.
+
+`200 OK`:
+
+```json
+{
+  "success": true,
+  "documents": [ { "document_id": "3f9c2b1e-...", "status": "indexed", "...": "see the document object" } ],
+  "total": 37
+}
+```
+
+`total` counts every match, not just the returned page.
+
+#### `DELETE .../rag/documents/{documentId}`: delete every chunk
+
+A delete also stops an index job that is still running for the document.
+
+`200 OK`:
+
+```json
+{
+  "success": true,
+  "message": "Deleted 12 document chunks",
+  "deleted_count": 12,
+  "document_id": "3f9c2b1e-...",
+  "knowledge_base_id": null
+}
+```
+
+- Deleting a document that is already deleted returns `200` with
+  `"deleted_count": 0` and `"message": "Document was already deleted"`.
+- `deleted_count` is `null` only for a document indexed before the registry
+  existed, on Pinecone, where the number of removed chunks can't be counted.
+
+`404 Not Found`: no such document in this project or knowledge base:
+
+```json
+{
+  "success": false,
+  "error": "Document not found",
+  "document_id": "3f9c2b1e-...",
+  "knowledge_base_id": null
+}
+```
+
+Treat `404` as "already gone": it's safe to remove your own record.
+
+#### `GET .../rag/jobs/{jobId}`: job status
+
+Wrapped in `job`:
+
+```json
+{
+  "success": true,
+  "job": {
+    "job_id": "7d2e...-uuid",
+    "type": "document",
+    "status": "completed",
+    "knowledge_base_id": null,
+    "progress": {
+      "total_documents": 1,
+      "processed_documents": 1,
+      "successful_documents": 1,
+      "failed_documents": 0,
+      "indexed_chunks": 12,
+      "completion_percentage": 100
+    },
+    "created_at": "2026-10-14T09:12:40.002Z",
+    "started_at": "2026-10-14T09:12:41.510Z",
+    "completed_at": "2026-10-14T09:12:44.140Z",
+    "processing_time_ms": 2630,
+    "is_active": false,
+    "results": { "indexed_count": 12, "indexed_ids": ["..."], "errors": [] }
+  }
+}
+```
+
+Job `status` is `pending`, `processing`, `completed` or `failed`. These are
+different values from the document `status`. `results` is present only when
+the job is `completed`; `error` (a string) only when it is `failed`. If every
+document in a job fails, the job is `failed`.
+
+#### Errors
+
+| Status | Body | When |
+|---|---|---|
+| `400` | `{ "errors": [{ "msg": "...", "path": "chunks", ... }] }` | Request validation failed. Note: no `success` field. |
+| `400` | `{ "success": false, "error": "..." }` | Invalid document content, or no embedding API key |
+| `404` | `{ "success": false, "error": "Knowledge base not found" }` | `knowledge_base_id` doesn't exist in this project |
+| `500` | `{ "success": false, "error": "..." }` | Unexpected failure; safe to retry |
+
+#### Pre-chunked items on `POST /rag/index`
 
 Items sent to `POST /rag/index` that carry `metadata.document_id` are treated as
-chunks of that document and go through the same registry. If an item's
-`content` starts with its `metadata.chunk_context`, the context is embedded but
-not returned by search.
+chunks of that document and go through the same registry. The document can
+then be read with `GET .../rag/documents/{document_id}` and deleted with
+`DELETE`. If an item's `content` starts with its `metadata.chunk_context`, the
+context is embedded but not returned by search.
+
+The response is unchanged, plus a `document_ids` list:
+
+```json
+{
+  "success": true,
+  "background_processing": true,
+  "job_id": "7d2e...-uuid",
+  "knowledge_base_id": null,
+  "estimated_time": "~24 seconds",
+  "message": "Documents queued for background indexing. Use job ID 7d2e...-uuid to check status.",
+  "document_count": 12,
+  "document_ids": ["3f9c2b1e-..."],
+  "status_endpoint": "/api/v1/organizations/{orgId}/projects/{projectId}/rag/jobs/7d2e...-uuid"
+}
+```
+
+`document_count` is the number of items sent (chunks), not the number of
+documents.
 
 ## 🚀 Production Deployment
 
