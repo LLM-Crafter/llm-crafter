@@ -1,4 +1,5 @@
 const ragService = require('../services/ragService');
+const ragDocumentService = require('../services/ragDocumentService');
 const indexingJobProcessor = require('../services/indexingJobProcessor');
 const KnowledgeBase = require('../models/KnowledgeBase');
 const { validationResult } = require('express-validator');
@@ -58,6 +59,49 @@ class RAGController {
         return res.status(400).json({
           success: false,
           error: 'API key ID is required',
+        });
+      }
+
+      // Chunks that name their document (metadata.document_id) are indexed as
+      // registry-tracked documents, so DELETE /rag/documents/:id removes them
+      const clientDocuments = ragDocumentService.groupPreChunkedItems(documents);
+      if (clientDocuments) {
+        const { jobInfo, outcomes } = await this.indexClientDocuments(
+          req,
+          clientDocuments,
+          {
+            apiKeyId: embeddingApiKeyId,
+            knowledgeBaseId,
+            background: process_in_background,
+            // Callers of this endpoint always expect a job to poll
+            skipUnchanged: false,
+          }
+        );
+        const documentIds = clientDocuments.map(d => d.document_id);
+
+        if (jobInfo) {
+          return res.json({
+            success: true,
+            background_processing: true,
+            job_id: jobInfo.job_id,
+            knowledge_base_id: knowledgeBaseId,
+            estimated_time: jobInfo.estimated_time,
+            message: `Documents queued for background indexing. Use job ID ${jobInfo.job_id} to check status.`,
+            document_count: documents.length,
+            document_ids: documentIds,
+            status_endpoint: `/api/v1/organizations/${orgId}/projects/${projectId}/rag/jobs/${jobInfo.job_id}`,
+          });
+        }
+
+        const indexedIds = outcomes.flatMap(o => o.vector_ids);
+        return res.json({
+          success: true,
+          background_processing: false,
+          knowledge_base_id: knowledgeBaseId,
+          indexed_count: indexedIds.length,
+          indexed_ids: indexedIds,
+          document_ids: documentIds,
+          message: `Successfully indexed ${indexedIds.length} document chunks`,
         });
       }
 
@@ -516,7 +560,224 @@ class RAGController {
   }
 
   /**
-   * Delete document by document_id
+   * Register new revisions of client-owned documents and index them, either
+   * through a queued job or inline. Returns { jobInfo, registered, outcomes }.
+   */
+  async indexClientDocuments(
+    req,
+    documents,
+    { apiKeyId, knowledgeBaseId, background, skipUnchanged }
+  ) {
+    const { orgId, projectId } = req.params;
+    const scope = { organizationId: orgId, projectId, knowledgeBaseId };
+
+    const registered = [];
+    for (const document of documents) {
+      const { row, unchanged } = await ragDocumentService.registerRevision(
+        scope,
+        document,
+        { skipUnchanged }
+      );
+      registered.push({
+        document,
+        revision: row.revision,
+        chunk_count: row.chunk_count,
+        unchanged,
+      });
+    }
+
+    const toIndex = registered.filter(r => !r.unchanged);
+    const revisions = toIndex.map(r => ({
+      document_id: r.document.document_id,
+      revision: r.revision,
+    }));
+
+    if (background) {
+      let jobInfo = null;
+      if (toIndex.length > 0) {
+        try {
+          jobInfo = await indexingJobProcessor.queueIndexingJob(
+            toIndex.map(r => ({ ...r.document, revision: r.revision })),
+            orgId,
+            projectId,
+            apiKeyId,
+            {
+              type: 'document',
+              knowledgeBaseId,
+              userAgent: req.get('User-Agent'),
+              ipAddress: req.ip,
+            }
+          );
+        } catch (error) {
+          await ragDocumentService.failRevisions(scope, revisions, error.message);
+          throw error;
+        }
+        await ragDocumentService.attachJob(scope, revisions, jobInfo.job_id);
+      }
+      return { jobInfo, registered, outcomes: [] };
+    }
+
+    const outcomes = [];
+    for (const r of toIndex) {
+      outcomes.push(
+        await ragDocumentService.indexRevision({
+          organizationId: orgId,
+          projectId,
+          knowledgeBaseId,
+          apiKeyId,
+          document: r.document,
+          revision: r.revision,
+        })
+      );
+    }
+    return { jobInfo: null, registered, outcomes };
+  }
+
+  /**
+   * Index or replace a client-owned document from pre-chunked content
+   * PUT /api/v1/organizations/:organizationId/projects/:projectId/rag/documents/:documentId
+   */
+  async upsertDocument(req, res) {
+    try {
+      const { orgId, projectId, documentId } = req.params;
+      const {
+        chunks,
+        metadata,
+        api_key_id,
+        process_in_background = true,
+      } = req.body;
+
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+      const embeddingApiKeyId = await ragService.resolveEmbeddingApiKeyId(
+        api_key_id,
+        knowledgeBaseId
+      );
+      if (!embeddingApiKeyId) {
+        return res.status(400).json({
+          success: false,
+          error: 'API key ID is required',
+        });
+      }
+
+      const document = ragDocumentService.normalizeDocument(documentId, {
+        chunks,
+        metadata,
+      });
+      const { jobInfo, registered, outcomes } =
+        await this.indexClientDocuments(req, [document], {
+          apiKeyId: embeddingApiKeyId,
+          knowledgeBaseId,
+          background: process_in_background,
+          skipUnchanged: true,
+        });
+      const [{ revision, chunk_count, unchanged }] = registered;
+      const base = {
+        success: true,
+        document_id: document.document_id,
+        knowledge_base_id: knowledgeBaseId,
+        revision,
+      };
+
+      if (unchanged) {
+        return res.json({
+          ...base,
+          status: 'indexed',
+          unchanged: true,
+          chunk_count,
+          message: 'Document content is unchanged; nothing to re-index',
+        });
+      }
+
+      if (jobInfo) {
+        return res.status(202).json({
+          ...base,
+          status: 'pending',
+          background_processing: true,
+          job_id: jobInfo.job_id,
+          status_endpoint: `/api/v1/organizations/${orgId}/projects/${projectId}/rag/documents/${encodeURIComponent(document.document_id)}`,
+        });
+      }
+
+      const [outcome] = outcomes;
+      res.json({
+        ...base,
+        status: outcome.status,
+        background_processing: false,
+        chunk_count: outcome.chunk_count,
+        vector_ids: outcome.vector_ids,
+      });
+    } catch (error) {
+      console.error('RAG document upsert error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Get a client-owned document's indexing state
+   * GET /api/v1/organizations/:organizationId/projects/:projectId/rag/documents/:documentId
+   */
+  async getDocument(req, res) {
+    try {
+      const { orgId, projectId, documentId } = req.params;
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+
+      const document = await ragDocumentService.getDocument({
+        organizationId: orgId,
+        projectId,
+        knowledgeBaseId,
+        documentId,
+      });
+      if (!document) {
+        return res.status(404).json({
+          success: false,
+          error: 'Document not found',
+        });
+      }
+
+      res.json({ success: true, document });
+    } catch (error) {
+      console.error('RAG document fetch error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * List client-owned documents in the project KB or a knowledge base
+   * GET /api/v1/organizations/:organizationId/projects/:projectId/rag/documents
+   */
+  async listDocuments(req, res) {
+    try {
+      const { orgId, projectId } = req.params;
+      const { status, limit = 50, skip = 0 } = req.query;
+      const knowledgeBaseId = await resolveKnowledgeBaseId(req);
+
+      const { documents, total } = await ragDocumentService.listDocuments(
+        { organizationId: orgId, projectId, knowledgeBaseId },
+        {
+          status,
+          limit: parseInt(limit, 10),
+          skip: parseInt(skip, 10),
+        }
+      );
+
+      res.json({ success: true, documents, total });
+    } catch (error) {
+      console.error('RAG document list error:', error);
+      res.status(error.status || 500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Delete all chunks of a document
    * DELETE /api/v1/organizations/:organizationId/projects/:projectId/rag/documents/:documentId
    */
   async deleteByDocumentId(req, res) {
@@ -524,19 +785,34 @@ class RAGController {
       const { orgId, projectId, documentId } = req.params;
       const knowledgeBaseId = await resolveKnowledgeBaseId(req);
 
-      const result = await ragService.deleteByDocumentId(
-        documentId,
-        orgId,
+      const result = await ragDocumentService.deleteDocument({
+        organizationId: orgId,
         projectId,
-        knowledgeBaseId
-      );
+        knowledgeBaseId,
+        documentId,
+      });
+
+      if (!result.found) {
+        return res.status(404).json({
+          success: false,
+          error: 'Document not found',
+          document_id: documentId,
+          knowledge_base_id: knowledgeBaseId,
+        });
+      }
+
+      let message;
+      if (result.already_deleted) {
+        message = 'Document was already deleted';
+      } else if (result.deleted_count === null) {
+        message = 'Document chunks deleted (count unavailable for legacy documents)';
+      } else {
+        message = `Deleted ${result.deleted_count} document chunks`;
+      }
 
       res.json({
         success: true,
-        message:
-          result.deleted_count === null
-            ? 'Document chunks deleted'
-            : `Deleted ${result.deleted_count} document chunks`,
+        message,
         deleted_count: result.deleted_count,
         document_id: documentId,
         knowledge_base_id: knowledgeBaseId,
@@ -555,6 +831,9 @@ const ragController = new RAGController();
 
 // Bind methods to maintain 'this' context
 ragController.indexDocuments = ragController.indexDocuments.bind(ragController);
+ragController.upsertDocument = ragController.upsertDocument.bind(ragController);
+ragController.getDocument = ragController.getDocument.bind(ragController);
+ragController.listDocuments = ragController.listDocuments.bind(ragController);
 ragController.searchDocuments =
   ragController.searchDocuments.bind(ragController);
 ragController.batchIndexDocuments =

@@ -1,5 +1,6 @@
 const IndexingJob = require('../models/IndexingJob');
 const ragService = require('./ragService');
+const ragDocumentService = require('./ragDocumentService');
 const { v4: uuidv4 } = require('uuid');
 
 class IndexingJobProcessor {
@@ -145,7 +146,9 @@ class IndexingJobProcessor {
       };
       
       // Process documents based on job type
-      if (job.type === 'batch' && Array.isArray(job.documents)) {
+      if (job.type === 'document') {
+        await this.processClientDocuments(job, results);
+      } else if (job.type === 'batch' && Array.isArray(job.documents)) {
         await this.processBatchDocuments(job, results);
       } else {
         await this.processSingleDocument(job, results);
@@ -175,6 +178,52 @@ class IndexingJobProcessor {
     }
   }
   
+  /**
+   * Index client-owned documents, each carrying the registry revision it was queued for
+   */
+  async processClientDocuments(job, results) {
+    for (const [index, document] of job.documents.entries()) {
+      try {
+        const outcome = await ragDocumentService.indexRevision({
+          organizationId: job.organization_id,
+          projectId: job.project_id,
+          knowledgeBaseId: job.knowledge_base_id || null,
+          apiKeyId: job.api_key_id,
+          document,
+          revision: document.revision,
+        });
+        // A superseded revision is not a failure: a newer write owns the document
+        results.indexed_ids.push(...outcome.vector_ids);
+        results.total_chunks += outcome.vector_ids.length;
+        results.total_successful++;
+      } catch (error) {
+        console.error(
+          `❌ Error indexing document ${document.document_id}:`,
+          error
+        );
+        results.errors.push({
+          document_index: index,
+          error: error.message,
+          timestamp: new Date(),
+        });
+        results.total_failed++;
+      }
+      results.total_processed++;
+
+      await job.updateProgress({
+        processed_documents: results.total_processed,
+        successful_documents: results.total_successful,
+        failed_documents: results.total_failed,
+        indexed_chunks: results.total_chunks,
+      });
+    }
+
+    // Surface a job where nothing indexed as failed so pollers don't see "completed"
+    if (results.total_successful === 0 && results.total_failed > 0) {
+      throw new Error(results.errors.map(e => e.error).join('; '));
+    }
+  }
+
   /**
    * Process batch documents with concurrency
    */

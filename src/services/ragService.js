@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const OpenAIService = require('./openaiService');
 const ApiKey = require('../models/ApiKey');
 const KnowledgeBase = require('../models/KnowledgeBase');
+const RagIndexedDocument = require('../models/RagIndexedDocument');
 const VectorDatabaseConfig = require('../models/VectorDatabaseConfig');
 const { createVectorDatabase } = require('./vectorDatabaseService');
 
@@ -793,32 +794,17 @@ class RAGService {
       projectId,
       knowledgeBaseId,
     });
+    // Registry rows go first: an index job that loses its row stops writing and
+    // cleans up after itself, so nothing lands after the vectors are cleared
+    await RagIndexedDocument.deleteMany({
+      organization_id: organizationId,
+      project_id: projectId,
+      knowledge_base_id: knowledgeBaseId || null,
+    });
     const vectorDB = await this.getVectorDatabase(organizationId, projectId);
     return vectorDB.clearIndex(
       this.buildScope(organizationId, projectId, knowledgeBaseId)
     );
-  }
-
-  /**
-   * Delete documents by document_id
-   */
-  async deleteByDocumentId(
-    documentId,
-    organizationId,
-    projectId,
-    knowledgeBaseId = null
-  ) {
-    const vectorDB = await this.getVectorDatabase(organizationId, projectId);
-    const result = await vectorDB.deleteDocument(
-      documentId,
-      this.buildScope(organizationId, projectId, knowledgeBaseId)
-    );
-
-    return {
-      success: true,
-      deleted_count: result?.deleted_count ?? null,
-      document_id: documentId,
-    };
   }
 }
 

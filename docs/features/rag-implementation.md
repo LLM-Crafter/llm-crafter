@@ -335,6 +335,53 @@ DELETE /api/v1/organizations/{orgId}/projects/{projectId}/rag
 POST /api/v1/organizations/{orgId}/projects/{projectId}/rag/batch-index
 ```
 
+### Documents (pre-chunked, client-owned)
+
+Use these when you chunk documents yourself and need to replace or delete
+them later. The document ID is yours; LLM Crafter stores each chunk as
+`{documentId}#{i}` and tracks the document in a registry, so deletes and
+re-indexes never depend on searching the vector store.
+
+```
+PUT    /api/v1/organizations/{orgId}/projects/{projectId}/rag/documents/{documentId}
+GET    /api/v1/organizations/{orgId}/projects/{projectId}/rag/documents/{documentId}
+GET    /api/v1/organizations/{orgId}/projects/{projectId}/rag/documents
+DELETE /api/v1/organizations/{orgId}/projects/{projectId}/rag/documents/{documentId}
+```
+
+`PUT` indexes the document, or replaces it: chunks beyond the new chunk count
+are removed, and identical content is not re-embedded.
+
+```json
+{
+  "api_key_id": "<embedding api key id>",
+  "knowledge_base_id": "<optional>",
+  "process_in_background": true,
+  "metadata": { "file_name": "handbook.pdf" },
+  "chunks": [
+    {
+      "content": "Chunk text returned by search",
+      "embed_text": "Optional text to embed instead, e.g. generated context + chunk",
+      "metadata": { "page_number": 3 }
+    }
+  ]
+}
+```
+
+In the background it returns `202` with `job_id`. Poll `GET .../rag/documents/{documentId}`
+until `status` is `indexed` or `failed`. Metadata values must be strings,
+numbers, booleans or string arrays; others are dropped.
+
+`DELETE` returns the real number of chunks removed in `deleted_count`. A second
+delete returns `200` with `deleted_count: 0`, and an unknown document returns
+`404`. A delete also stops an index job that is still running for the document.
+Pass `knowledge_base_id` as a query parameter for `GET` and `DELETE`.
+
+Items sent to `POST /rag/index` that carry `metadata.document_id` are treated as
+chunks of that document and go through the same registry. If an item's
+`content` starts with its `metadata.chunk_context`, the context is embedded but
+not returned by search.
+
 ## 🚀 Production Deployment
 
 ### Vector Database Integration

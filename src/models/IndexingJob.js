@@ -31,7 +31,8 @@ const indexingJobSchema = new mongoose.Schema({
   
   type: {
     type: String,
-    enum: ['single', 'batch'],
+    // document = client-owned pre-chunked documents tracked in RagIndexedDocument
+    enum: ['single', 'batch', 'document'],
     required: true
   },
   

@@ -1,3 +1,5 @@
+const { v5: uuidv5 } = require('uuid');
+
 // Optional imports - gracefully handle missing dependencies
 let weaviate;
 let Pinecone;
@@ -25,6 +27,66 @@ function resolveNamespace({ project_id, knowledge_base_id }) {
 }
 
 const WEAVIATE_PROJECT_SCOPE = '__project__';
+// Namespace for deriving deterministic Weaviate object UUIDs from chunk ids
+const WEAVIATE_CHUNK_UUID_NAMESPACE = '4f1c2a6e-8d3b-5e7a-9c41-2b6d8e0f3a57';
+
+// Chunks of client-owned documents are keyed {document_id}#{chunk_index}, so a
+// document's vectors can be addressed (and listed by prefix) without metadata
+function chunkVectorId(documentId, chunkIndex) {
+  return `${documentId}#${chunkIndex}`;
+}
+
+function chunkVectorIdRange(documentId, from, to) {
+  const ids = [];
+  for (let i = from; i < to; i++) {
+    ids.push(chunkVectorId(documentId, i));
+  }
+  return ids;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const RESERVED_METADATA_KEYS = new Set([
+  'id',
+  'content',
+  'title',
+  'source',
+  'document_id',
+  'chunk_index',
+  'organization_id',
+  'project_id',
+  'knowledge_base_id',
+  'metadata_json',
+  'embedding',
+]);
+
+// Keeps the client metadata every provider can store: Pinecone only accepts
+// string, number, boolean or string[] values, and reserved keys stay ours
+function toFlatMetadata(metadata) {
+  const flat = {};
+  for (const [key, value] of Object.entries(metadata || {})) {
+    if (RESERVED_METADATA_KEYS.has(key) || value === null) {
+      continue;
+    }
+    const isScalar = ['string', 'number', 'boolean'].includes(typeof value);
+    const isStringList =
+      Array.isArray(value) && value.every(item => typeof item === 'string');
+    if (isScalar || isStringList) {
+      flat[key] = value;
+    }
+  }
+  return flat;
+}
+
+function chunksInBatches(items, size) {
+  const batches = [];
+  for (let i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+  return batches;
+}
 
 /**
  * Vector Database Interface
@@ -181,6 +243,25 @@ class VectorDatabaseInterface {
   async clearIndex(scope) {
     throw new Error('clearIndex method must be implemented by subclass');
   }
+
+  // chunks = [{ document_id, chunk_index, content, title, source, metadata, embedding }]
+  // Upserts by {document_id}#{chunk_index}, so re-indexing overwrites in place
+  async upsertChunks(chunks, scope) {
+    throw new Error('upsertChunks method must be implemented by subclass');
+  }
+
+  // Deletes every chunk of a client-owned document; knownCount is the
+  // registry's high-water mark of chunk indexes that may exist
+  async deleteDocumentChunks(documentId, scope, { knownCount = 0 } = {}) {
+    throw new Error(
+      'deleteDocumentChunks method must be implemented by subclass'
+    );
+  }
+
+  // Deletes chunks with from <= chunk_index < to (stale tail after a re-index)
+  async deleteChunkRange(documentId, scope, from, to) {
+    throw new Error('deleteChunkRange method must be implemented by subclass');
+  }
 }
 
 /**
@@ -247,19 +328,30 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
       return;
     }
 
-    const hasKbProperty = (existingClass?.properties || []).some(
-      p => p.name === 'knowledge_base_id'
+    // Properties added after the class was first created
+    const addedProperties = [
+      {
+        name: 'knowledge_base_id',
+        dataType: ['text'],
+        description: 'Knowledge base ID',
+      },
+      {
+        name: 'metadata_json',
+        dataType: ['text'],
+        description: 'Client chunk metadata as JSON',
+      },
+    ];
+    const existingNames = new Set(
+      (existingClass?.properties || []).map(p => p.name)
     );
-    if (!hasKbProperty) {
-      await this.client.schema
-        .propertyCreator()
-        .withClassName(this.className)
-        .withProperty({
-          name: 'knowledge_base_id',
-          dataType: ['text'],
-          description: 'Knowledge base ID',
-        })
-        .do();
+    for (const property of addedProperties) {
+      if (!existingNames.has(property.name)) {
+        await this.client.schema
+          .propertyCreator()
+          .withClassName(this.className)
+          .withProperty(property)
+          .do();
+      }
     }
   }
 
@@ -332,6 +424,11 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
           dataType: ['text'],
           description: 'Knowledge base ID',
         },
+        {
+          name: 'metadata_json',
+          dataType: ['text'],
+          description: 'Client chunk metadata as JSON',
+        },
       ],
       vectorizer: 'none', // We'll provide our own vectors
     };
@@ -377,7 +474,7 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
         .get()
         .withClassName(this.className)
         .withFields(
-          'content title source document_id chunk_index organization_id project_id knowledge_base_id _additional { id certainty }'
+          'content title source document_id chunk_index organization_id project_id knowledge_base_id metadata_json _additional { id certainty }'
         )
         .withNearVector({
           vector: embedding,
@@ -388,7 +485,8 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
 
       const result = await searchQuery.do();
       return (result.data.Get[this.className] || []).map(
-        ({ _additional, ...rest }) => ({
+        ({ _additional, metadata_json, ...rest }) => ({
+          ...(metadata_json ? JSON.parse(metadata_json) : {}),
           ...rest,
           id: _additional?.id,
           score: _additional?.certainty,
@@ -421,6 +519,72 @@ class WeaviateVectorDB extends VectorDatabaseInterface {
       console.error('Error deleting document from Weaviate:', error);
       throw error;
     }
+  }
+
+  _chunkUuid(chunk, scope) {
+    const scopeKey = [
+      scope.organization_id,
+      scope.project_id,
+      scope.knowledge_base_id || WEAVIATE_PROJECT_SCOPE,
+    ].join('/');
+    return uuidv5(
+      `${scopeKey}|${chunkVectorId(chunk.document_id, chunk.chunk_index)}`,
+      WEAVIATE_CHUNK_UUID_NAMESPACE
+    );
+  }
+
+  async upsertChunks(chunks, scope) {
+    // Batch import replaces objects with the same UUID, giving upsert semantics
+    let batcher = this.client.batch.objectsBatcher();
+    for (const chunk of chunks) {
+      batcher = batcher.withObject({
+        class: this.className,
+        id: this._chunkUuid(chunk, scope),
+        properties: {
+          content: chunk.content,
+          title: chunk.title || '',
+          source: chunk.source || '',
+          document_id: chunk.document_id,
+          chunk_index: chunk.chunk_index,
+          organization_id: scope.organization_id,
+          project_id: scope.project_id,
+          knowledge_base_id: scope.knowledge_base_id || WEAVIATE_PROJECT_SCOPE,
+          metadata_json: JSON.stringify(toFlatMetadata(chunk.metadata)),
+        },
+        vector: chunk.embedding,
+      });
+    }
+
+    const results = await batcher.do();
+    const failed = (results || []).find(r => r.result?.errors);
+    if (failed) {
+      const message = failed.result.errors.error?.[0]?.message || 'unknown';
+      throw new Error(`Weaviate chunk upsert failed: ${message}`);
+    }
+    return chunks.map(c => chunkVectorId(c.document_id, c.chunk_index));
+  }
+
+  async deleteDocumentChunks(documentId, scope) {
+    // document_id is a stored property, so the filter also catches legacy chunks
+    return this.deleteDocument(documentId, scope);
+  }
+
+  async deleteChunkRange(documentId, scope, from) {
+    // Everything at or past `from` is stale, so the upper bound is not needed
+    await this.client.batch
+      .objectsBatchDeleter()
+      .withClassName(this.className)
+      .withWhere(
+        this._scopeWhere(scope, [
+          { path: ['document_id'], operator: 'Equal', valueText: documentId },
+          {
+            path: ['chunk_index'],
+            operator: 'GreaterThanEqual',
+            valueInt: from,
+          },
+        ])
+      )
+      .do();
   }
 
   async getStats(scope) {
@@ -689,6 +853,101 @@ class PineconeVectorDB extends VectorDatabaseInterface {
     return { deleted_count: null };
   }
 
+  async upsertChunks(chunks, scope) {
+    if (chunks.length === 0) {
+      return [];
+    }
+    const embeddingDim = chunks[0].embedding.length;
+    if (embeddingDim !== this.indexDimension) {
+      throw new Error(
+        `Embedding dimension mismatch: embeddings have ${embeddingDim} dimensions, ` +
+          `but Pinecone index '${this.indexName}' is configured for ${this.indexDimension} dimensions.`
+      );
+    }
+
+    const vectors = chunks.map(chunk => {
+      const metadata = {
+        ...toFlatMetadata(chunk.metadata),
+        content: chunk.content,
+        title: chunk.title || '',
+        source: chunk.source || '',
+        document_id: chunk.document_id,
+        chunk_index: chunk.chunk_index,
+        organization_id: scope.organization_id,
+        project_id: scope.project_id,
+      };
+      // Pinecone rejects null metadata values
+      if (scope.knowledge_base_id) {
+        metadata.knowledge_base_id = scope.knowledge_base_id;
+      }
+      return {
+        id: chunkVectorId(chunk.document_id, chunk.chunk_index),
+        values: chunk.embedding,
+        metadata,
+      };
+    });
+
+    await this.index.namespace(resolveNamespace(scope)).upsert(vectors);
+    return vectors.map(v => v.id);
+  }
+
+  // listPaginated is serverless-only; it throws on pod-based indexes
+  async _listChunkIds(namespaceIndex, documentId) {
+    const ownChunk = new RegExp(`^${escapeRegExp(documentId)}#\\d+$`);
+    const ids = [];
+    let paginationToken;
+    do {
+      const page = await namespaceIndex.listPaginated({
+        prefix: `${documentId}#`,
+        paginationToken,
+      });
+      // The prefix also matches documents named "{documentId}#...", so filter
+      for (const vector of page.vectors || []) {
+        if (ownChunk.test(vector.id)) {
+          ids.push(vector.id);
+        }
+      }
+      paginationToken = page.pagination?.next;
+    } while (paginationToken);
+    return ids;
+  }
+
+  async _fetchExistingIds(namespaceIndex, ids) {
+    const existing = [];
+    for (const batch of chunksInBatches(ids, 100)) {
+      const response = await namespaceIndex.fetch(batch);
+      existing.push(...Object.keys(response.records || {}));
+    }
+    return existing;
+  }
+
+  async deleteDocumentChunks(documentId, scope, { knownCount = 0 } = {}) {
+    const namespaceIndex = this.index.namespace(resolveNamespace(scope));
+    const knownIds = chunkVectorIdRange(documentId, 0, knownCount);
+
+    // Count what actually exists so callers get a real deleted_count
+    let existingIds;
+    try {
+      existingIds = await this._listChunkIds(namespaceIndex, documentId);
+    } catch (error) {
+      existingIds = await this._fetchExistingIds(namespaceIndex, knownIds);
+    }
+
+    const ids = [...new Set([...existingIds, ...knownIds])];
+    for (const batch of chunksInBatches(ids, 1000)) {
+      await namespaceIndex.deleteMany(batch);
+    }
+    return { deleted_count: existingIds.length };
+  }
+
+  async deleteChunkRange(documentId, scope, from, to) {
+    const namespaceIndex = this.index.namespace(resolveNamespace(scope));
+    const ids = chunkVectorIdRange(documentId, from, to);
+    for (const batch of chunksInBatches(ids, 1000)) {
+      await namespaceIndex.deleteMany(batch);
+    }
+  }
+
   async getStats(scope) {
     const namespace = resolveNamespace(scope);
     try {
@@ -816,6 +1075,44 @@ class MemoryVectorDB extends VectorDatabaseInterface {
     return { deleted_count: initialLength - this.documents.length };
   }
 
+  async upsertChunks(chunks, scope) {
+    // One instance serves every KB of a project, so ids carry the KB scope
+    const scopeKey = scope.knowledge_base_id || 'project';
+    await this.addDocuments(
+      chunks.map(chunk => ({
+        ...toFlatMetadata(chunk.metadata),
+        id: `${scopeKey}:${chunkVectorId(chunk.document_id, chunk.chunk_index)}`,
+        content: chunk.content,
+        title: chunk.title || '',
+        source: chunk.source || '',
+        document_id: chunk.document_id,
+        chunk_index: chunk.chunk_index,
+        organization_id: scope.organization_id,
+        project_id: scope.project_id,
+        knowledge_base_id: scope.knowledge_base_id || null,
+        indexed_at: new Date().toISOString(),
+        embedding: chunk.embedding,
+      }))
+    );
+    return chunks.map(c => chunkVectorId(c.document_id, c.chunk_index));
+  }
+
+  async deleteDocumentChunks(documentId, scope) {
+    return this.deleteDocument(documentId, scope);
+  }
+
+  async deleteChunkRange(documentId, scope, from, to) {
+    this.documents = this.documents.filter(
+      doc =>
+        !(
+          this._inScope(doc, scope) &&
+          doc.document_id === documentId &&
+          doc.chunk_index >= from &&
+          doc.chunk_index < to
+        )
+    );
+  }
+
   async getStats(scope) {
     const docs = this.documents.filter(doc => this._inScope(doc, scope));
 
@@ -889,4 +1186,5 @@ module.exports = {
   MemoryVectorDB,
   createVectorDatabase,
   resolveNamespace,
+  chunkVectorId,
 };
