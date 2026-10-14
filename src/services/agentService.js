@@ -2855,7 +2855,7 @@ Your response:`;
       // Reasoning-style models (e.g. gpt-5.6 family) spend hidden reasoning tokens
       // out of the same completion budget, so a small cap can leave 0 tokens for
       // the actual title text.
-      const maxTokens = openai.isFixedTemperatureModel(model) ? 1000 : 60;
+      const maxTokens = openai.isFixedTemperatureModel(model) ? 2000 : 200;
 
       const response = await openai.generateCompletion(
         model,
