@@ -204,15 +204,15 @@ class AgentService {
     await conversation.addMessage(userMessageData);
 
     // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter.
-    // Started now so it runs in parallel with the agent instead of delaying the response;
-    // generateAIConversationTitle never rejects (returns null on error).
+    // Runs fully in the background (fire-and-forget) so it never delays or fails the turn;
+    // generateAndSaveConversationTitle never rejects.
     const userMessageCount = conversation.messages.filter(
       msg => msg.role === 'user'
     ).length;
     const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
-    const titlePromise = shouldGenerateTitle
-      ? this.generateAIConversationTitle(conversation, agent)
-      : null;
+    if (shouldGenerateTitle) {
+      this.generateAndSaveConversationTitle(conversation, agent);
+    }
 
     // Fire message hooks in agent-controlled mode (non-blocking)
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
@@ -265,25 +265,6 @@ class AgentService {
       });
       const lastMsg = savedConversation.messages[savedConversation.messages.length - 1];
       assistantMessageId = lastMsg?._id || null;
-    }
-
-    // Apply the title generated in parallel with the agent (started after the user message was added)
-    if (titlePromise) {
-      const titleResult = await titlePromise;
-      if (titleResult) {
-        conversation.title = titleResult.title;
-        if (titleResult.titleTranslations.length > 0) {
-          conversation.title_translations = titleResult.titleTranslations;
-        }
-        // Accumulate background title + translation costs into conversation metadata
-        const titleCost = (titleResult.titleUsage?.cost || 0) + (titleResult.titleTranslationUsage?.cost || 0);
-        const titleTokens = (titleResult.titleUsage?.total_tokens || 0) + (titleResult.titleTranslationUsage?.total_tokens || 0);
-        if (titleCost > 0) {
-          conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + titleCost;
-          conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + titleTokens;
-        }
-        await conversation.save();
-      }
     }
 
     // Generate question suggestions if enabled
@@ -488,15 +469,15 @@ class AgentService {
     await conversation.addMessage(userMessageData);
 
     // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter.
-    // Started now so it runs in parallel with the agent instead of delaying the response;
-    // generateAIConversationTitle never rejects (returns null on error).
+    // Runs fully in the background (fire-and-forget) so it never delays or fails the turn;
+    // generateAndSaveConversationTitle never rejects.
     const userMessageCount = conversation.messages.filter(
       msg => msg.role === 'user'
     ).length;
     const shouldGenerateTitle = userMessageCount === 2 || (userMessageCount > 2 && (userMessageCount - 2) % 5 === 0);
-    const titlePromise = shouldGenerateTitle
-      ? this.generateAIConversationTitle(conversation, agent)
-      : null;
+    if (shouldGenerateTitle) {
+      this.generateAndSaveConversationTitle(conversation, agent);
+    }
 
     // Fire message hooks in agent-controlled mode (non-blocking)
     hookService.executeHooks(agent, conversation, userMessage, 'user', 'message').catch(err => {
@@ -549,25 +530,6 @@ class AgentService {
       });
       const lastMsg = savedConversation.messages[savedConversation.messages.length - 1];
       assistantMessageId = lastMsg?._id || null;
-    }
-
-    // Apply the title generated in parallel with the agent (started after the user message was added)
-    if (titlePromise) {
-      const titleResult = await titlePromise;
-      if (titleResult) {
-        conversation.title = titleResult.title;
-        if (titleResult.titleTranslations.length > 0) {
-          conversation.title_translations = titleResult.titleTranslations;
-        }
-        // Accumulate background title + translation costs into conversation metadata
-        const titleCost = (titleResult.titleUsage?.cost || 0) + (titleResult.titleTranslationUsage?.cost || 0);
-        const titleTokens = (titleResult.titleUsage?.total_tokens || 0) + (titleResult.titleTranslationUsage?.total_tokens || 0);
-        if (titleCost > 0) {
-          conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + titleCost;
-          conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + titleTokens;
-        }
-        await conversation.save();
-      }
     }
 
     // Generate question suggestions if enabled
@@ -2888,6 +2850,44 @@ Your response:`;
     } catch (error) {
       console.error('Failed to generate AI conversation title:', error);
       return null; // Fallback to existing title on error
+    }
+  }
+
+  /**
+   * Generate an AI title and persist it with an atomic update rather than conversation.save().
+   * Other instances of the same conversation (a newer turn, hooks, handoff) save concurrently,
+   * and assigning title_translations on a stale doc would throw a VersionError. Never rejects;
+   * returns the title result (or null) so callers can report its usage.
+   */
+  async generateAndSaveConversationTitle(conversation, agent, modelOverride = null) {
+    try {
+      const titleResult = await this.generateAIConversationTitle(conversation, agent, modelOverride);
+      if (!titleResult) {
+        return null;
+      }
+
+      const titleCost = (titleResult.titleUsage?.cost || 0) + (titleResult.titleTranslationUsage?.cost || 0);
+      const titleTokens = (titleResult.titleUsage?.total_tokens || 0) + (titleResult.titleTranslationUsage?.total_tokens || 0);
+
+      const update = { $set: { title: titleResult.title } };
+      if (titleResult.titleTranslations.length > 0) {
+        update.$set.title_translations = titleResult.titleTranslations;
+      }
+      if (titleCost > 0) {
+        update.$inc = { 'metadata.total_cost': titleCost, 'metadata.total_tokens_used': titleTokens };
+      }
+      await Conversation.updateOne({ _id: conversation._id }, update);
+
+      // Mirror the cost counters in memory so a later save() of this doc doesn't overwrite the $inc
+      if (titleCost > 0) {
+        conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + titleCost;
+        conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + titleTokens;
+      }
+
+      return titleResult;
+    } catch (error) {
+      console.error(`[Title] Failed to save AI conversation title for ${conversation._id}:`, error);
+      return null;
     }
   }
 

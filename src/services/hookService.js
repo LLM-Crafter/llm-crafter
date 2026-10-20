@@ -196,7 +196,8 @@ class HookService {
   async _executeRegenerateTitleHook(hook, agent, conversation) {
     const agentService = require('./agentService');
 
-    const titleResult = await agentService.generateAIConversationTitle(
+    // Saves atomically — this conversation doc is shared with the in-flight agent turn
+    const titleResult = await agentService.generateAndSaveConversationTitle(
       conversation,
       agent,
       hook.model
@@ -207,18 +208,8 @@ class HookService {
       return { tools_used: [], token_usage: emptyUsage, llm_response: 'No title regenerated (not enough context yet)' };
     }
 
-    conversation.title = titleResult.title;
-    if (titleResult.titleTranslations.length > 0) {
-      conversation.title_translations = titleResult.titleTranslations;
-    }
-
     const titleCost = (titleResult.titleUsage?.cost || 0) + (titleResult.titleTranslationUsage?.cost || 0);
     const titleTokens = (titleResult.titleUsage?.total_tokens || 0) + (titleResult.titleTranslationUsage?.total_tokens || 0);
-    if (titleCost > 0) {
-      conversation.metadata.total_cost = (conversation.metadata.total_cost || 0) + titleCost;
-      conversation.metadata.total_tokens_used = (conversation.metadata.total_tokens_used || 0) + titleTokens;
-    }
-    await conversation.save();
 
     return {
       tools_used: [],
