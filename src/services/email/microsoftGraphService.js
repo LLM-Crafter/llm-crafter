@@ -14,6 +14,15 @@ function recipient(address) {
   return { emailAddress: { address } };
 }
 
+// With immutable IDs a draft deleted in Outlook still resolves, but from the
+// Recoverable Items folder (403) instead of disappearing (404).
+function isDeletedDraftError(err) {
+  const status = err.response?.status;
+  const code = err.response?.data?.error?.code;
+  return (status === 404 && code === 'ErrorItemNotFound') ||
+    (status === 403 && code === 'ErrorRecoverableItemsAccessDenied');
+}
+
 class MicrosoftGraphService {
   async request(account, config) {
     const accessToken = await microsoftOAuthService.getFreshAccessToken(account);
@@ -108,11 +117,19 @@ class MicrosoftGraphService {
     if (!outbound.provider_draft_id) {
       return this.createDraft(account, outbound);
     }
-    const { data } = await this.request(account, {
-      method: 'patch',
-      url: `/me/messages/${encodeURIComponent(outbound.provider_draft_id)}`,
-      data: this._draftPatch(outbound, false)
-    });
+    let data;
+    try {
+      ({ data } = await this.request(account, {
+        method: 'patch',
+        url: `/me/messages/${encodeURIComponent(outbound.provider_draft_id)}`,
+        data: this._draftPatch(outbound, false)
+      }));
+    } catch (err) {
+      if (!isDeletedDraftError(err)) {
+        throw err;
+      }
+      return this.createDraft(account, outbound);
+    }
     await this._syncAttachments(account, outbound.provider_draft_id, outbound);
     return {
       draftId: outbound.provider_draft_id,
