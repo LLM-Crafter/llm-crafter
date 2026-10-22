@@ -75,7 +75,7 @@ const messageSchema = new mongoose.Schema({
   // Allows 3rd-party applications to render these messages as they please
   code: {
     type: String,
-    enum: ['HUMAN_JOINED', 'AI_JOINED', 'HANDOFF_REFUSED', 'HANDOFF_REQUESTED', 'TEMPLATE_SENT'],
+    enum: ['HUMAN_JOINED', 'AI_JOINED', 'HANDOFF_REFUSED', 'HANDOFF_REQUESTED', 'TEMPLATE_SENT', 'ANSWER_GATE_SKIPPED'],
     default: null,
   },
   // Channel-specific information for each message

@@ -166,6 +166,66 @@ const mailAccountSchema = new mongoose.Schema(
       },
     },
 
+    // ── Answer gate ──────────────────────────────────────────────────────
+    // Second stage for emails that passed triage: rates how confident we are
+    // that the agent should answer (high / medium / low) and maps the level
+    // to an action. Runs in emailAnswerGateService — config here.
+    answer_gate: {
+      enabled: { type: Boolean, default: false },
+      // false = shadow mode: evaluate and record, but never change the outcome.
+      enforce: { type: Boolean, default: true },
+      // Who judges `criteria`. Jev needs agent.config.jev.api_key and falls
+      // back to the LLM judge when it fails.
+      provider: { type: String, enum: ['llm', 'jev'], default: 'llm' },
+      // llm: null = cheapest model for the key's provider. jev: null = agent's Jev model.
+      model: { type: String, default: null },
+      // llm only: ApiKey in this project to judge with. null = the agent's key.
+      api_key: { type: String, ref: 'ApiKey', default: null },
+      // jev only: probability a criterion needs to pass. null = agent's jev.min_confidence.
+      min_confidence: { type: Number, default: null, min: 0, max: 1 },
+      // Optional steering prompt passed to the judge.
+      custom_prompt: { type: String, default: null },
+      actions: {
+        high: { type: String, enum: ['reply', 'draft', 'draft_flagged', 'skip'], default: 'reply' },
+        medium: { type: String, enum: ['reply', 'draft', 'draft_flagged', 'skip'], default: 'draft_flagged' },
+        low: { type: String, enum: ['reply', 'draft', 'draft_flagged', 'skip'], default: 'skip' },
+      },
+      // Deterministic checks. Inbound-only types run before the agent writes
+      // a reply, so a skip there saves the reasoning call.
+      signals: [{
+        _id: false,
+        id: { type: String, default: null },
+        type: {
+          type: String,
+          required: true,
+          enum: [
+            'triage_confidence_below',  // value: number
+            'triage_topic_in',          // value: [topic]
+            'triage_intent_in',         // value: [intent]
+            'sender_has_prior_threads', // value: min earlier threads (default 1)
+            'thread_messages_above',    // value: number of customer messages
+            'has_attachments',
+            'tool_failed',
+            'tool_not_called',          // value: [tool name], empty = any tool
+            'handoff_requested',
+          ],
+        },
+        value: { type: mongoose.Schema.Types.Mixed, default: null },
+        caps_at: { type: String, enum: ['medium', 'low'], default: 'low' },
+        // Shown to staff when the check fails. null = generated reason.
+        reason: { type: String, default: null },
+      }],
+      // Plain-English rules the drafted reply must meet, judged by `provider`.
+      criteria: [{
+        _id: false,
+        id: { type: String, required: true },
+        description: { type: String, required: true },
+        caps_at: { type: String, enum: ['medium', 'low'], default: 'low' },
+        // Shown to staff when the check fails. null = the judge's reason.
+        reason: { type: String, default: null },
+      }],
+    },
+
     // ── Recipient resolution ─────────────────────────────────────────────
     // Detects when a reply should go to an address mentioned in the email
     // body instead of the envelope From/Reply-To (e.g. an automated lead

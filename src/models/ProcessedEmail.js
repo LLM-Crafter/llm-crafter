@@ -40,6 +40,7 @@ const processedEmailSchema = new mongoose.Schema(
         // would find a real reply target in the body — it found none, and
         // replying to a no-reply address itself would be pointless.
         'skipped_no_recipient',
+        'skipped_answer_gate', // answer gate decided no draft should be written
         'failed',         // unrecoverable
       ],
       default: 'pending',

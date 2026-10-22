@@ -16,6 +16,7 @@ This guide walks you from zero to a working email bot.
 │ IMAP Poller  │ ─▶ │ email.ingest    │ ─▶ │ Ingest Worker    │
 │ (scheduler)  │    │ Mongo job queue │    │ → triage         │
 └──────────────┘    └─────────────────┘    │ → agent reason   │
+                                            │ → answer gate    │
                                             │ → outbound row   │
                                             └────────┬─────────┘
                                                      │
@@ -34,6 +35,7 @@ Key components (all live in `src/services/email/`):
 | `workers/ingestWorker.js`        | Drains `email.ingest`: parses MIME, runs triage, hands off to the agent orchestrator.                                                     |
 | `emailAgentService.js`           | Resolves/creates a `Conversation`, calls `agentService.executeAgentReasoning`, writes an `OutboundEmail` row (`drafted` or `queued`).     |
 | `emailTriageService.js`          | Deterministic guards (loop headers, list-unsubscribe, auto-submitted, etc.) + LLM in-scope classifier.                                    |
+| `emailAnswerGateService.js`      | Optional second stage: rates confidence to answer (high / medium / low) from signals + LLM or Jev criteria; can skip the draft entirely. |
 | `workers/outboundWorker.js`      | Atomically claims `state='queued'` rows, sends via SMTP, marks `sent`. A reaper requeues stale `sending` claims.                          |
 | `transports/smtpTransport.js`    | Nodemailer wrapper. Stamps `X-LLMCrafter-Agent` / `X-LLMCrafter-Outbound-Id` headers and self-generates `Message-Id` for clean threading. |
 
@@ -510,6 +512,11 @@ Modes:
 you've listed `billing` in `escalate_intents`, the reply is drafted even
 in `auto_send` mode.
 
+To draft (or send) only the replies the agent is confident about, and leave
+the rest for a person, enable the [answer gate](email-answer-gate.md). When
+it decides `skip`, no draft is created, even if the intent is in
+`escalate_intents`.
+
 ---
 
 ## 5. Lifecycle controls
@@ -610,6 +617,10 @@ Example for a sales inbox:
 }
 ```
 
+Triage only answers "is this email for us?". To also decide whether the
+agent is confident enough to answer an in-scope email, see the
+[Email Answer Gate](email-answer-gate.md).
+
 Related: when a mailbox receives automated notifications (e.g. lead
 platforms, contact-form relays) that forward a third party's enquiry, see
 [Email Recipient Resolution](email-recipient-resolution.md) for redirecting
@@ -644,7 +655,7 @@ Hitting the cap converts the reply into a `drafted` row with
 | `state.last_polled_at`               | `MailAccount.state` | Last successful tick.                                            |
 | `state.consecutive_failures`         | `MailAccount.state` | Increments on poll errors.                                       |
 | `JobQueue` collection                | Mongo               | Pending/processing/done/failed jobs with `last_error` strings.   |
-| `ProcessedEmail.outcome`             | per inbound         | `replied` / `drafted` / `filtered_*` / `rate_limited` / `error`. |
+| `ProcessedEmail.outcome`             | per inbound         | `processed` / `skipped_triage` / `skipped_loop` / `skipped_dup` / `skipped_no_recipient` / `skipped_answer_gate` / `failed`. |
 | `OutboundEmail.state` + `last_error` | per outbound        | Send progress.                                                   |
 
 Tail in Mongo:

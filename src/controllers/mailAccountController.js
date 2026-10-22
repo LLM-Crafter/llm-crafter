@@ -17,6 +17,7 @@
  */
 
 const Agent = require('../models/Agent');
+const ApiKey = require('../models/ApiKey');
 const Conversation = require('../models/Conversation');
 const MailAccount = require('../models/MailAccount');
 const OutboundEmail = require('../models/OutboundEmail');
@@ -25,6 +26,7 @@ const emailUtils = require('../services/email/emailUtils');
 const draftService = require('../services/email/draftService');
 const outboundAttachmentService = require('../services/email/outboundAttachmentService');
 const emailAgentService = require('../services/email/emailAgentService');
+const jevService = require('../services/jevService');
 const { uploadFiles } = require('./uploadController');
 const gmailOAuthService = require('../services/email/gmailOAuthService');
 const gmailApiService = require('../services/email/gmailApiService');
@@ -72,6 +74,32 @@ async function getAccountOr404(req, res, agentId) {
     return null;
   }
   return account;
+}
+
+/**
+ * Cross-field checks for `answer_gate` the schema can't express. Returns an
+ * error message, or null when the config is usable.
+ */
+async function validateAnswerGate(gate, agent) {
+  if (!gate) return null;
+
+  const ids = (gate.criteria || []).map(c => c.id);
+  const duplicate = ids.find((id, i) => ids.indexOf(id) !== i);
+  if (duplicate) return `answer_gate.criteria has a duplicate id "${duplicate}"`;
+
+  if (gate.provider === 'jev' && !agent.config?.jev?.api_key) {
+    return 'answer_gate.provider "jev" needs a Jev API key on the agent (config.jev.api_key)';
+  }
+
+  if (gate.api_key) {
+    const apiKey = await ApiKey.findOne({ _id: gate.api_key, project: agent.project, is_active: true })
+      .populate('provider');
+    if (!apiKey) return 'answer_gate.api_key not found or inactive in this project';
+    if (apiKey.provider?.name === jevService.PROVIDER_NAME) {
+      return 'answer_gate.api_key must be an LLM key; Jev uses the agent\'s config.jev.api_key';
+    }
+  }
+  return null;
 }
 
 /**
@@ -154,10 +182,14 @@ const createMailAccount = async (req, res) => {
       reply_policy: body.reply_policy || {},
       triage: body.triage || {},
       recipient_resolution: body.recipient_resolution || {},
+      answer_gate: body.answer_gate || {},
       poll_config: body.poll_config || {},
       is_active: body.is_active !== false,
       is_paused: body.is_paused === true,
     });
+
+    const gateError = await validateAnswerGate(account.answer_gate, agent);
+    if (gateError) return res.status(400).json({ error: gateError });
 
     await account.save();
     res.status(201).json(account);
@@ -191,10 +223,14 @@ const updateMailAccount = async (req, res) => {
       'reply_policy',
       'triage',
       'recipient_resolution',
+      'answer_gate',
       'poll_config',
       'is_active',
       'is_paused',
     ]);
+
+    const gateError = await validateAnswerGate(account.answer_gate, agent);
+    if (gateError) return res.status(400).json({ error: gateError });
 
     await account.save();
     res.json(account);

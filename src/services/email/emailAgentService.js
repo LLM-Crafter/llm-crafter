@@ -13,13 +13,15 @@
  *   4. Delegate reasoning to the existing `agentService.executeAgentReasoning`
  *      (chatbot brain). This is **reused unchanged** — the email flow is just
  *      another caller of that engine.
- *   5. Decide what to do with the draft reply based on the account's
+ *   5. Run the answer gate (when enabled) — rates the reply high / medium /
+ *      low and may skip it entirely; inbound-only checks run before step 4.
+ *   6. Decide what to do with the draft reply based on the account's
  *      `reply_policy`:
  *         - draft_only         → store as `drafted`, never send
  *         - auto_send          → enqueue outbound job
  *         - confidence_based   → auto-send if confidence >= threshold, else draft
  *         - human_review       → store as `drafted` and notify (TODO)
- *   6. Persist an OutboundEmail row in the chosen state.
+ *   7. Persist an OutboundEmail row in the chosen state.
  *
  * What this service does NOT do:
  *   - Actually open SMTP / IMAP sockets (the transports do that)
@@ -39,6 +41,7 @@ const agentService = require('../agentService');
 const attachmentProcessingService = require('../attachmentProcessingService');
 const hookService = require('../hookService');
 const emailTriageService = require('./emailTriageService');
+const emailAnswerGateService = require('./emailAnswerGateService');
 const emailRecipientResolverService = require('./emailRecipientResolverService');
 const { isNoReplyOnlyAddress, hasUsableReplyTo } = require('./emailSenderGuards');
 const emailUtils = require('./emailUtils');
@@ -246,6 +249,18 @@ class EmailAgentService {
       return { status: 'skipped_no_recipient', triage };
     }
 
+    // ── 3b. Answer gate, inbound phase ───────────────────────────────────
+    // Only emails that passed triage get here. Inbound-only signals run now
+    // so a reply that can only end up skipped never costs a reasoning call.
+    const gateCtx = { account, agent, conversation, email, triage, customerAddress: resolvedReplyTo };
+    let gate = null;
+    if (emailAnswerGateService.isEnabled(account)) {
+      gate = await emailAnswerGateService.evaluateInbound(gateCtx);
+      if (gate.enforced && gate.skip_early) {
+        return this._skipForAnswerGate({ processedEmail, conversation, gate, triage });
+      }
+    }
+
     // ── 4. Run the reasoning engine ──────────────────────────────────────
     // We deliberately call the chatbot brain directly — same code paths,
     // same hooks, same summarization, same handoff support.
@@ -293,6 +308,24 @@ class EmailAgentService {
     } catch (err) {
       await this._markProcessed(processedEmail, 'failed', { error: err.message });
       throw err;
+    }
+
+    // ── 4b. Answer gate, reply phase ─────────────────────────────────────
+    // Judged before the reply is stored, so a skipped reply never shows up
+    // in the thread as if it were a draft.
+    if (gate) {
+      gate = await emailAnswerGateService.evaluateReply({ ...gateCtx, reasoning }, gate);
+      this._foldLlmUsage(conversation, gate.usage);
+      if (gate.enforced && gate.action === 'skip') {
+        this._foldLlmUsage(conversation, reasoning.token_usage);
+        return this._skipForAnswerGate({
+          processedEmail,
+          conversation,
+          gate,
+          triage,
+          discardedReply: reasoning.content || null,
+        });
+      }
     }
 
     const send = account.send_profile || {};
@@ -347,6 +380,9 @@ class EmailAgentService {
       reasoning,
       recipientResolution,
     });
+    if (gate?.enforced) {
+      emailAnswerGateService.applyToDecision(decision, gate);
+    }
 
     // Hard guard: rate limit per thread per 24h.
     const rateLimitHit = await this._isThreadRateLimited({
@@ -375,6 +411,7 @@ class EmailAgentService {
       providerThreadId,
       recipientResolution,
       resolvedReplyTo,
+      answerGate: gate,
     });
 
     // Back-fill the outbound reference onto the assistant message so the
@@ -1067,6 +1104,7 @@ class EmailAgentService {
     providerThreadId,
     recipientResolution,
     resolvedReplyTo,
+    answerGate = null,
   }) {
     const send = account.send_profile || {};
     const messageId = emailUtils.generateMessageId(send.from_email);
@@ -1120,10 +1158,36 @@ class EmailAgentService {
         triage,
         decision,
         recipient_resolution: recipientResolution || null,
+        answer_gate: answerGate,
       },
     });
 
     return outbound;
+  }
+
+  /**
+   * End processing without a draft because the answer gate said `skip`. The
+   * inbound message stays on the thread with a system note explaining why,
+   * so staff can reply by hand. The discarded reply is kept in metadata
+   * (never shown to the LLM) for reviewing the gate's decisions.
+   */
+  async _skipForAnswerGate({ processedEmail, conversation, gate, triage, discardedReply = null }) {
+    await conversation.addMessage({
+      role: 'system',
+      code: 'ANSWER_GATE_SKIPPED',
+      content: `No reply was drafted: answer confidence is ${gate.level}. ${gate.reasons.join(' ')}`.trim(),
+      timestamp: new Date(),
+      metadata: { answer_gate: { ...gate, discarded_reply: discardedReply } },
+    });
+    await this._markProcessed(processedEmail, 'skipped_answer_gate', {
+      conversation_id: conversation._id,
+    });
+    return {
+      status: 'skipped_answer_gate',
+      conversation_id: conversation._id,
+      answer_gate: gate,
+      triage,
+    };
   }
 
   async _markProcessed(processedEmail, outcome, extra = {}) {

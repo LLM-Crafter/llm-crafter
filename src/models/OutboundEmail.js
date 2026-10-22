@@ -101,6 +101,7 @@ const outboundEmailSchema = new mongoose.Schema(
         'human_review',
         'escalated',
         'recipient_redirect_low_confidence',
+        'answer_gate',
         'manual',
       ],
       default: 'auto_send',

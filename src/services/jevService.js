@@ -123,9 +123,10 @@ class JevService {
   /**
    * Raw Jev call. Returns { answers, model, latency_ms, usage } or null.
    * `usage` matches the LLM usage shape used across agentService.
-   * `label` names the use case in the request log.
+   * `label` names the use case in the request log; `options.model` overrides
+   * the agent's Jev model for this call.
    */
-  async ask(agent, state, questions, label = 'ask') {
+  async ask(agent, state, questions, label = 'ask', options = {}) {
     const cfg = this.getConfig(agent);
     if (!cfg) return null;
 
@@ -138,7 +139,7 @@ class JevService {
       return null;
     }
 
-    const model = cfg.model || DEFAULT_MODEL;
+    const model = options.model || cfg.model || DEFAULT_MODEL;
     const tag = `[Jev] ${label} agent=${agent._id} model=${model}`;
     if (LOG_PAYLOADS) {
       console.log(`${tag} request: ${JSON.stringify({ state, questions })}`);

@@ -64,6 +64,16 @@ const createValidators = [
     .optional()
     .isFloat({ min: 0, max: 1 }),
   body('recipient_resolution.sender_overrides').optional().isArray(),
+  body('answer_gate').optional().isObject(),
+  body('answer_gate.enabled').optional().isBoolean(),
+  body('answer_gate.enforce').optional().isBoolean(),
+  body('answer_gate.provider').optional().isIn(['llm', 'jev']),
+  body('answer_gate.model').optional({ nullable: true }).isString(),
+  body('answer_gate.min_confidence')
+    .optional({ nullable: true })
+    .isFloat({ min: 0, max: 1 }),
+  body('answer_gate.signals').optional().isArray(),
+  body('answer_gate.criteria').optional().isArray(),
   body('poll_config').optional().isObject(),
   body('poll_config.interval_seconds').optional().isInt({ min: 15 }),
 ];
@@ -87,6 +97,16 @@ const updateValidators = [
     .optional()
     .isFloat({ min: 0, max: 1 }),
   body('recipient_resolution.sender_overrides').optional().isArray(),
+  body('answer_gate').optional().isObject(),
+  body('answer_gate.enabled').optional().isBoolean(),
+  body('answer_gate.enforce').optional().isBoolean(),
+  body('answer_gate.provider').optional().isIn(['llm', 'jev']),
+  body('answer_gate.model').optional({ nullable: true }).isString(),
+  body('answer_gate.min_confidence')
+    .optional({ nullable: true })
+    .isFloat({ min: 0, max: 1 }),
+  body('answer_gate.signals').optional().isArray(),
+  body('answer_gate.criteria').optional().isArray(),
   body('poll_config').optional().isObject(),
   body('credentials').optional().isObject(),
   body('is_active').optional().isBoolean(),
