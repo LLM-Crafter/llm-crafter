@@ -34,6 +34,13 @@ const messageSchema = new mongoose.Schema({
       avatar_url: String,
       timestamp: Date,
     },
+    channel_app_operator: {
+      // If message was sent by someone at the business directly from the channel's own
+      // app (e.g. the Instagram app), not through llm-crafter. Recorded from the echo webhook.
+      channel: String,
+      account_id: String, // The business's account ID on the channel
+      timestamp: Date, // When the platform says it was sent
+    },
   },
   // Agent thinking process (only for assistant messages)
   thinking_process: [

@@ -198,8 +198,9 @@ class InstagramService extends BaseChannelService {
 
       if (!messaging) return null;
 
-      // Ignore echo messages (messages sent by the page itself)
-      if (messaging.message?.is_echo) return null;
+      // Echoes are messages the account itself sent — by us through the API, or by someone
+      // at the business from the Instagram app. The orchestrator tells them apart.
+      if (messaging.message?.is_echo) return this.normalizeEcho(messaging);
 
       // Ignore delivery/read receipts
       if (messaging.delivery || messaging.read) return null;
@@ -231,6 +232,19 @@ class InstagramService extends BaseChannelService {
     } catch (error) {
       this.handleError(error, 'handleIncomingMessage');
     }
+  }
+
+  /**
+   * Normalize an echo. The conversation belongs to the recipient (the end user); the
+   * sender is our own Instagram account.
+   */
+  normalizeEcho(rawMessage) {
+    return {
+      ...this.normalizeMessage(rawMessage),
+      type: 'echo',
+      user_identifier: rawMessage.recipient?.id,
+      account_id: rawMessage.sender?.id,
+    };
   }
 
   /**

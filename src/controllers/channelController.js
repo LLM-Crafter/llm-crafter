@@ -272,18 +272,21 @@ const handleInstagramWebhook = async (req, res) => {
       JSON.stringify(req.body, null, 2)
     );
 
-    // Extract recipient ID to route to the correct agent
+    // Extract our account's ID to route to the correct agent. It's the recipient, except on
+    // echoes (messages our account sent), where it's the sender.
     const entry = req.body.entry?.[0];
-    let recipientId;
+    let event;
 
     if (entry?.messaging?.[0]) {
-      recipientId = entry.messaging[0].recipient?.id;
+      event = entry.messaging[0];
     } else if (entry?.changes) {
       const messageChange = entry.changes.find(
         c => c.field === 'messages' || c.field === 'message_reactions'
       );
-      recipientId = messageChange?.value?.recipient?.id;
+      event = messageChange?.value;
     }
+
+    const recipientId = event?.message?.is_echo ? event.sender?.id : event?.recipient?.id;
 
     if (!recipientId) {
       console.warn('[Instagram] Could not extract recipient ID from webhook');

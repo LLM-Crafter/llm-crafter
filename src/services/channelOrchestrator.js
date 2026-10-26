@@ -6,6 +6,7 @@
 const Agent = require('../models/Agent');
 const Conversation = require('../models/Conversation');
 const ChannelConfig = require('../models/ChannelConfig');
+const ChannelOutboundMessage = require('../models/ChannelOutboundMessage');
 const agentService = require('./agentService');
 const mediaStorageService = require('./mediaStorageService');
 const attachmentProcessingService = require('./attachmentProcessingService');
@@ -31,6 +32,14 @@ const TURN_POLL_INTERVAL_MS = parseInt(process.env.CHANNEL_TURN_POLL_INTERVAL_MS
 // How often an in-progress generation checks whether a newer message was buffered
 // (on any instance) for its conversation, so it can cancel and let the next turn take over.
 const TURN_CANCEL_CHECK_INTERVAL_MS = 750;
+// Channels that echo every message our account sends back through the webhook. Echoes of
+// messages sent from the platform's own app (not by Crafter) are recorded on the conversation.
+const ECHO_CHANNELS = new Set(['instagram']);
+// How long an unrecognised echo waits for our send path to record its ID before it's
+// treated as sent from the platform's app.
+const ECHO_MATCH_GRACE_MS = parseInt(process.env.CHANNEL_ECHO_MATCH_GRACE_MS, 10) || 5000;
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class ChannelOrchestrator {
   constructor() {
@@ -289,6 +298,11 @@ class ChannelOrchestrator {
         if (normalizedMessage.type === 'reaction') {
           return this._applyReaction(agentId, channel, normalizedMessage);
         }
+
+        // Echoes of our own account's messages are recorded, never an agent turn
+        if (normalizedMessage.type === 'echo') {
+          return this._recordEcho(agentId, channel, channelService, normalizedMessage);
+        }
       }
 
       // Show typing indicator for channels that support it
@@ -324,29 +338,13 @@ class ChannelOrchestrator {
         `[ChannelOrchestrator] Processing message for conversation: ${conversation._id}, status: ${conversation.status}, handler: ${conversation.current_handler}`
       );
 
-      // Process and store media attachments (if any) via the org's S3 config
-      let storedMedia = [];
-      if (normalizedMessage.media && normalizedMessage.media.length > 0 && channel !== 'website') {
-        try {
-          const agent = await Agent.findById(agentId).populate({
-            path: 'api_key',
-            populate: { path: 'provider' },
-          });
-          storedMedia = await mediaStorageService.processAndStore({
-            orgId: agent.organization,
-            agentId,
-            conversationId: String(conversation._id),
-            mediaItems: normalizedMessage.media,
-            channelService,
-            channel,
-          });
-          if (storedMedia.length > 0) {
-            storedMedia = await attachmentProcessingService.interpretChannelMedia(agent, storedMedia);
-          }
-        } catch (mediaErr) {
-          console.error(`[ChannelOrchestrator] Media processing failed (non-fatal):`, mediaErr.message);
-        }
-      }
+      const storedMedia = await this._storeIncomingMedia(
+        agentId,
+        channel,
+        channelService,
+        conversation,
+        normalizedMessage.media
+      );
 
       // Ensure content is at least an empty string (never null/undefined)
       if (!normalizedMessage.content) {
@@ -439,6 +437,126 @@ class ChannelOrchestrator {
       },
     });
     await conversation.save();
+  }
+
+  /**
+   * Stores incoming media via the org's S3 config and interprets it for the agent.
+   * Failures are logged and leave whatever was stored so far.
+   */
+  async _storeIncomingMedia(agentId, channel, channelService, conversation, media) {
+    let storedMedia = [];
+    if (!media || media.length === 0 || channel === 'website') return storedMedia;
+    try {
+      const agent = await Agent.findById(agentId).populate({
+        path: 'api_key',
+        populate: { path: 'provider' },
+      });
+      storedMedia = await mediaStorageService.processAndStore({
+        orgId: agent.organization,
+        agentId,
+        conversationId: String(conversation._id),
+        mediaItems: media,
+        channelService,
+        channel,
+      });
+      if (storedMedia.length > 0) {
+        storedMedia = await attachmentProcessingService.interpretChannelMedia(agent, storedMedia);
+      }
+    } catch (mediaErr) {
+      console.error(`[ChannelOrchestrator] ${channel} media processing failed (non-fatal):`, mediaErr.message);
+    }
+    return storedMedia;
+  }
+
+  /**
+   * Records an echo — a message our own account sent on the channel — unless Crafter sent
+   * it (an agent reply, or an operator reply from Crafter), which is already on the
+   * conversation. What's left was sent by someone at the business from the platform's own
+   * app; it's stored as a human_operator message flagged with handler_info.channel_app_operator,
+   * and never runs the agent.
+   *
+   * Meta can dispatch the echo before our send call returns, so an unrecognised ID gets a
+   * grace period for the send path to record it before it's treated as sent from the app.
+   * The stored timestamp is server time so pollers using `since` still pick it up.
+   */
+  async _recordEcho(agentId, channel, channelService, echo) {
+    const messageId = echo.message_id;
+    if (!messageId || !echo.user_identifier) {
+      return { success: true, status: 'ignored', reason: 'echo_without_id' };
+    }
+
+    if (await this._isOwnMessage(agentId, channel, messageId)) {
+      return { success: true, status: 'ignored', reason: 'own_echo' };
+    }
+    await sleep(ECHO_MATCH_GRACE_MS);
+    if (await this._isOwnMessage(agentId, channel, messageId)) {
+      return { success: true, status: 'ignored', reason: 'own_echo' };
+    }
+
+    if (!echo.content && !echo.media?.length) {
+      return { success: true, status: 'ignored', reason: 'empty_echo' };
+    }
+
+    // No metadata: the echo's sender is our account, which must not overwrite the user's
+    const conversation = await this.getOrCreateConversation(
+      agentId,
+      echo.user_identifier,
+      channel,
+      null,
+      channelService
+    );
+    const storedMedia = await this._storeIncomingMedia(agentId, channel, channelService, conversation, echo.media);
+
+    await conversation.addMessage({
+      role: 'human_operator',
+      content: echo.content || '',
+      timestamp: new Date(),
+      handler_info: {
+        channel_app_operator: {
+          channel,
+          account_id: echo.account_id,
+          timestamp: echo.timestamp,
+        },
+      },
+      channel_info: {
+        channel,
+        message_id: messageId,
+        media: storedMedia.length > 0 ? storedMedia : undefined,
+      },
+    });
+
+    console.log(`[ChannelOrchestrator] Recorded ${channel} message sent from the platform app on conversation ${conversation._id}`);
+    return { success: true, status: 'echo_recorded', conversation_id: conversation._id };
+  }
+
+  /**
+   * Whether a platform message ID belongs to a message Crafter sent, or one already stored
+   * (covers webhook redelivery).
+   */
+  async _isOwnMessage(agentId, channel, messageId) {
+    const [outbound, stored] = await Promise.all([
+      ChannelOutboundMessage.exists({ _id: `${channel}:${messageId}` }),
+      Conversation.exists({ agent: agentId, channel, 'messages.channel_info.message_id': messageId }),
+    ]);
+    return Boolean(outbound || stored);
+  }
+
+  /**
+   * Remembers platform message IDs we sent on a channel that echoes them back, so the
+   * echoes can be recognised as ours (see _recordEcho). Non-fatal.
+   */
+  async _recordOutboundMessageIds(channel, messageIds) {
+    if (!ECHO_CHANNELS.has(channel) || messageIds.length === 0) return;
+    try {
+      await ChannelOutboundMessage.insertMany(
+        messageIds.map(id => ({ _id: `${channel}:${id}` })),
+        { ordered: false }
+      );
+    } catch (error) {
+      if (error.code !== 11000) {
+        console.error(`[ChannelOrchestrator] Failed to record outbound ${channel} message IDs (non-fatal):`, error.message);
+      }
+    }
   }
 
   /**
@@ -676,29 +794,13 @@ class ChannelOrchestrator {
         channelService
       );
 
-      // Process and store media attachments (if any) via the org's S3 config
-      let storedMedia = [];
-      if (normalizedMessage.media && normalizedMessage.media.length > 0 && channel !== 'website') {
-        try {
-          const agent = await Agent.findById(agentId).populate({
-            path: 'api_key',
-            populate: { path: 'provider' },
-          });
-          storedMedia = await mediaStorageService.processAndStore({
-            orgId: agent.organization,
-            agentId,
-            conversationId: String(conversation._id),
-            mediaItems: normalizedMessage.media,
-            channelService,
-            channel,
-          });
-          if (storedMedia.length > 0) {
-            storedMedia = await attachmentProcessingService.interpretChannelMedia(agent, storedMedia);
-          }
-        } catch (mediaErr) {
-          console.error(`[ChannelOrchestrator] Streaming media processing failed (non-fatal):`, mediaErr.message);
-        }
-      }
+      const storedMedia = await this._storeIncomingMedia(
+        agentId,
+        channel,
+        channelService,
+        conversation,
+        normalizedMessage.media
+      );
 
       // Ensure content is at least an empty string (never null/undefined)
       if (!normalizedMessage.content) {
@@ -1070,14 +1172,18 @@ class ChannelOrchestrator {
 
       // Rich cards return { results: [...] } instead of a single message_id
       const sentIds = [];
-      const trackSent = result => {
-        const id = result?.message_id ?? result?.results?.[0]?.message_id;
-        if (id) sentIds.push(String(id));
+      const trackSent = async result => {
+        const ids = (result?.results || [result])
+          .map(r => r?.message_id)
+          .filter(Boolean)
+          .map(String);
+        sentIds.push(...ids);
+        await this._recordOutboundMessageIds(channel, ids);
       };
 
       // 1. Send the plain text (if any remains after pattern removal)
       if (textToSend && textToSend.trim()) {
-        trackSent(await channelService.sendMessage(recipient, textToSend, sendOptions));
+        await trackSent(await channelService.sendMessage(recipient, textToSend, sendOptions));
       }
 
       // 2. Send each rich card via the channel's native format.
@@ -1091,13 +1197,13 @@ class ChannelOrchestrator {
 
       for (const card of cardsToSend) {
         try {
-          trackSent(await channelService.sendRichCard(recipient, card, sendOptions));
+          await trackSent(await channelService.sendRichCard(recipient, card, sendOptions));
         } catch (cardErr) {
           console.error(`[ChannelOrchestrator] Failed to send rich card via ${channel}:`, cardErr.message);
           // Fallback: send a text-only version of the card
           const fallbackText = this._cardToFallbackText(card);
           if (fallbackText) {
-            trackSent(await channelService.sendMessage(recipient, fallbackText, sendOptions));
+            await trackSent(await channelService.sendMessage(recipient, fallbackText, sendOptions));
           }
         }
       }
