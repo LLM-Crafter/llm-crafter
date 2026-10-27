@@ -970,6 +970,33 @@ conversationSchema.methods.assignExternalOperator = function (
   return this.save();
 };
 
+// Assign someone at the business replying from the channel's own app (e.g. the Instagram
+// app). Nobody in llm-crafter is assigned, so any operator can hand it back.
+conversationSchema.methods.assignChannelAppOperator = function (channel, accountId) {
+  this.status = 'human_controlled';
+  this.current_handler = 'human';
+  this.handoff_info.assigned_human = undefined;
+  this.handoff_info.assigned_external_operator = undefined;
+  this.handoff_info.handed_off_at = new Date();
+
+  const appName = channel.charAt(0).toUpperCase() + channel.slice(1);
+  this.messages.push({
+    role: 'system',
+    content: `A member of our team joined from the ${appName} app.`,
+    code: 'HUMAN_JOINED',
+    timestamp: new Date(),
+    handler_info: {
+      channel_app_operator: {
+        channel,
+        account_id: accountId,
+        timestamp: new Date(),
+      },
+    },
+  });
+
+  return this.save();
+};
+
 // Hand back to agent
 conversationSchema.methods.handBackToAgent = function () {
   this.status = 'agent_controlled';

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 /**
  * ChannelOutboundMessage — platform message IDs of everything Crafter sent through a
- * channel that echoes outgoing messages back via webhook (Instagram).
+ * channel that echoes outgoing messages back via webhook (Instagram, Messenger).
  *
  * Echoes for these IDs are our own messages (already stored on the conversation) and are
  * dropped; an echo whose ID is not here was sent from the platform's own app by someone at

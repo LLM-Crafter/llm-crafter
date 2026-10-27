@@ -34,7 +34,7 @@ const TURN_POLL_INTERVAL_MS = parseInt(process.env.CHANNEL_TURN_POLL_INTERVAL_MS
 const TURN_CANCEL_CHECK_INTERVAL_MS = 750;
 // Channels that echo every message our account sends back through the webhook. Echoes of
 // messages sent from the platform's own app (not by Crafter) are recorded on the conversation.
-const ECHO_CHANNELS = new Set(['instagram']);
+const ECHO_CHANNELS = new Set(['instagram', 'messenger']);
 // How long an unrecognised echo waits for our send path to record its ID before it's
 // treated as sent from the platform's app.
 const ECHO_MATCH_GRACE_MS = parseInt(process.env.CHANNEL_ECHO_MATCH_GRACE_MS, 10) || 5000;
@@ -473,7 +473,8 @@ class ChannelOrchestrator {
    * it (an agent reply, or an operator reply from Crafter), which is already on the
    * conversation. What's left was sent by someone at the business from the platform's own
    * app; it's stored as a human_operator message flagged with handler_info.channel_app_operator,
-   * and never runs the agent.
+   * and never runs the agent. That person has taken over, so the conversation becomes
+   * human_controlled (operators hand it back to the agent from Crafter as usual).
    *
    * Meta can dispatch the echo before our send call returns, so an unrecognised ID gets a
    * grace period for the send path to record it before it's treated as sent from the app.
@@ -506,6 +507,13 @@ class ChannelOrchestrator {
       channelService
     );
     const storedMedia = await this._storeIncomingMedia(agentId, channel, channelService, conversation, echo.media);
+
+    if (conversation.status !== 'human_controlled') {
+      await conversation.assignChannelAppOperator(channel, echo.account_id);
+      // Stop a reply this instance is generating. Buffered turns check the status when claimed.
+      const executionToken = this.executionTokens.get(String(conversation._id));
+      if (executionToken) executionToken.cancelled = true;
+    }
 
     await conversation.addMessage({
       role: 'human_operator',

@@ -235,19 +235,6 @@ class InstagramService extends BaseChannelService {
   }
 
   /**
-   * Normalize an echo. The conversation belongs to the recipient (the end user); the
-   * sender is our own Instagram account.
-   */
-  normalizeEcho(rawMessage) {
-    return {
-      ...this.normalizeMessage(rawMessage),
-      type: 'echo',
-      user_identifier: rawMessage.recipient?.id,
-      account_id: rawMessage.sender?.id,
-    };
-  }
-
-  /**
    * Extract user identifier (Instagram-scoped user ID)
    */
   extractUserIdentifier(rawMessage) {

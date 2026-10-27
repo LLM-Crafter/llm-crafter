@@ -360,10 +360,11 @@ const handleMessengerWebhook = async (req, res) => {
       JSON.stringify(req.body, null, 2)
     );
 
-    // Extract recipient ID (the Page ID that received the message)
+    // Extract the Page ID to route to the correct agent. It's the recipient, except on
+    // echoes (messages the Page sent), where it's the sender.
     const entry = req.body.entry?.[0];
     const messaging = entry?.messaging?.[0];
-    const recipientId = messaging?.recipient?.id;
+    const recipientId = messaging?.message?.is_echo ? messaging.sender?.id : messaging?.recipient?.id;
 
     if (!recipientId) {
       console.warn('[Messenger] Could not extract recipient ID from webhook');

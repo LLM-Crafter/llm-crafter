@@ -175,8 +175,9 @@ class MessengerService extends BaseChannelService {
       const messaging = entry.messaging?.[0];
       if (!messaging) return null;
 
-      // Ignore echo messages (sent by the page itself)
-      if (messaging.message?.is_echo) return null;
+      // Echoes are messages the page itself sent — by us through the API, or by someone
+      // at the business from Messenger / Meta Business Suite. The orchestrator tells them apart.
+      if (messaging.message?.is_echo) return this.normalizeEcho(messaging);
 
       // Ignore delivery/read receipts
       if (messaging.delivery || messaging.read) return null;

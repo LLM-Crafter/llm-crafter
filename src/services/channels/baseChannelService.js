@@ -88,6 +88,21 @@ class BaseChannelService {
   }
 
   /**
+   * Normalize an echo — a message our own account sent (Meta channels). The conversation
+   * belongs to the recipient (the end user); the sender is our account.
+   * @param {Object} rawMessage - Raw messaging event with message.is_echo set
+   * @returns {Object} - Normalized echo
+   */
+  normalizeEcho(rawMessage) {
+    return {
+      ...this.normalizeMessage(rawMessage),
+      type: 'echo',
+      user_identifier: rawMessage.recipient?.id,
+      account_id: rawMessage.sender?.id,
+    };
+  }
+
+  /**
    * Extract user identifier from raw message
    * Must be implemented by each channel
    * @param {Object} rawMessage
