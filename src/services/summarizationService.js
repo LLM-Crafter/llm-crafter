@@ -1,7 +1,12 @@
 const OpenAIService = require('./openaiService');
 const APIKey = require('../models/ApiKey');
 const { getActiveGuidance } = require('../utils/operatorGuidance');
+const { formatToolCall } = require('../utils/toolContext');
 const languageDetectionService = require('./languageDetectionService');
+
+// Room per tool call in the summarization prompt. Results are often large
+// third-party payloads; they are compacted to fit rather than cut off.
+const SUMMARY_TOOL_CALL_TOKENS = 600;
 
 class SummarizationService {
   /**
@@ -127,18 +132,7 @@ class SummarizationService {
       // Include detailed tool usage information (parameters and results)
       if (msg.tools_used && msg.tools_used.length > 0) {
         msg.tools_used.forEach(t => {
-          prompt += `[Tool: ${t.tool_name}`;
-          if (t.parameters) {
-            prompt += `, Parameters: ${JSON.stringify(t.parameters)}`;
-          }
-          if (t.success) {
-            const resultStr = JSON.stringify(t.result);
-            // Truncate very long tool results
-            prompt += `, Result: ${resultStr.length > 500 ? resultStr.substring(0, 497) + '...' : resultStr}`;
-          } else if (t.error) {
-            prompt += `, Error: ${t.error}`;
-          }
-          prompt += `]\n`;
+          prompt += `[Tool: ${formatToolCall(t, SUMMARY_TOOL_CALL_TOKENS)}]\n`;
         });
         prompt += `\n`;
       }

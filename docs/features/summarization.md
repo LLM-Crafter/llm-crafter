@@ -77,6 +77,8 @@ Summaries are created in a structured format that preserves the most important i
 }
 ```
 
+The summary also has `tool_results`: key data from the tool calls in the summarized messages. The summarizer sees each call with its parameters and its result, cut down to fit the same way as [tool results in later turns](../concepts/conversations.md#tool-results-from-earlier-turns).
+
 ## Model Selection
 
 LLM Crafter automatically selects cost-effective models for summarization:

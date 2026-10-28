@@ -242,6 +242,18 @@ const agentSchema = new mongoose.Schema(
         max_extracted_chars: { type: Number, default: 20_000, min: 1000, max: 100_000 },
         max_description_chars: { type: Number, default: 4_000, min: 250, max: 20_000 },
       },
+      // Tool results from earlier turns that go back into the prompt, so the
+      // agent can answer follow-ups from data it already fetched. Budgets are
+      // estimated tokens. The most recent turn that used tools stays as the
+      // agent saw it, up to max_tokens_latest_turn; older turns share
+      // max_tokens, newest first, and once it is used up older calls keep
+      // only their parameters.
+      tool_context: {
+        enabled: { type: Boolean, default: true },
+        max_tokens_latest_turn: { type: Number, default: 8000, min: 0, max: 20_000 },
+        max_tokens: { type: Number, default: 3000, min: 0, max: 20_000 },
+        max_tokens_per_turn: { type: Number, default: 2000, min: 0, max: 20_000 },
+      },
       // ISO 639-1 language codes to generate translations for.
       // When set, conversation titles and summaries are translated into each
       // listed language and stored alongside the primary (English) value.

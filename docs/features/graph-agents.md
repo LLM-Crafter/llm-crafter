@@ -103,7 +103,7 @@ Each batch is checked before anything runs:
 | Budget used up | Not run. The planner gets "budget exhausted". |
 | Otherwise | Runs. All tools in the batch run in parallel. |
 
-Every tool that runs uses one call from the budget, and its result is recorded for procedures. Results are shown to the planner, the responder and the critic. `api_caller` results are trimmed to status code and body or summary.
+Every tool that runs uses one call from the budget, and its result is recorded for procedures. Results are shown to the planner, the responder and the critic. `api_caller` results are trimmed to status code and body or summary. Later turns see them too, in the conversation history (see [Tool results from earlier turns](../concepts/conversations.md#tool-results-from-earlier-turns)).
 
 If `request_human_handoff` succeeds, the turn ends right away. The user gets the tool's `handoff_message`, or a default message.
 
@@ -116,7 +116,7 @@ The responder writes the reply. Its model is `graph_models.responder_model`, or 
 It receives:
 
 - the agent's persona prompt (see [Prompts per role](#prompts-per-role)), plus the request's dynamic context and the language requirement,
-- the conversation history and summary,
+- the conversation history and summary, including tool results from earlier turns,
 - the procedure status block, if a procedure is active,
 - the funnel state, and
 - all tool results from this turn, including failures.

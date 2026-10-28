@@ -13,6 +13,7 @@ const { runAgentGraph } = require('./agentGraph');
 // Status label helpers only; the agent loop itself never runs graph code.
 const { createStatusEmitter, toolStatus } = require('./agentGraph/shared');
 const { formatHistoryLines } = require('../utils/operatorGuidance');
+const { attachToolContext, toolResultForPrompt } = require('../utils/toolContext');
 
 class AgentService {
   /**
@@ -2237,7 +2238,8 @@ class AgentService {
     const messages = conversation.getContextForAgent(4000, { beforeIndex: historyCutoffIndex }); // Limit to ~4K tokens
 
     return {
-      conversation_history: messages,
+      // Earlier turns' tool results ride along on their assistant messages, within their own budget
+      conversation_history: attachToolContext(messages, agent.config?.tool_context),
       available_tools: agent.tools,
       agent_config: agent.config,
       has_summary: !!conversation.conversation_summary,
@@ -2356,29 +2358,7 @@ class AgentService {
   }
 
   getToolResultForPrompt(toolName, result) {
-    if (toolName !== 'api_caller' || !result || typeof result !== 'object') {
-      return result;
-    }
-
-    const promptResult = {
-      endpoint_name: result.endpoint_name,
-      url: result.url,
-      method: result.method,
-      status_code: result.status_code,
-      success: result.success,
-    };
-
-    if (result._summarized && result.summary !== undefined) {
-      promptResult.summary = result.summary;
-      promptResult._summarized = true;
-      promptResult._original_length = result._original_length;
-    } else if (result.body !== undefined) {
-      promptResult.body = result.body;
-    } else if (result.data !== undefined) {
-      promptResult.data = result.data;
-    }
-
-    return promptResult;
+    return toolResultForPrompt(toolName, result);
   }
 
   /**

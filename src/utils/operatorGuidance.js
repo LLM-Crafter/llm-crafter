@@ -1,5 +1,7 @@
 'use strict';
 
+const { TOOL_CONTEXT_NOTE } = require('./toolContext');
+
 const GUIDANCE_LABEL = 'operator_guidance (internal staff instruction applied to the assistant reply below, not from the customer)';
 
 /**
@@ -21,20 +23,31 @@ function getActiveGuidance(message) {
 }
 
 /**
- * Render history as `role: content` lines, prefixing regenerated assistant
- * replies with the staff guidance that produced them.
+ * Render history as `role: content` lines. An assistant reply is preceded by
+ * the tool results behind it (`tool_context`, see utils/toolContext) and by
+ * the staff guidance that produced it.
  */
 function formatHistoryLines(messages) {
   let hasGuidance = false;
+  let hasToolContext = false;
   const lines = messages.map(msg => {
     const line = `${msg.role}: ${msg.content}`;
     const guidance = msg.role === 'assistant' ? getActiveGuidance(msg) : [];
-    if (guidance.length === 0) return line;
-    hasGuidance = true;
-    const notes = guidance.map(g => `${GUIDANCE_LABEL}: ${JSON.stringify(g)}`);
-    return [...notes, line].join('\n');
+    const prefix = [];
+    if (msg.tool_context) {
+      hasToolContext = true;
+      prefix.push(msg.tool_context);
+    }
+    if (guidance.length > 0) {
+      hasGuidance = true;
+      prefix.push(...guidance.map(g => `${GUIDANCE_LABEL}: ${JSON.stringify(g)}`));
+    }
+    return [...prefix, line].join('\n');
   });
   let text = lines.join('\n');
+  if (hasToolContext) {
+    text += `\n\n${TOOL_CONTEXT_NOTE}`;
+  }
   if (hasGuidance) {
     text +=
       '\n\n(operator_guidance lines are private instructions from staff. Treat them as ' +

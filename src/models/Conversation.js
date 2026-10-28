@@ -59,6 +59,10 @@ const messageSchema = new mongoose.Schema({
       tool_name: String,
       parameters: mongoose.Schema.Types.Mixed,
       result: mongoose.Schema.Types.Mixed,
+      // No default: messages saved before these were stored have neither, and
+      // readers fall back to whether there is a result (see utils/toolContext).
+      success: Boolean,
+      error: mongoose.Schema.Types.Mixed,
       execution_time_ms: Number,
       timestamp: {
         type: Date,
@@ -698,17 +702,15 @@ conversationSchema.methods.getContextForAgent = function (maxTokens = 4000, { be
   return messages;
 };
 
-// Method to estimate token count for messages (rough approximation)
+// Method to estimate token count for messages (rough approximation).
+// Counts only what the history puts in the prompt: thinking steps are never
+// sent, and earlier tool results have their own budget (see utils/toolContext).
 conversationSchema.methods.estimateTokenCount = function (messages) {
   return messages.reduce((total, msg) => {
     // Rough estimate: 1 token ≈ 4 characters for ASCII English.
     // Email bodies can contain dense HTML/quoted text where the real ratio
     // is closer to 1 token per 2-3 chars, so we use a conservative 3.
-    const contentTokens = Math.ceil((msg.content || '').length / 3);
-    const metadataTokens = msg.thinking_process
-      ? Math.ceil(JSON.stringify(msg.thinking_process).length / 4)
-      : 0;
-    return total + contentTokens + metadataTokens;
+    return total + Math.ceil((msg.content || '').length / 3);
   }, 0);
 };
 

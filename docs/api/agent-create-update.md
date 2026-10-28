@@ -51,6 +51,17 @@ All fields marked **required** apply to `POST`. For `PUT` every field is optiona
 | `auto_end_after_minutes`  | integer | `30`         | Idle minutes before a conversation is auto-ended                             |
 | `context_window_strategy` | string  | `"truncate"` | How to handle context overflow: `"truncate"` \| `"summarize"` \| `"sliding"` |
 
+#### Tool results in later turns (`config.tool_context`)
+
+Tool results from earlier turns go back into the prompt, so the agent can answer follow-ups such as "the black one" from data it already fetched. The most recent turn that used tools is shown as the agent saw it; older turns are cut down only as far as their budget requires. See [Conversations](../concepts/conversations.md#tool-results-from-earlier-turns).
+
+| Field                    | Type    | Default | Description                                                                                                                         |
+| ------------------------ | ------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`                | boolean | `true`  | Put tool results from earlier turns back into the prompt                                                                            |
+| `max_tokens_latest_turn` | integer | `8000`  | Estimated tokens for the most recent turn that used tools (0–20000). Within this, its results are shown in full; above it, cut down |
+| `max_tokens`             | integer | `3000`  | Estimated tokens for all older turns together (0–20000). Once used up, their calls are listed without results                       |
+| `max_tokens_per_turn`    | integer | `2000`  | Estimated tokens for each older turn (0–20000)                                                                                      |
+
 #### Tool-call limits (task agents)
 
 | Field             | Type    | Default | Description                |

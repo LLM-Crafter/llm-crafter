@@ -239,12 +239,37 @@ function buildContext(conversation, maxTokens = 4000) {
 }
 ```
 
+### Tool Results From Earlier Turns
+
+Tool results stay available after the turn that fetched them. When the customer refers back to something the agent looked up ("the black one", "the cheaper one"), the agent can read it from the history instead of asking again.
+
+In the history, each assistant reply comes right after the tool calls behind it:
+
+```text
+user: Do you have the SUV in stock?
+tool_results (2026-10-26 07:35 UTC):
+- api_caller {"endpoint_name":"search_cars","method":"GET","query_params":{"model":"SUV"}} → {"status_code":200,"success":true,"body":{"items":[{"external_id":"3035","attributes":{"exterior_color":"White"}},{"external_id":"3094","attributes":{"exterior_color":"Black"}}]}}
+assistant: We have two: [listing:3035] [listing:3094]. Which one do you like?
+user: the black one
+```
+
+Results usually come from third-party APIs, so nothing depends on their schema:
+
+- The most recent turn that used tools is shown as the agent saw it during that turn, so follow-ups get the full data. It stays that way until a newer turn uses tools. `api_caller` results leave out headers and the fields that repeat the call.
+- Older turns share a smaller budget. When their results don't fit, they are cut down step by step: empty fields and lists of links (such as images) go first, then long text and long lists get shorter. Every cut is marked with `…` and says how much was left out. The largest result in a turn is cut first, so small results stay whole.
+- Among older turns, the newest gets the budget first. Once it is used up, the remaining calls are listed with their parameters but without their result, so the agent can make the call again.
+- A call repeated later with the same parameters keeps only its newest result. Failed calls always show their error.
+- Summarized messages are skipped; the summary keeps the key data from their tool calls.
+
+The ReAct loop, email agents, and the planner, responder and critic of [graph agents](../features/graph-agents.md) all get the same history. Budgets are set per agent in [`config.tool_context`](../api/agent-create-update.md#tool-results-in-later-turns-config-tool-context).
+
 ### Token Estimation
 
 ```javascript
-function estimateTokens(text) {
-  // Rough estimation: 1 token ≈ 4 characters
-  return Math.ceil(text.length / 4);
+function estimateTokens(message) {
+  // Conservative estimate: 1 token ≈ 3 characters. Only the content counts:
+  // thinking steps are never sent, and tool results have their own budget.
+  return Math.ceil(message.content.length / 3);
 }
 ```
 
