@@ -59,6 +59,106 @@ const findAgentForAccount = async (channel, key, accountId) => {
   return configs[0]?.agent || null;
 };
 
+// WhatsApp coexistence sync webhooks. They arrive in bulk and hold personal data, and we
+// don't import them, so they are never logged in full or routed to an agent.
+const WHATSAPP_SYNC_FIELDS = new Set(['history', 'smb_app_state_sync']);
+
+const summarizeWhatsAppSyncChange = ({ field, value }) => {
+  const summary = { field, phone_number_id: value?.metadata?.phone_number_id };
+  if (field !== 'history') return summary;
+
+  // Absent on media chunks, which have no `history` wrapper. Error 2593109 means the
+  // business declined to share history, which is expected.
+  const history = value?.history?.[0];
+  return {
+    ...summary,
+    phase: history?.metadata?.phase,
+    chunk_order: history?.metadata?.chunk_order,
+    progress: history?.metadata?.progress,
+    error_code: history?.errors?.[0]?.code,
+  };
+};
+
+const logWhatsAppWebhook = (label, body) => {
+  const changes = (body?.entry || []).flatMap(entry => entry.changes || []);
+  const syncChanges = changes.filter(change => WHATSAPP_SYNC_FIELDS.has(change.field));
+
+  if (syncChanges.length === 0) {
+    console.log(`[WhatsApp] Received ${label}:`, JSON.stringify(body, null, 2));
+    return;
+  }
+  for (const change of syncChanges) {
+    console.log(`[WhatsApp] Received ${label}:`, summarizeWhatsAppSyncChange(change));
+  }
+};
+
+/**
+ * account_update has no phone_number_id, so it routes by WABA, which can back several
+ * configs. PARTNER_REMOVED disables them but keeps the credentials, so the customer can
+ * reconnect. Other events are ignored.
+ */
+const handleWhatsAppAccountUpdate = async value => {
+  if (value?.event !== 'PARTNER_REMOVED') return;
+
+  const wabaId = value.waba_info?.waba_id;
+  const filter = {
+    'whatsapp.credentials.waba_id': wabaId,
+    'whatsapp.enabled': true,
+  };
+  const configs = wabaId ? await ChannelConfig.find(filter).select('agent').lean() : [];
+  if (configs.length === 0) {
+    console.warn(`[WhatsApp] No enabled config for ${value.event} on waba_id: ${wabaId}`);
+    return;
+  }
+
+  await ChannelConfig.updateMany(filter, {
+    $set: {
+      'whatsapp.enabled': false,
+      'whatsapp.disconnection': {
+        event: value.event,
+        reason: value.disconnection_info?.reason,
+        initiated_by: value.disconnection_info?.initiated_by,
+        at: new Date(),
+      },
+    },
+  });
+  configs.forEach(config => channelOrchestrator.clearAgentCache(config.agent));
+  console.log(
+    `[WhatsApp] ${value.event} disabled ${configs.length} config(s) on waba_id ${wabaId}`,
+    value.disconnection_info
+  );
+};
+
+/**
+ * Splits a Meta webhook into one single-change webhook per change, since handleMetaWebhook
+ * reads the first change. Other formats (Twilio, 360dialog) pass through as they are.
+ */
+const splitWhatsAppWebhook = body => {
+  const webhooks = (body?.entry || []).flatMap(entry =>
+    (entry.changes || []).map(change => ({ ...body, entry: [{ ...entry, changes: [change] }] }))
+  );
+  return webhooks.length > 0 ? webhooks : [body];
+};
+
+/**
+ * Processes webhooks in order, in the background (never rejects). One at a time, because
+ * changes in a batch can belong to the same conversation.
+ */
+const processWhatsAppWebhooks = async (routed, ip) => {
+  for (const { agentId, body } of routed) {
+    try {
+      const result = await channelOrchestrator.handleIncomingMessage(agentId, 'whatsapp', body, {
+        ip_address: ip,
+      });
+      if (result?.conversation_id) {
+        console.log('[WhatsApp] Message processed:', result.conversation_id);
+      }
+    } catch (error) {
+      console.error('[WhatsApp] Error processing message:', error);
+    }
+  }
+};
+
 // ===== WEBHOOK HANDLERS =====
 
 /**
@@ -88,24 +188,13 @@ const handleWhatsAppWebhook = async (req, res) => {
     }
 
     // Handle incoming message
-    console.log(
-      '[WhatsApp] Received webhook:',
-      JSON.stringify(req.body, null, 2)
-    );
+    logWhatsAppWebhook('webhook', req.body);
 
     // Process message asynchronously
-    channelOrchestrator
-      .handleIncomingMessage(agentId, 'whatsapp', req.body, {
-        ip_address: req.ip,
-      })
-      .then(result => {
-        if (result?.conversation_id) {
-          console.log('[WhatsApp] Message processed:', result.conversation_id);
-        }
-      })
-      .catch(error => {
-        console.error('[WhatsApp] Error processing message:', error);
-      });
+    processWhatsAppWebhooks(
+      splitWhatsAppWebhook(req.body).map(body => ({ agentId, body })),
+      req.ip
+    );
 
     // Respond to webhook quickly (within 5 seconds for Meta)
     res.status(200).json({ success: true });
@@ -137,44 +226,45 @@ const handleWhatsAppSharedWebhook = async (req, res) => {
     }
 
     // Handle incoming message
-    console.log(
-      '[WhatsApp] Received shared webhook:',
-      JSON.stringify(req.body, null, 2)
-    );
+    logWhatsAppWebhook('shared webhook', req.body);
 
-    // Extract phone_number_id from the webhook payload
-    const entry = req.body.entry?.[0];
-    const phoneNumberId =
-      entry?.changes?.[0]?.value?.metadata?.phone_number_id;
+    const routed = [];
+    for (const body of splitWhatsAppWebhook(req.body)) {
+      const change = body.entry?.[0]?.changes?.[0];
 
-    if (!phoneNumberId) {
-      console.warn('[WhatsApp] Could not extract phone_number_id from webhook');
-      return res.status(200).json({ success: true });
+      // Skipped without touching the database: history arrives in many chunks
+      if (WHATSAPP_SYNC_FIELDS.has(change?.field)) continue;
+
+      // A failure here answers 500 so Meta retries; applying it twice does no harm
+      if (change?.field === 'account_update') {
+        await handleWhatsAppAccountUpdate(change.value);
+        continue;
+      }
+
+      // Extract phone_number_id from the webhook payload
+      const phoneNumberId = change?.value?.metadata?.phone_number_id;
+
+      if (!phoneNumberId) {
+        console.warn('[WhatsApp] Could not extract phone_number_id from webhook');
+        continue;
+      }
+
+      // Look up which agent owns this WhatsApp phone number
+      const agentId = await findAgentForAccount('whatsapp', 'phone_number_id', phoneNumberId);
+
+      if (!agentId) {
+        console.warn(
+          `[WhatsApp] No agent configured for phone_number_id: ${phoneNumberId}`
+        );
+        continue;
+      }
+
+      routed.push({ agentId, body });
     }
 
-    // Look up which agent owns this WhatsApp phone number
-    const agentId = await findAgentForAccount('whatsapp', 'phone_number_id', phoneNumberId);
-
-    if (!agentId) {
-      console.warn(
-        `[WhatsApp] No agent configured for phone_number_id: ${phoneNumberId}`
-      );
-      return res.status(200).json({ success: true });
-    }
-
-    // Process message asynchronously
-    channelOrchestrator
-      .handleIncomingMessage(agentId, 'whatsapp', req.body, {
-        ip_address: req.ip,
-      })
-      .then(result => {
-        if (result?.conversation_id) {
-          console.log('[WhatsApp] Message processed:', result.conversation_id);
-        }
-      })
-      .catch(error => {
-        console.error('[WhatsApp] Error processing message:', error);
-      });
+    // Process messages asynchronously. Only started once the loop above can no longer fail,
+    // so a retried webhook can't run a message twice.
+    processWhatsAppWebhooks(routed, req.ip);
 
     // Respond to webhook quickly (within 5 seconds for Meta)
     res.status(200).json({ success: true });
@@ -545,6 +635,9 @@ const updateChannelConfig = async (req, res) => {
       // Copy other non-credential fields
       if (updates.whatsapp.enabled !== undefined) {
         channelConfig.whatsapp.enabled = updates.whatsapp.enabled;
+      }
+      if (channelConfig.whatsapp.enabled) {
+        channelConfig.whatsapp.disconnection = undefined;
       }
       if (updates.whatsapp.provider) {
         channelConfig.whatsapp.provider = updates.whatsapp.provider;

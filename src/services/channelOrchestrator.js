@@ -32,9 +32,10 @@ const TURN_POLL_INTERVAL_MS = parseInt(process.env.CHANNEL_TURN_POLL_INTERVAL_MS
 // How often an in-progress generation checks whether a newer message was buffered
 // (on any instance) for its conversation, so it can cancel and let the next turn take over.
 const TURN_CANCEL_CHECK_INTERVAL_MS = 750;
-// Channels that echo every message our account sends back through the webhook. Echoes of
-// messages sent from the platform's own app (not by Crafter) are recorded on the conversation.
-const ECHO_CHANNELS = new Set(['instagram', 'messenger']);
+// Channels that echo messages our account sends back through the webhook (on WhatsApp, via
+// smb_message_echoes on coexistence numbers). Echoes of messages sent from the platform's own
+// app (not by Crafter) are recorded on the conversation.
+const ECHO_CHANNELS = new Set(['instagram', 'messenger', 'whatsapp']);
 // How long an unrecognised echo waits for our send path to record its ID before it's
 // treated as sent from the platform's app.
 const ECHO_MATCH_GRACE_MS = parseInt(process.env.CHANNEL_ECHO_MATCH_GRACE_MS, 10) || 5000;
@@ -45,6 +46,7 @@ class ChannelOrchestrator {
   constructor() {
     this.channelServices = new Map(); // Map of agentId_channel -> service instance
     this.initialized = new Set(); // Track which agents have been initialized
+    this.configVersions = new Map(); // Map of agentId -> updatedAt of the config the services were built from
     this.executionTokens = new Map(); // Map of conversationId -> { cancelled: boolean }
     this.turnPollTimer = null; // setInterval handle for the debounce-turn poller
     this.turnPollInFlight = false; // guards against overlapping poll ticks
@@ -135,9 +137,14 @@ class ChannelOrchestrator {
    */
   async initializeChannelsForAgent(agentId) {
     try {
-      // Check if already initialized
+      // Reuse the cached services only if they were built from the current config. It may
+      // have been changed through another app instance, e.g. a reconnect with a new token.
       if (this.initialized.has(agentId)) {
-        return { enabled: this.getEnabledChannels(agentId) };
+        const current = await ChannelConfig.findOne({ agent: agentId }).select('updatedAt').lean();
+        if (current?.updatedAt?.getTime() === this.configVersions.get(agentId)) {
+          return { enabled: this.getEnabledChannels(agentId) };
+        }
+        this.clearAgentCache(agentId);
       }
 
       // Use lean() to get raw data without toJSON transformation that strips credentials
@@ -206,6 +213,7 @@ class ChannelOrchestrator {
       enabledChannels.push('website');
 
       this.initialized.add(agentId);
+      this.configVersions.set(agentId, channelConfig.updatedAt?.getTime());
 
       return {
         enabled: enabledChannels,
@@ -292,6 +300,11 @@ class ChannelOrchestrator {
         // null means a non-message webhook (e.g. status updates) - nothing to process
         if (!normalizedMessage) {
           return { success: true, status: 'ignored', reason: 'non_message_webhook' };
+        }
+
+        // One webhook can carry several echoes (WhatsApp smb_message_echoes)
+        if (Array.isArray(normalizedMessage)) {
+          return this._recordEchoes(agentId, channel, channelService, normalizedMessage);
         }
 
         // Reactions update the message they target — never a new message or an agent turn
@@ -466,6 +479,23 @@ class ChannelOrchestrator {
       console.error(`[ChannelOrchestrator] ${channel} media processing failed (non-fatal):`, mediaErr.message);
     }
     return storedMedia;
+  }
+
+  /**
+   * Records a webhook's echoes in order. The webhook was already acknowledged, so a failed
+   * echo won't be redelivered and must not take the rest of the batch down with it.
+   */
+  async _recordEchoes(agentId, channel, channelService, echoes) {
+    const results = [];
+    for (const echo of echoes) {
+      try {
+        results.push(await this._recordEcho(agentId, channel, channelService, echo));
+      } catch (error) {
+        console.error(`[ChannelOrchestrator] Failed to record ${channel} echo ${echo.message_id}:`, error);
+        results.push({ success: false, status: 'failed', message_id: echo.message_id });
+      }
+    }
+    return { success: true, status: 'echoes_processed', results };
   }
 
   /**
@@ -1121,7 +1151,8 @@ class ChannelOrchestrator {
 
       switch (channel) {
         case 'whatsapp':
-          recipient = channelMetadata?.whatsapp?.phone_number;
+          // Conversations started by an echo have no metadata; the identifier is the user's number
+          recipient = channelMetadata?.whatsapp?.phone_number || userIdentifier;
           break;
 
         case 'telegram':
@@ -1347,6 +1378,7 @@ class ChannelOrchestrator {
       if (key.startsWith(`${agentId}_`)) this.channelServices.delete(key);
     }
     this.initialized.delete(agentId);
+    this.configVersions.delete(agentId);
     console.log(`[ChannelOrchestrator] Cleared cache for agent ${agentId}`);
   }
 

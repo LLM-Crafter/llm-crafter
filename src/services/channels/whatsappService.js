@@ -720,6 +720,18 @@ class WhatsAppService extends BaseChannelService {
     const entry = rawMessage.entry?.[0];
     const change = entry?.changes?.[0];
     const value = change?.value;
+    const field = change?.field;
+
+    if (field === 'smb_message_echoes') {
+      return this.normalizeMetaEchoes(value);
+    }
+    // Other fields never run the agent. `history` in particular replays old media in
+    // value.messages[], looking exactly like new inbound messages. Payloads without a field
+    // fall through to the message handling below.
+    if (field && field !== 'messages') {
+      return null;
+    }
+
     const message = value?.messages?.[0];
 
     if (!message) {
@@ -744,6 +756,22 @@ class WhatsAppService extends BaseChannelService {
     const normalized = this.normalizeMessage(message);
     normalized.metaContact = change?.value?.contacts?.[0];
     return normalized;
+  }
+
+  /**
+   * Normalize smb_message_echoes: messages the business sent from the WhatsApp Business app
+   * on a coexistence number. `from` is the business and `to` is the end user, whose number
+   * identifies the conversation. One webhook can carry several.
+   * @returns {Array<Object>|null} - Normalized echoes, or null if there are none
+   */
+  normalizeMetaEchoes(value) {
+    const echoes = (value?.message_echoes || []).map(echo => ({
+      ...this.normalizeMessage(echo),
+      type: 'echo',
+      user_identifier: echo.to,
+      account_id: value.metadata?.phone_number_id || echo.from,
+    }));
+    return echoes.length > 0 ? echoes : null;
   }
 
   /**

@@ -49,6 +49,14 @@ const channelConfigSchema = new mongoose.Schema(
       },
       webhook_url: String,
       verify_token: String, // For Meta webhook verification
+      // Set when Meta reports the customer disconnected (account_update PARTNER_REMOVED).
+      // Cleared when the channel is enabled again.
+      disconnection: {
+        event: String,
+        reason: String, // e.g. PRIMARY_INACTIVITY, ACCOUNT_DISCONNECTED, CHANGE_NUMBER
+        initiated_by: String, // USER or SYSTEM
+        at: Date,
+      },
       business_profile: {
         description: String,
         address: String,
@@ -435,7 +443,9 @@ channelConfigSchema.methods.updateAnalytics = function (channel) {
       this.analytics.total_messages_by_channel.website += 1;
       break;
   }
-  return this.save();
+  // updatedAt marks config changes (the orchestrator rebuilds its services when it moves), and
+  // this runs on every reply
+  return this.save({ timestamps: false });
 };
 
 module.exports = mongoose.model('ChannelConfig', channelConfigSchema);

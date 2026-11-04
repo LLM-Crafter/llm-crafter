@@ -981,7 +981,7 @@ conversationSchema.methods.assignChannelAppOperator = function (channel, account
   this.handoff_info.assigned_external_operator = undefined;
   this.handoff_info.handed_off_at = new Date();
 
-  const appName = channel.charAt(0).toUpperCase() + channel.slice(1);
+  const appName = channel === 'whatsapp' ? 'WhatsApp' : channel.charAt(0).toUpperCase() + channel.slice(1);
   this.messages.push({
     role: 'system',
     content: `A member of our team joined from the ${appName} app.`,

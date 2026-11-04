@@ -47,7 +47,7 @@ describe.each([
 
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    orchestrator.initialized.add(AGENT_ID);
+    jest.spyOn(orchestrator, 'initializeChannelsForAgent').mockResolvedValue({ enabled: [channel] });
     orchestrator.channelServices.set(`${AGENT_ID}_${channel}`, service);
     conversation = {
       _id: 'conv-1',
