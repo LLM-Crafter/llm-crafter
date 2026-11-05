@@ -45,6 +45,11 @@ const PRICING = {
       cachedInput: 0.0001, // $0.10 per million tokens cached input
       output: 0.01, // $10.00 per million tokens output
     },
+    'gpt-6.1-terra': {
+      input: 0.001, // $1.00 per million tokens input
+      cachedInput: 0.00005, // $0.05 per million tokens cached input
+      output: 0.005, // $5.00 per million tokens output
+    },
     'gpt-6-luna': {
       input: 0.0001, // $0.10 per million tokens input
       cachedInput: 0.00001, // $0.01 per million tokens cached input
@@ -520,6 +525,7 @@ class OpenAIService {
       'gpt-5.6-cyber',
       'gpt-6-astra',
       'gpt-6.1-sol',
+      'gpt-6.1-terra',
       'gpt-6-luna',
       'gpt-4.1',
       'gpt-4.1-mini',

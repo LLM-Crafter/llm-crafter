@@ -140,7 +140,7 @@ describe('OpenAI Responses API', () => {
     test.each([
       'gpt-5.5', 'gpt-5.5-pro', 'gpt-5.5-cyber',
       'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.6-cyber',
-      'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna',
+      'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna',
     ])('sends structured outputs on %s', async model => {
       const create = jest.fn().mockResolvedValue(textResponse('{}'));
       await serviceWith(create).service.generateCompletion(
@@ -386,7 +386,7 @@ describe('OpenAI Responses API', () => {
 
   test('fixed-temperature detection covers the gpt-6 family', () => {
     const service = new OpenAIService('key', 'openai');
-    ['gpt-6-luna', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.6-terra'].forEach(model => {
+    ['gpt-6-luna', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-5.6-terra'].forEach(model => {
       expect(service.isFixedTemperatureModel(model)).toBe(true);
     });
     ['gpt-5.5', 'gpt-4.1', 'gpt-60'].forEach(model => {

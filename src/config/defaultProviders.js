@@ -7,6 +7,7 @@ const defaultProviders = [
       // GPT-6 series (latest)
       'gpt-6-astra', // Top-tier flagship model
       'gpt-6.1-sol', // Balanced flagship tier
+      'gpt-6.1-terra', // Balanced speed/intelligence tier
       'gpt-6-luna', // Fastest, most cost-efficient tier
 
       // GPT-5.6 series (Daybreak generation)
