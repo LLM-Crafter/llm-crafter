@@ -457,6 +457,45 @@ class JevService {
   }
 
   /**
+   * Judge each skill independently with one yes/no question, so several can apply
+   * and "none apply" needs no extra option. Thresholds are the caller's decision.
+   *
+   * @returns {Promise<{probabilities: Object<string, number>, usage: Object, latency_ms: number}|null>}
+   *   probabilities is keyed by skill id; null when any answer is missing
+   */
+  async selectSkills(agent, { conversationHistory, skills }) {
+    const questions = {};
+    for (const skill of skills) {
+      questions[skill.id] = {
+        type: 'noul',
+        instructions: 'The customer\'s latest message in `conversation`, or the topic it continues, calls for these instructions.',
+        criteria: {
+          true: this._truncate(skill.description, MAX_MESSAGE_CHARS),
+          false: skill.not_for
+            ? this._truncate(skill.not_for, MAX_MESSAGE_CHARS)
+            : 'The message is about something else.',
+        },
+      };
+    }
+
+    const result = await this.ask(
+      agent,
+      { conversation: this._conversationState(conversationHistory, 6) },
+      questions,
+      'skill_selection'
+    );
+    if (!result) return null;
+
+    const probabilities = {};
+    for (const skill of skills) {
+      const value = result.answers?.[skill.id]?.noul;
+      if (typeof value !== 'number') return null;
+      probabilities[skill.id] = value;
+    }
+    return { probabilities, usage: result.usage, latency_ms: result.latency_ms };
+  }
+
+  /**
    * Email triage. Returns a result shaped like the LLM classifier's parsed JSON
    * (in_scope/topic/intent/confidence/reasons) or null when not confident.
    */

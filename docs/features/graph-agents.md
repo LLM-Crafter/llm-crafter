@@ -18,6 +18,9 @@ Turn it on per agent with `config.enable_small_agent_graph: true`. Only chatbot 
 user message
      │
      ▼
+[Skill selection]
+     │
+     ▼
 [Jev planner gate] ── "no tools needed" ──────────────┐
      │                                                │
      ▼                                                │
@@ -37,7 +40,7 @@ Critic ── approved ──► send draft
      └─ rejected ──► Responder revises once ──► send revision
 ```
 
-Steps in brackets only run when [Jev](../guides/jev-setup.md) is configured for the agent. A successful human handoff ends the turn early, at any point in the planner loop.
+Skill selection only runs when the agent has [skills](skills.md). The other steps in brackets only run when [Jev](../guides/jev-setup.md) is configured for the agent. A successful human handoff ends the turn early, at any point in the planner loop.
 
 ---
 
@@ -45,7 +48,7 @@ Steps in brackets only run when [Jev](../guides/jev-setup.md) is configured for 
 
 ### Native mode (default)
 
-The planner uses the provider's own tool calling (OpenAI-compatible `tools`, or Anthropic tool use). It runs as a loop:
+The planner uses the provider's own tool calling: the Responses API on OpenAI, `tools` on Chat Completions for other OpenAI-compatible providers, or Anthropic tool use. On OpenAI's reasoning models it runs at low reasoning effort unless the agent sets `reasoning_effort`, so choosing tools stays quick. It runs as a loop:
 
 1. The planner gets the conversation and returns zero or more tool calls.
 2. All calls in that step run in parallel.
@@ -88,7 +91,7 @@ JSON mode runs when:
 
 ### Jev planner gate
 
-With `config.jev.planner_gate` on, Jev first decides whether the message needs tools at all. If it confidently says no, the planner is skipped and Jev's funnel state is used.
+With `config.jev.planner_gate` on, Jev first decides whether the message needs tools at all. If it confidently says no, the planner is skipped and Jev's funnel state is used. The gate doesn't run on turns with an active [skill](skills.md), because the skill can call for a lookup the gate can't see.
 
 ---
 
@@ -209,6 +212,7 @@ Context each role sees on every turn:
 
 | | Planner | Responder | Critic |
 |---|:-:|:-:|:-:|
+| Active [skills](skills.md) | ✓ | ✓ | ✓ |
 | Conversation history and summary | ✓ | ✓ | ✓ |
 | Dynamic context (the request's `context`) | ✓ | ✓ | ✓ |
 | Procedure status | ✓ | ✓ | ✓ |
@@ -228,6 +232,8 @@ LLM calls per turn, not counting Jev calls:
 | One batch of tools | 2 | 1 | 1 | 4 |
 | Two dependent batches | 3 | 1 | 1 | 5 |
 | Critic rejects the draft | | +1 | | +1 |
+
+Agents with [skills](skills.md) make one more selection call per turn, unless Jev is clear about every skill or a procedure is running.
 
 Tips:
 
@@ -250,6 +256,7 @@ Tips:
 
 | Step | Meaning |
 |---|---|
+| `skill_selection` / `skills_suspended` | Which skills were chosen and are active / a running procedure suspended skills |
 | `planner_gate` / `planner_skipped` | Jev gate result, or the planner was skipped (no tools, or Jev said none needed) |
 | `planner` | One planner round, with `tools_planned` and, when it stopped, `funnel_state` |
 | `planner_fallback` | Native tool calling failed; the turn used JSON mode |
@@ -272,9 +279,10 @@ Tips:
 |---|---|
 | `src/services/agentGraph/index.js` | Runs the steps, plus the responder, critic, revision and streaming logic |
 | `src/services/agentGraph/planner.js` | Jev gate, native and JSON planners, tool batch execution |
+| `src/services/agentGraph/skills.js` | Skill selection and the active skill lifecycle |
 | `src/services/agentGraph/toolCatalog.js` | Turns agent tools and API endpoints into native tool definitions |
 | `src/services/agentGraph/prompts.js` | All role prompts and output schemas |
 | `src/services/agentGraph/shared.js` | Usage totals, model lookup, cancellation, status events |
-| `src/services/openaiService.js` | `generateToolCompletion`: native tool calling for OpenAI-compatible providers and Anthropic |
+| `src/services/openaiService.js` | `generateToolCompletion`: native tool calling for OpenAI (Responses API), other OpenAI-compatible providers (Chat Completions) and Anthropic |
 | `src/services/agentService.js` | `executeChatbotAgentGraph*` wrappers that call into the graph |
 | `tests/agentGraph.test.js` | Graph tests using a scripted fake LLM |

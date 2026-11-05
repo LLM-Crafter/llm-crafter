@@ -35,8 +35,8 @@ All fields marked **required** apply to `POST`. For `PUT` every field is optiona
 | `llm_settings.parameters.temperature`       | number  | no       | `0.7`   | `0` – `2`                                                                                                |
 | `llm_settings.parameters.max_tokens`        | integer | no       | `1000`  | ≥ 1                                                                                                      |
 | `llm_settings.parameters.top_p`             | number  | no       | `1`     | `0` – `1`                                                                                                |
-| `llm_settings.parameters.frequency_penalty` | number  | no       | `0`     | `-2` – `2`                                                                                               |
-| `llm_settings.parameters.presence_penalty`  | number  | no       | `0`     | `-2` – `2`                                                                                               |
+| `llm_settings.parameters.frequency_penalty` | number  | no       | `0`     | `-2` – `2`. Ignored on the `openai` provider, whose Responses API has no such setting                    |
+| `llm_settings.parameters.presence_penalty`  | number  | no       | `0`     | `-2` – `2`. Ignored on the `openai` provider, whose Responses API has no such setting                    |
 | `llm_settings.parameters.reasoning_effort`  | string  | no       | `null`  | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. Only sent when set; supported values vary per model |
 
 ---
@@ -89,6 +89,12 @@ Tool results from earlier turns go back into the prompt, so the agent can answer
 | `graph_models.planner_model`   | string  | `null`  | Model override for the planner step. Falls back to `llm_settings.model` when `null`              |
 | `graph_models.responder_model` | string  | `null`  | Model override for the responder step                                                            |
 | `graph_models.critic_model`    | string  | `null`  | Model override for the critic step                                                               |
+| `graph_models.selector_model`  | string  | `null`  | Model that selects [skills](../features/skills.md). Falls back to a small model from the agent's provider, then `llm_settings.model` |
+| `skill_selection.yes_threshold` | number | `0.7`   | Jev probability at or above which a skill is activated                                            |
+| `skill_selection.no_threshold` | number  | `0.3`   | Jev probability at or below which a skill is not activated. If any value falls in between, the selector model judges all skills and decides |
+| `skill_selection.max_active`   | integer | `3`     | Most skills active at once                                                                        |
+| `skill_selection.idle_turns`   | integer | `6`     | Turns without being selected before a skill is released                                           |
+| `skill_selection.idle_hours`   | number  | `24`    | Hours since a skill was last selected before it is released                                       |
 
 When the critic rejects a reply it lists the issues, and the responder rewrites the reply once using them; the rewrite is not checked again. The critic is skipped on greeting turns that used no tools.
 
@@ -106,6 +112,10 @@ When any section is non-empty and `enable_small_agent_graph` is `true`, the pipe
 | `output_format`     | string | `""`    | Response structure / formatting guidelines |
 | `guardrails`        | string | `""`    | Topics to avoid, safety rules              |
 | `domain_workflows`  | string | `""`    | Domain-specific procedures or scripts      |
+
+##### `skills` (graph mode)
+
+A top-level array of task instructions, loaded only on the turns that need them. `PUT` replaces the whole array. See [Skills](../features/skills.md) for the fields and how to write them.
 
 #### Human handoff (`config.handoff_config`)
 

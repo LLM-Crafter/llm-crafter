@@ -318,6 +318,24 @@ const agentSchema = new mongoose.Schema(
           type: String,
           default: null,
         },
+        // Model that selects skills when Jev isn't used. When omitted, a small
+        // model from the agent's provider is used (see agentGraph/skills.js).
+        selector_model: {
+          type: String,
+          default: null,
+        },
+      },
+      // How agent.skills are selected and kept active (graph mode only).
+      skill_selection: {
+        // Jev probability at or above this activates a skill; at or below no_threshold rejects it.
+        // If any value falls in between, the selector model judges all skills and decides.
+        yes_threshold: { type: Number, default: 0.7, min: 0, max: 1 },
+        no_threshold: { type: Number, default: 0.3, min: 0, max: 1 },
+        max_active: { type: Number, default: 3, min: 1 },
+        // A skill is released after this many turns without being selected, or
+        // when this many hours pass since it was last selected.
+        idle_turns: { type: Number, default: 6, min: 1 },
+        idle_hours: { type: Number, default: 24, min: 1 },
       },
       // Optional TypeSafe Jev classifier: fast yes/no/choice decisions that replace
       // or short-circuit LLM calls. Every feature falls back to the LLM path when
@@ -330,6 +348,7 @@ const agentSchema = new mongoose.Schema(
         planner_gate: { type: Boolean, default: false },
         language_detection: { type: Boolean, default: false },
         procedure_matching: { type: Boolean, default: false },
+        skill_selection: { type: Boolean, default: false },
         email_triage: { type: Boolean, default: false },
         responder_routing: {
           enabled: { type: Boolean, default: false },
@@ -508,6 +527,20 @@ const agentSchema = new mongoose.Schema(
             gated_tool: { type: String, default: null },
           },
         ],
+      },
+    ],
+    // Skills — task instructions loaded only on the turns that need them (graph
+    // mode only). Guidance, not enforcement: use procedures for required steps.
+    skills: [
+      {
+        id: { type: String, required: true, default: uuidv4 },
+        name: { type: String, required: true, trim: true },
+        // When to use this skill. The selector reads this, not the instructions.
+        description: { type: String, required: true },
+        // Optional near-misses this skill should not be selected for.
+        not_for: { type: String, default: '' },
+        instructions: { type: String, required: true },
+        enabled: { type: Boolean, default: true },
       },
     ],
     // GDPR configuration

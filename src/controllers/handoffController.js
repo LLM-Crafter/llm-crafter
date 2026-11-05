@@ -101,7 +101,7 @@ const getPendingHandoffs = async (req, res) => {
 
     const conversationDocs = await Conversation.find(filter)
       .select(
-        '-procedure_state -dynamic_context -messages.token_usage -messages.thinking_process -messages.tools_used'
+        '-procedure_state -skill_state -dynamic_context -messages.token_usage -messages.thinking_process -messages.tools_used'
       )
       .populate('agent', 'name type')
       .sort({ 'handoff_info.requested_at': -1 })

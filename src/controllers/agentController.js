@@ -19,8 +19,9 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const encryptionUtil = require('../utils/encryption');
 const attachmentProcessingService = require('../services/attachmentProcessingService');
 const { PROVIDER_NAME: JEV_PROVIDER_NAME } = require('../services/jevService');
+const { validateSkills } = require('../utils/agentSkills');
 
-const JEV_FEATURE_FLAGS = ['critic_precheck', 'planner_gate', 'language_detection', 'procedure_matching', 'email_triage'];
+const JEV_FEATURE_FLAGS = ['critic_precheck', 'planner_gate', 'language_detection', 'procedure_matching', 'skill_selection', 'email_triage'];
 
 /**
  * Validate `config.jev` from a create/update request body.
@@ -432,6 +433,14 @@ const createAgent = async (req, res) => {
       procedures = req.body.procedures;
     }
 
+    // Validate skills if provided
+    if (req.body.skills !== undefined) {
+      const skillError = validateSkills(req.body.skills);
+      if (skillError) {
+        return res.status(400).json({ error: skillError });
+      }
+    }
+
     const agent = new Agent({
       name: req.body.name,
       description: req.body.description,
@@ -447,6 +456,7 @@ const createAgent = async (req, res) => {
       gdpr: gdprConfig,
       message_transformers: messageTransformers || [],
       procedures: procedures || [],
+      skills: req.body.skills || [],
     });
 
     await agent.save();
@@ -759,6 +769,15 @@ const updateAgent = async (req, res) => {
         return res.status(400).json({ error: procedureError });
       }
       agent.procedures = req.body.procedures;
+    }
+
+    // Update skills if provided
+    if (req.body.skills !== undefined) {
+      const skillError = validateSkills(req.body.skills);
+      if (skillError) {
+        return res.status(400).json({ error: skillError });
+      }
+      agent.skills = req.body.skills;
     }
 
     // Increment version on update

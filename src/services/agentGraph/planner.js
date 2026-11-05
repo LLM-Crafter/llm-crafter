@@ -35,7 +35,9 @@ const DEFAULT_HANDOFF_MESSAGE =
 async function planAndAct(ctx) {
   const { agent } = ctx;
 
-  if (jevService.isEnabled(agent, 'planner_gate') && agent.tools.length > 0) {
+  // An active skill can call for a lookup the gate can't see, so it never skips the planner.
+  const hasActiveSkills = ctx.activeSkills?.length > 0;
+  if (jevService.isEnabled(agent, 'planner_gate') && agent.tools.length > 0 && !hasActiveSkills) {
     const gate = await jevService.assessToolNeed(agent, {
       conversationHistory: ctx.context.conversation_history,
       tools: agent.tools,
