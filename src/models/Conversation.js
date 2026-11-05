@@ -365,6 +365,19 @@ const conversationSchema = new mongoose.Schema(
         },
       ],
     },
+    // Skills active on this conversation (see Agent.skills). Stores ids only, so
+    // edits to a skill apply from the next turn. Graph mode only.
+    skill_state: {
+      active: [
+        {
+          _id: false,
+          skill_id: { type: String, required: true },
+          activated_at: { type: Date, required: true },
+          last_selected_at: { type: Date, required: true },
+          idle_turns: { type: Number, default: 0 },
+        },
+      ],
+    },
     // Third-party annotations attached by external integrations so 3rd-party
     // frontends can filter/sort conversations server-side (e.g. a CRM tagging a
     // lead priority). Stored using the attribute pattern so MongoDB can index a

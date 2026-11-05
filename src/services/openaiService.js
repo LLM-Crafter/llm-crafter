@@ -10,6 +10,15 @@ const ANTHROPIC_STRUCTURED_OUTPUT_MODELS = /^claude-(fable|mythos|opus-(5|4-[5-9
 const ANTHROPIC_EFFORT_MODELS = /^claude-(fable|mythos|opus-(5|4-[5-9])|sonnet-(5|4-6)|haiku-5)/i;
 // Claude models with server-side refusal fallback (fallbacks: "default").
 const ANTHROPIC_FALLBACK_MODELS = /^claude-(fable-5-1|opus-5|sonnet-5-5)/i;
+// Search models only work on Chat Completions. Other chat-only models are caught
+// by isResponsesUnavailableError and retried there.
+const OPENAI_CHAT_ONLY_MODELS = /-search-(api|preview)$/i;
+// Models that accept a reasoning effort on the Responses API.
+const OPENAI_REASONING_MODELS = /^(gpt-[56](\.\d+)?(-|$)|o\d(-|$))/i;
+const OPENAI_NO_EFFORT_MODELS = /-(pro|chat-latest|search-api)$/i;
+// Parameters that some models reject, and that a request can safely run without.
+const RESPONSES_DROPPABLE_PARAMETERS = ['temperature', 'top_p', 'reasoning'];
+const RESPONSES_MIN_OUTPUT_TOKENS = 16;
 const ANTHROPIC_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
 // Anthropic stop_reason -> OpenAI finish_reason
@@ -502,6 +511,16 @@ class OpenAIService {
       'gpt-5.4-mini',
       'gpt-5.4-pro',
       'gpt-5.4-nano',
+      'gpt-5.5',
+      'gpt-5.5-pro',
+      'gpt-5.5-cyber',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.6-cyber',
+      'gpt-6-astra',
+      'gpt-6.1-sol',
+      'gpt-6-luna',
       'gpt-4.1',
       'gpt-4.1-mini',
       'gpt-4.1-nano',
@@ -511,8 +530,8 @@ class OpenAIService {
   }
 
   /**
-   * Reasoning-style models (o1/o3 family, "-pro" variants, and the gpt-5.6
-   * family) only accept the default temperature (1) and reject any other
+   * Reasoning-style models (o1/o3 family, "-pro" variants, and the gpt-5.6 and
+   * gpt-6 families) only accept the default temperature (1) and reject any other
    * value with a 400 error. Newer Claude models (Fable, Mythos, Opus 4.7+,
    * Sonnet 5+, Haiku 5.5) behave the same way.
    */
@@ -529,7 +548,7 @@ class OpenAIService {
     return (
       /^o\d(-|$)/i.test(model) ||
       /-pro$/i.test(model) ||
-      /^gpt-5\.6(-|$)/i.test(model)
+      /^gpt-(5\.6|6)(\.\d+)?(-|$)/i.test(model)
     );
   }
 
@@ -541,7 +560,10 @@ class OpenAIService {
     const msg = error?.message || '';
     return (
       /temperature/i.test(msg) &&
-      (/does not support/i.test(msg) || /only the default/i.test(msg) || /unsupported_value/i.test(msg))
+      (/does not support/i.test(msg) ||
+        /not supported/i.test(msg) ||
+        /only the default/i.test(msg) ||
+        /unsupported_value/i.test(msg))
     );
   }
 
@@ -586,6 +608,13 @@ class OpenAIService {
       return this.generateAnthropicCompletion(
         model, prompt, parameters, systemPrompt, null, responseFormat, extraOptions
       );
+    }
+
+    const viaResponses = await this.tryResponsesApi(model, () =>
+      this.generateResponsesCompletion(model, prompt, parameters, systemPrompt, null, responseFormat, extraOptions)
+    );
+    if (viaResponses) {
+      return viaResponses;
     }
 
     const mappedParams = this.mapParameters(parameters, model);
@@ -679,6 +708,13 @@ class OpenAIService {
       return this.generateAnthropicCompletion(
         model, prompt, parameters, systemPrompt, onChunk, responseFormat, extraOptions
       );
+    }
+
+    const viaResponses = await this.tryResponsesApi(model, () =>
+      this.generateResponsesCompletion(model, prompt, parameters, systemPrompt, onChunk, responseFormat, extraOptions)
+    );
+    if (viaResponses) {
+      return viaResponses;
     }
 
     const mappedParams = this.mapParameters(parameters, model);
@@ -909,6 +945,13 @@ class OpenAIService {
       );
     }
 
+    const viaResponses = await this.tryResponsesApi(model, () =>
+      this.generateResponsesToolCompletion(model, prompt, tools, rounds, parameters, systemPrompt, extraOptions)
+    );
+    if (viaResponses) {
+      return viaResponses;
+    }
+
     const messages = [];
     if (systemPrompt && systemPrompt.trim()) {
       messages.push({ role: 'system', content: systemPrompt.trim() });
@@ -981,6 +1024,264 @@ class OpenAIService {
       };
     } catch (error) {
       throw new Error(`${this.provider} API Error: ${error.message}`);
+    }
+  }
+
+  // ---- OpenAI Responses API ---------------------------------------------------
+  // Only the "openai" provider uses Responses. Other OpenAI-compatible providers
+  // stay on Chat Completions: Google's compatible endpoint doesn't offer Responses,
+  // and support elsewhere varies by model and feature.
+
+  usesResponsesApi(model) {
+    return this.provider?.toLowerCase() === 'openai' && !OPENAI_CHAT_ONLY_MODELS.test(model || '');
+  }
+
+  /**
+   * Run a Responses API call for providers and models that use it. Returns null
+   * when the caller should use Chat Completions instead: the provider doesn't use
+   * Responses, or OpenAI says this model isn't available there.
+   */
+  async tryResponsesApi(model, call) {
+    if (!this.usesResponsesApi(model)) {
+      return null;
+    }
+    try {
+      return await call();
+    } catch (error) {
+      if (!error.responsesUnavailable) {
+        throw error;
+      }
+      console.warn(`[OpenAI] ${model} isn't available on the Responses API; using Chat Completions.`);
+      return null;
+    }
+  }
+
+  isResponsesUnavailableError(error) {
+    return /only supported in (the )?\/?(v1\/)?chat\/completions|not supported (in|on|by|with) (the )?\/?(v1\/)?responses/i
+      .test(error?.message || '');
+  }
+
+  /** Wrap an API error the same way the Chat Completions path does. */
+  responsesError(error) {
+    const wrapped = new Error(`${this.provider} API Error: ${error.message}`);
+    wrapped.responsesUnavailable = this.isResponsesUnavailableError(error);
+    return wrapped;
+  }
+
+  /** Name of the request parameter an error rejects, if a request can run without it. */
+  droppableResponsesParameter(error, request) {
+    const message = error?.message || '';
+    const named =
+      (error?.code === 'unsupported_parameter' && error.param) ||
+      message.match(/Unsupported parameter: '([^']+)'/i)?.[1] ||
+      (this.isTemperatureUnsupportedError(error) ? 'temperature' : null);
+    const parameter = named ? named.split('.')[0] : null;
+    return RESPONSES_DROPPABLE_PARAMETERS.includes(parameter) && parameter in request ? parameter : null;
+  }
+
+  /** Create a response, retrying without any optional parameter the model rejects. */
+  async createResponse(request) {
+    const attempt = { ...request };
+    for (let tries = 0; tries <= RESPONSES_DROPPABLE_PARAMETERS.length; tries++) {
+      try {
+        return await this.client.responses.create(attempt);
+      } catch (error) {
+        const parameter = this.droppableResponsesParameter(error, attempt);
+        if (!parameter) {
+          throw error;
+        }
+        console.warn(`[OpenAI] ${attempt.model} rejected "${parameter}"; retrying without it.`);
+        delete attempt[parameter];
+      }
+    }
+    throw new Error('Responses API request kept being rejected');
+  }
+
+  /**
+   * Map provider-neutral parameters. Responses has no frequency_penalty,
+   * presence_penalty or stop, so those are left out.
+   */
+  mapResponsesParameters(parameters = {}, model) {
+    const { temperature, top_p: topP, max_tokens: maxTokens, max_completion_tokens: maxCompletionTokens } = parameters;
+    const mapped = {};
+
+    const maxOutput = maxTokens ?? maxCompletionTokens;
+    if (maxOutput != null) {
+      mapped.max_output_tokens = Math.max(maxOutput, RESPONSES_MIN_OUTPUT_TOKENS);
+    }
+    if (temperature != null && !this.isFixedTemperatureModel(model)) {
+      mapped.temperature = temperature;
+    }
+    // 1 is the default, and reasoning models can reject the parameter altogether.
+    if (topP != null && topP !== 1) {
+      mapped.top_p = topP;
+    }
+    if (parameters.reasoning_effort) {
+      mapped.reasoning = { effort: parameters.reasoning_effort };
+    }
+    return mapped;
+  }
+
+  /** Convert a prompt, which may be OpenAI-style content parts, to Responses input content. */
+  toResponsesContent(prompt) {
+    if (!Array.isArray(prompt)) {
+      return prompt;
+    }
+    return prompt.map(part => {
+      if (part.type === 'text') {
+        return { type: 'input_text', text: part.text };
+      }
+      if (part.type === 'image_url') {
+        return {
+          type: 'input_image',
+          image_url: part.image_url?.url,
+          ...(part.image_url?.detail && { detail: part.image_url.detail }),
+        };
+      }
+      return part;
+    });
+  }
+
+  toResponsesTextFormat(responseFormat) {
+    if (responseFormat.type !== 'json_schema') {
+      return { type: responseFormat.type };
+    }
+    const { name, schema, strict, description } = responseFormat.json_schema;
+    return { type: 'json_schema', name, schema, strict: strict ?? false, ...(description && { description }) };
+  }
+
+  buildResponsesRequest(model, prompt, parameters, systemPrompt, extraOptions) {
+    const request = {
+      model,
+      input: [{ role: 'user', content: this.toResponsesContent(prompt) }],
+      // Responses stores data by default; conversations are stored by this application only.
+      store: false,
+      ...this.mapResponsesParameters(parameters, model),
+      ...extraOptions,
+    };
+    if (systemPrompt && systemPrompt.trim()) {
+      request.instructions = systemPrompt.trim();
+    }
+    return request;
+  }
+
+  responsesOutputText(response) {
+    return (response.output || [])
+      .filter(item => item.type === 'message')
+      .flatMap(item => item.content || [])
+      .filter(part => part.type === 'output_text')
+      .map(part => part.text)
+      .join('');
+  }
+
+  /** Finish reason in Chat Completions terms, which is what callers expect. Throws on a failed response. */
+  responsesFinishReason(response, hasToolCalls = false) {
+    if (response.status === 'failed') {
+      throw new Error(response.error?.message || 'The response failed');
+    }
+    if (response.status === 'incomplete') {
+      return response.incomplete_details?.reason === 'content_filter' ? 'content_filter' : 'length';
+    }
+    return hasToolCalls ? 'tool_calls' : 'stop';
+  }
+
+  responsesUsage(model, usage = {}) {
+    const promptTokens = usage.input_tokens || 0;
+    const completionTokens = usage.output_tokens || 0;
+    const cachedTokens = usage.input_tokens_details?.cached_tokens ?? 0;
+    return {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: usage.total_tokens ?? promptTokens + completionTokens,
+      cached_tokens: cachedTokens,
+      cost: this.calculateCost(model, promptTokens, completionTokens, cachedTokens),
+    };
+  }
+
+  /** Plain or streaming completion. Streams when onChunk is given. */
+  async generateResponsesCompletion(model, prompt, parameters, systemPrompt, onChunk, responseFormat, extraOptions) {
+    const request = this.buildResponsesRequest(model, prompt, parameters, systemPrompt, extraOptions);
+    if (responseFormat && this.supportsStructuredOutputs(model)) {
+      request.text = { format: this.toResponsesTextFormat(responseFormat) };
+    }
+
+    try {
+      if (!onChunk) {
+        const response = await this.createResponse(request);
+        return {
+          content: this.responsesOutputText(response),
+          finish_reason: this.responsesFinishReason(response),
+          usage: this.responsesUsage(model, response.usage),
+        };
+      }
+
+      const stream = await this.createResponse({ ...request, stream: true });
+      let content = '';
+      let finalResponse = null;
+      for await (const event of stream) {
+        if (event.type === 'response.output_text.delta') {
+          content += event.delta;
+          onChunk(event.delta);
+        } else if (event.type === 'response.completed' || event.type === 'response.incomplete' || event.type === 'response.failed') {
+          finalResponse = event.response;
+        } else if (event.type === 'error') {
+          throw new Error(event.message || 'Streaming error');
+        }
+      }
+
+      return {
+        content,
+        finish_reason: finalResponse ? this.responsesFinishReason(finalResponse) : 'stop',
+        usage: this.responsesUsage(model, finalResponse?.usage),
+      };
+    } catch (error) {
+      throw this.responsesError(error);
+    }
+  }
+
+  /**
+   * One step of a tool-calling loop. assistantMessage is the response's output
+   * items, so reasoning items are passed back with their tool calls as OpenAI
+   * requires. Each step sends the full history because nothing is stored.
+   */
+  async generateResponsesToolCompletion(model, prompt, tools, rounds, parameters = {}, systemPrompt, extraOptions) {
+    const request = this.buildResponsesRequest(model, prompt, parameters, systemPrompt, extraOptions);
+    for (const round of rounds) {
+      request.input.push(...round.assistantMessage);
+      for (const result of round.results) {
+        request.input.push({ type: 'function_call_output', call_id: result.id, output: result.content });
+      }
+    }
+    // strict: false keeps free-form objects such as query_params working.
+    request.tools = tools.map(tool => ({
+      type: 'function',
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      strict: false,
+    }));
+    request.tool_choice = 'auto';
+
+    // Choosing tools shouldn't wait on a model's default effort, usually medium.
+    if (!request.reasoning && OPENAI_REASONING_MODELS.test(model) && !OPENAI_NO_EFFORT_MODELS.test(model)) {
+      request.reasoning = { effort: 'low' };
+    }
+
+    try {
+      const response = await this.createResponse(request);
+      const toolCalls = (response.output || [])
+        .filter(item => item.type === 'function_call')
+        .map(item => ({ id: item.call_id, name: item.name, arguments: item.arguments || '{}' }));
+
+      return {
+        content: this.responsesOutputText(response),
+        tool_calls: toolCalls,
+        assistantMessage: response.output || [],
+        finish_reason: this.responsesFinishReason(response, toolCalls.length > 0),
+        usage: this.responsesUsage(model, response.usage),
+      };
+    } catch (error) {
+      throw this.responsesError(error);
     }
   }
 

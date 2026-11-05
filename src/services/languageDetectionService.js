@@ -1,5 +1,6 @@
 const OpenAIService = require('./openaiService');
 const jevService = require('./jevService');
+const { SMALL_MODELS } = require('../config/smallModels');
 
 /**
  * Language Detection Service
@@ -20,14 +21,7 @@ class LanguageDetectionService {
     // Cheapest model per provider — used exclusively for language detection.
     // If a provider is missing or its model is unavailable the service
     // falls back gracefully to the previous turn language or "en".
-    this.modelByProvider = {
-      openai: 'gpt-5.4-nano',           // newest cheapest OpenAI model
-      anthropic: 'claude-haiku-5-5',      // cheapest Anthropic model
-      google: 'gemini-2.0-flash',        // cheapest Google model
-      deepseek: 'deepseek-chat',         // DeepSeek V3 chat, very cheap
-      xai: 'grok-4.20-0309-non-reasoning', // cheapest xAI model (no reasoning tokens)
-      openrouter: 'deepseek/deepseek-chat', // cheapest openrouter route
-    };
+    this.modelByProvider = SMALL_MODELS;
 
     this.systemPrompt = [
       'You are an expert language identifier.',

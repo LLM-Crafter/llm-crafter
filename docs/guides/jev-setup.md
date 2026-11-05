@@ -105,6 +105,7 @@ Requires the `member` role. To create a new agent with Jev already on, send the 
       "planner_gate": true,
       "language_detection": true,
       "procedure_matching": true,
+      "skill_selection": true,
       "email_triage": false,
       "responder_routing": {
         "enabled": true,
@@ -131,12 +132,13 @@ The response is the updated agent document.
 | `planner_gate` | bool | `false` | Graph mode, agents with tools. If Jev is confident that no tool is needed, the planner is skipped. |
 | `language_detection` | bool | `false` | Jev detects the user's language before the LLM detector runs. |
 | `procedure_matching` | bool | `false` | Jev picks the matching procedure (or none) before the LLM matcher runs. |
+| `skill_selection` | bool | `false` | Graph mode, agents with [skills](../features/skills.md). Jev judges each skill with a yes/no question. If any answer is unclear, the selector model judges all skills and decides. Uses `config.skill_selection` thresholds, not `min_confidence`. |
 | `email_triage` | bool | `false` | Email agents only. Jev classifies incoming email (in scope, topic, intent) before the LLM triage runs. |
 | `responder_routing.enabled` | bool | `false` | Graph mode. Jev picks the `fast` or `powerful` responder model per turn. |
 | `responder_routing.fast_model` | string | `null` | Required when routing is on. Must be a model of the agent's **main** provider. |
 | `responder_routing.powerful_model` | string | `null` | `null` uses the graph responder model. Must be a model of the agent's main provider. |
 
-`critic_precheck`, `planner_gate` and `responder_routing` only run when the agent uses graph mode (`config.enable_small_agent_graph: true`). On a ReAct agent, only `language_detection` and `procedure_matching` (and `email_triage` for email agents) have an effect.
+`critic_precheck`, `planner_gate`, `skill_selection` and `responder_routing` only run when the agent uses graph mode (`config.enable_small_agent_graph: true`). On a ReAct agent, only `language_detection` and `procedure_matching` (and `email_triage` for email agents) have an effect.
 
 ### Minimal example: language detection only
 

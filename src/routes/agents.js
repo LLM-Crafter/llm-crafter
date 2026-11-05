@@ -45,6 +45,7 @@ const createAgentValidation = [
     .withMessage(`Reasoning effort must be one of: ${REASONING_EFFORTS.join(', ')}`),
   body('tools').optional().isArray().withMessage('Tools must be an array'),
   body('procedures').optional().isArray().withMessage('procedures must be an array'),
+  body('skills').optional().isArray().withMessage('skills must be an array'),
   // Question suggestions validation
   body('question_suggestions')
     .optional()
@@ -132,6 +133,7 @@ const updateAgentValidation = [
     .withMessage(`Reasoning effort must be one of: ${REASONING_EFFORTS.join(', ')}`),
   body('tools').optional().isArray().withMessage('Tools must be an array'),
   body('procedures').optional().isArray().withMessage('procedures must be an array'),
+  body('skills').optional().isArray().withMessage('skills must be an array'),
   body('is_active').optional().isBoolean(),
   // Question suggestions validation
   body('question_suggestions')

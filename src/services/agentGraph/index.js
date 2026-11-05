@@ -2,8 +2,9 @@
 //
 // When agent.config.enable_small_agent_graph === true the ReAct loop is replaced by:
 //
-//   [Jev gate] → planner ⇄ tools → responder → [Jev pre-check] → critic → (one revision)
+//   skill selection → [Jev gate] → planner ⇄ tools → responder → [Jev pre-check] → critic → (one revision)
 //
+//   - Skills   (optional) load the task instructions this turn needs (see skills.js).
 //   - Planner  decides which tools to run (see planner.js). No user-facing text.
 //   - Responder writes the reply from the conversation and tool results.
 //   - Critic   approves the draft or lists concrete issues; on rejection the
@@ -20,6 +21,7 @@ const procedureService = require('../procedureService');
 const jevService = require('../jevService');
 const prompts = require('./prompts');
 const { planAndAct } = require('./planner');
+const { activateSkills } = require('./skills');
 const { newUsage, accumulateUsage, getGraphModel, createStatusEmitter } = require('./shared');
 
 const EMPTY_REPLY =
@@ -67,6 +69,8 @@ async function runAgentGraph(service, agent, conversation, dynamicContext = {}, 
     ctx.openai = new OpenAIService(agent.api_key.getDecryptedKey(), agent.api_key.provider.name);
     ctx.context = service.buildAgentContext(agent, conversation);
     const routingPromise = startResponderRouting(agent, ctx.context);
+
+    await activateSkills(ctx);
 
     const { funnelState, handoff } = await planAndAct(ctx);
     if (handoff) {
@@ -275,7 +279,7 @@ async function jevCriticPrecheck(ctx, draft) {
       error: tr.error,
     })),
     draftReply: draft,
-    agentInstructions: prompts.criticInstructions(agent),
+    agentInstructions: prompts.criticInstructions(agent, ctx.context.skills_directive),
     procedureDirective: ctx.context.procedure_directive,
     language: agent.config.enforce_language_detection !== false ? conversation.current_turn_language : null,
   });
