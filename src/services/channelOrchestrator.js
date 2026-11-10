@@ -12,6 +12,8 @@ const mediaStorageService = require('./mediaStorageService');
 const attachmentProcessingService = require('./attachmentProcessingService');
 const channelTurnBufferService = require('./channelTurnBufferService');
 const messageTransformerService = require('./messageTransformerService');
+const hookService = require('./hookService');
+const { isIgnoredContact, getActiveWelcomeMessage } = require('../utils/whatsappContactSettings');
 
 // Import channel services
 const WhatsAppService = require('./channels/whatsappService');
@@ -108,6 +110,15 @@ class ChannelOrchestrator {
     };
     const storedMedia = claimed.stored_media || [];
 
+    await this.initializeChannelsForAgent(claimed.agent);
+    const channelService = this.channelServices.get(`${claimed.agent}_${claimed.channel}`);
+
+    // The number may have been added to the ignored list while the turn was buffered
+    if (this._isIgnoredContact(claimed.channel, channelService, normalizedMessage.user_identifier)) {
+      await this._handleIgnoredContactMessage(conversation, claimed.channel, normalizedMessage, storedMedia);
+      return;
+    }
+
     if (
       conversation.current_handler === 'human' &&
       conversation.status === 'human_controlled'
@@ -115,9 +126,6 @@ class ChannelOrchestrator {
       await this._recordHumanControlledMessage(conversation, claimed.channel, normalizedMessage, storedMedia);
       return;
     }
-
-    await this.initializeChannelsForAgent(claimed.agent);
-    const channelService = this.channelServices.get(`${claimed.agent}_${claimed.channel}`);
 
     await this._runAgentTurn(
       claimed.agent,
@@ -316,6 +324,11 @@ class ChannelOrchestrator {
         if (normalizedMessage.type === 'echo') {
           return this._recordEcho(agentId, channel, channelService, normalizedMessage);
         }
+
+        // A message we sent could not be delivered (reported after the send succeeded)
+        if (normalizedMessage.type === 'delivery_failed') {
+          return this._recordDeliveryFailure(agentId, channel, normalizedMessage);
+        }
       }
 
       // Show typing indicator for channels that support it
@@ -351,17 +364,26 @@ class ChannelOrchestrator {
         `[ChannelOrchestrator] Processing message for conversation: ${conversation._id}, status: ${conversation.status}, handler: ${conversation.current_handler}`
       );
 
+      // Numbers on the ignored list never reach the agent (or any LLM, so their media isn't
+      // interpreted); the team handles them
+      const isIgnored = this._isIgnoredContact(channel, channelService, normalizedMessage.user_identifier);
+
       const storedMedia = await this._storeIncomingMedia(
         agentId,
         channel,
         channelService,
         conversation,
-        normalizedMessage.media
+        normalizedMessage.media,
+        { interpret: !isIgnored }
       );
 
       // Ensure content is at least an empty string (never null/undefined)
       if (!normalizedMessage.content) {
         normalizedMessage.content = '';
+      }
+
+      if (isIgnored) {
+        return this._handleIgnoredContactMessage(conversation, channel, normalizedMessage, storedMedia);
       }
 
       // Check if conversation is human-controlled
@@ -439,7 +461,7 @@ class ChannelOrchestrator {
    * Persists an incoming user message without triggering agent processing (human handoff).
    */
   async _recordHumanControlledMessage(conversation, channel, normalizedMessage, storedMedia) {
-    conversation.messages.push({
+    await conversation.addMessage({
       role: 'user',
       content: normalizedMessage.content,
       timestamp: new Date(),
@@ -449,14 +471,179 @@ class ChannelOrchestrator {
         media: storedMedia.length > 0 ? storedMedia : undefined,
       },
     });
-    await conversation.save();
+    // Same as user messages on human-controlled conversations from the API/website
+    // (agentService.executeChatbotAgent): message hooks still fire, so the team hears of it
+    await this._fireUserMessageHooks(conversation, normalizedMessage.content);
+  }
+
+  /** Fires the agent's message hooks and (re)schedules inactivity hooks. Non-fatal. */
+  async _fireUserMessageHooks(conversation, content) {
+    try {
+      const agent = await Agent.findById(conversation.agent).populate({
+        path: 'api_key',
+        populate: { path: 'provider' },
+      });
+      if (!agent?.hooks?.length) return;
+      hookService.executeHooks(agent, conversation, content, 'user', 'message').catch(err => {
+        console.error('[Hook] message hook error:', err.message);
+      });
+      hookService.scheduleInactivityHooks(agent, conversation);
+    } catch (error) {
+      console.error(`[ChannelOrchestrator] Failed to fire hooks for conversation ${conversation._id} (non-fatal):`, error.message);
+    }
+  }
+
+  /** Whether the sender is on the channel's ignored list (WhatsApp only). */
+  _isIgnoredContact(channel, channelService, userIdentifier) {
+    return channel === 'whatsapp' && isIgnoredContact(channelService?.config, userIdentifier);
   }
 
   /**
-   * Stores incoming media via the org's S3 config and interprets it for the agent.
-   * Failures are logged and leave whatever was stored so far.
+   * A message from a number on the ignored list: stored as usual, but the agent never runs.
+   * The conversation goes to the team (human_controlled, ai_disabled_reason 'ignored_contact')
+   * and message hooks fire so they hear of it. Handback is refused while the number is
+   * listed (see handoffController.handBackToAgent).
    */
-  async _storeIncomingMedia(agentId, channel, channelService, conversation, media) {
+  async _handleIgnoredContactMessage(conversation, channel, normalizedMessage, storedMedia) {
+    if (
+      conversation.status !== 'human_controlled' ||
+      conversation.current_handler !== 'human' ||
+      conversation.ai_disabled_reason !== 'ignored_contact'
+    ) {
+      if (conversation.status !== 'human_controlled') {
+        conversation.handoff_info = conversation.handoff_info || {};
+        conversation.handoff_info.handed_off_at = new Date();
+      }
+      conversation.status = 'human_controlled';
+      conversation.current_handler = 'human';
+      conversation.ai_disabled_reason = 'ignored_contact';
+
+      // Stop a reply this instance may be generating. Buffered turns check when claimed.
+      const executionToken = this.executionTokens.get(String(conversation._id));
+      if (executionToken) executionToken.cancelled = true;
+
+      console.log(`[ChannelOrchestrator] ${channel} sender on conversation ${conversation._id} is an ignored contact — passing it to the team`);
+    }
+
+    // Saves the status change along with the message
+    await this._recordHumanControlledMessage(conversation, channel, normalizedMessage, storedMedia);
+
+    return {
+      conversation_id: conversation._id,
+      status: 'human_controlled',
+      reason: 'ignored_contact',
+    };
+  }
+
+  /**
+   * Logs a message the platform failed to deliver after accepting it, and marks the stored
+   * message (matched by platform message ID) with metadata.delivery_status 'failed'.
+   */
+  async _recordDeliveryFailure(agentId, channel, failure) {
+    console.error(
+      `[ChannelOrchestrator] ${channel} message ${failure.message_id} to ${failure.user_identifier} failed to deliver:`,
+      JSON.stringify(failure.errors)
+    );
+    if (!failure.message_id) {
+      return { success: true, status: 'ignored', reason: 'failure_without_id' };
+    }
+
+    const result = await Conversation.updateOne(
+      { agent: agentId, channel, 'messages.channel_info.message_id': failure.message_id },
+      {
+        $set: {
+          'messages.$[m].metadata.delivery_status': 'failed',
+          'messages.$[m].metadata.delivery_errors': failure.errors,
+          'messages.$[m].metadata.delivery_failed_at': new Date(),
+        },
+      },
+      { arrayFilters: [{ 'm.channel_info.message_id': failure.message_id }] }
+    );
+    return {
+      success: true,
+      status: result.matchedCount > 0 ? 'delivery_failure_recorded' : 'ignored',
+      ...(result.matchedCount === 0 && { reason: 'message_not_found' }),
+    };
+  }
+
+  /**
+   * Decides whether this turn gets the channel's welcome message: it's the first turn of a
+   * number's first-ever conversation with this agent. A number that wrote before has an
+   * earlier conversation (or earlier messages here), so it isn't greeted when the setting
+   * is switched on. Returns the function that sends it once the user message is stored,
+   * or null.
+   */
+  async _prepareWelcomeMessage(agentId, channel, channelService, conversation, normalizedMessage) {
+    if (channel !== 'whatsapp' || !channelService?.isEnabled?.()) return null;
+    const welcome = getActiveWelcomeMessage(channelService.config);
+    if (!welcome || conversation.welcome_message_sent_at) return null;
+    if ((conversation.messages || []).some(m => m.role !== 'system')) return null;
+
+    const hasEarlierConversation = await Conversation.exists({
+      agent: agentId,
+      channel,
+      user_identifier: conversation.user_identifier,
+      _id: { $ne: conversation._id },
+    });
+    if (hasEarlierConversation) return null;
+
+    return storedConversation =>
+      this._sendWelcomeMessage(channel, channelService, storedConversation, normalizedMessage, welcome);
+  }
+
+  /**
+   * Sends the welcome message and stores it as an assistant message (metadata.kind
+   * 'welcome_message'), right after the user message it answers. Claimed atomically so
+   * it goes out at most once per conversation, and never retried: a failure is logged and
+   * the agent reply still goes out.
+   */
+  async _sendWelcomeMessage(channel, channelService, conversation, normalizedMessage, welcome) {
+    const claimed = await Conversation.updateOne(
+      { _id: conversation._id, welcome_message_sent_at: null },
+      { $set: { welcome_message_sent_at: new Date() } }
+    );
+    if (claimed.modifiedCount === 0) return;
+
+    const recipient = normalizedMessage.channel_metadata?.whatsapp?.phone_number || conversation.user_identifier;
+    let result;
+    try {
+      result = await channelService.sendWelcomeMessage(recipient, welcome);
+    } catch (error) {
+      console.error(
+        `[ChannelOrchestrator] Welcome message failed for agent ${conversation.agent}, conversation ${conversation._id}, recipient ${recipient}:`,
+        error.response?.data ? JSON.stringify(error.response.data) : error.message
+      );
+      return;
+    }
+
+    const platformMessageId = result?.message_id ? String(result.message_id) : undefined;
+    if (platformMessageId) {
+      await this._recordOutboundMessageIds(channel, [platformMessageId]);
+    }
+    console.log(
+      `[ChannelOrchestrator] Welcome message sent on conversation ${conversation._id} (${welcome.image_url ? 'image' : 'text'}, message ${platformMessageId})`
+    );
+
+    await conversation.addMessage({
+      role: 'assistant',
+      content: welcome.text || '',
+      timestamp: new Date(),
+      channel_info: {
+        channel,
+        message_id: platformMessageId,
+        media: welcome.image_url
+          ? [{ type: 'image', url: welcome.image_url, stored: false, interpretation_status: 'unsupported' }]
+          : undefined,
+      },
+      metadata: { kind: 'welcome_message' },
+    });
+  }
+
+  /**
+   * Stores incoming media via the org's S3 config and (unless `interpret` is false)
+   * interprets it for the agent. Failures are logged and leave whatever was stored so far.
+   */
+  async _storeIncomingMedia(agentId, channel, channelService, conversation, media, { interpret = true } = {}) {
     let storedMedia = [];
     if (!media || media.length === 0 || channel === 'website') return storedMedia;
     try {
@@ -472,7 +659,7 @@ class ChannelOrchestrator {
         channelService,
         channel,
       });
-      if (storedMedia.length > 0) {
+      if (interpret && storedMedia.length > 0) {
         storedMedia = await attachmentProcessingService.interpretChannelMedia(agent, storedMedia);
       }
     } catch (mediaErr) {
@@ -712,6 +899,22 @@ class ChannelOrchestrator {
         }, TURN_CANCEL_CHECK_INTERVAL_MS);
       }
 
+      // A number's first-ever conversation gets the channel's welcome message before the
+      // reply. Sent once the user message is stored, so the agent doesn't run (and nothing
+      // is sent) when it's disabled or the conversation is with a human.
+      let sendWelcomeMessage = null;
+      try {
+        sendWelcomeMessage = await this._prepareWelcomeMessage(
+          agentId,
+          channel,
+          channelService,
+          conversation,
+          normalizedMessage
+        );
+      } catch (err) {
+        console.error(`[ChannelOrchestrator] Welcome message check failed for conversation ${conversation._id} (non-fatal):`, err.message);
+      }
+
       let agentResponse;
       try {
         // Execute agent (your existing logic!)
@@ -721,7 +924,8 @@ class ChannelOrchestrator {
           normalizedMessage.content,
           normalizedMessage.user_identifier,
           dynamicContext,
-          cancellationToken
+          cancellationToken,
+          sendWelcomeMessage ? { onUserMessageStored: sendWelcomeMessage } : {}
         );
       } catch (err) {
         if (err.code === 'EXECUTION_CANCELLED') {

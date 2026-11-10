@@ -622,6 +622,23 @@ class WhatsAppService extends BaseChannelService {
   }
 
   /**
+   * Send the channel's welcome message: an image (with the text as caption, if any) or,
+   * without an image, a text message.
+   * @param {string} to - Recipient phone number
+   * @param {{image_url: string|null, text: string|null}} welcome
+   */
+  async sendWelcomeMessage(to, welcome) {
+    if (welcome.image_url) {
+      return this.sendMediaMessage(to, {
+        type: 'image',
+        url: welcome.image_url,
+        caption: welcome.text || undefined,
+      });
+    }
+    return this.sendMessage(to, welcome.text);
+  }
+
+  /**
    * Send rich card via Twilio.
    * Twilio WhatsApp supports media messages with captions.
    * List messages are rendered as numbered text (Twilio doesn't have a list API).
@@ -737,6 +754,21 @@ class WhatsAppService extends BaseChannelService {
     if (!message) {
       // Status updates (sent, delivered, read) have no messages field - ignore silently
       const status = value?.statuses?.[0];
+      if (status?.status === 'failed') {
+        // Delivery failures are only reported here, after the send call succeeded — e.g.
+        // when Meta can't fetch a media link. Recorded on the message we sent.
+        return {
+          type: 'delivery_failed',
+          user_identifier: status.recipient_id,
+          message_id: status.id,
+          errors: (status.errors || []).map(error => ({
+            code: error.code,
+            title: error.title,
+            message: error.message,
+            details: error.error_data?.details,
+          })),
+        };
+      }
       if (status) {
         this.log(`Message status update: ${status.status}`, { messageId: status.id, recipient: status.recipient_id });
         return null;

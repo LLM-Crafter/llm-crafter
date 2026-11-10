@@ -233,6 +233,20 @@ const conversationSchema = new mongoose.Schema(
       enum: ['agent', 'human'],
       default: 'agent',
     },
+    // Why the agent won't answer this conversation, when it's for a reason other than a
+    // regular handoff. 'ignored_contact': the number is on the channel's ignored list.
+    // Cleared on handback.
+    ai_disabled_reason: {
+      type: String,
+      enum: ['ignored_contact', null],
+      default: null,
+    },
+    // When the channel welcome message was sent (or attempted) on this conversation.
+    // Claimed atomically so it goes out at most once.
+    welcome_message_sent_at: {
+      type: Date,
+      default: null,
+    },
     handoff_info: {
       requested_by: String, // 'agent' or human operator user ID
       requested_at: Date,
@@ -1016,6 +1030,7 @@ conversationSchema.methods.assignChannelAppOperator = function (channel, account
 conversationSchema.methods.handBackToAgent = function () {
   this.status = 'agent_controlled';
   this.current_handler = 'agent';
+  this.ai_disabled_reason = null;
 
   // Add system message
   this.messages.push({

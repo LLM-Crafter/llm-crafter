@@ -70,7 +70,8 @@ class AgentService {
     userMessage,
     userIdentifier,
     dynamicContext = {},
-    cancellationToken = null
+    cancellationToken = null,
+    turnOptions = {}
   ) {
     //populate agent with API key and provider of api key
     const agent = await Agent.findById(agentId).populate({
@@ -203,6 +204,16 @@ class AgentService {
       userMessageData.channel_info = dynamicContext.channel_info_for_message;
     }
     await conversation.addMessage(userMessageData);
+
+    // Lets the caller act between storing the user message and reasoning, e.g. send a
+    // channel welcome message (channelOrchestrator._sendWelcomeMessage)
+    if (turnOptions.onUserMessageStored) {
+      try {
+        await turnOptions.onUserMessageStored(conversation);
+      } catch (err) {
+        console.error('[Agent] onUserMessageStored failed (non-fatal):', err.message);
+      }
+    }
 
     // Generate AI-powered conversation title on 2nd message and every 5 messages thereafter.
     // Runs fully in the background (fire-and-forget) so it never delays or fails the turn;

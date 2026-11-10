@@ -200,6 +200,7 @@ When a webhook hook fires, it sends a `POST` request with `Content-Type: applica
   },
   "conversation_status": "human_controlled",
   "current_handler": "human",
+  "ai_disabled_reason": null,
   "external_operator": {
     "external_id": "op-789",
     "name": "Jane Support",
@@ -254,6 +255,7 @@ For an `email_draft_ready` hook, `event` is `"email_draft_ready"` and the payloa
 | `message.content`               | string | Yes            | The raw message text                                                                            |
 | `conversation_status`           | string | Yes            | One of: `active`, `agent_controlled`, `human_controlled`, `handoff_requested`, `ended`          |
 | `current_handler`               | string | Yes            | `"agent"` or `"human"`                                                                          |
+| `ai_disabled_reason`            | string | Yes            | Why the agent won't answer, or `null`. `"ignored_contact"`: the number is on the channel's ignored contacts list |
 | `external_operator`             | object | No             | **Only present when an external operator has taken over the conversation**                      |
 | `external_operator.external_id` | string | —              | The operator's external ID                                                                      |
 | `external_operator.name`        | string | —              | The operator's display name                                                                     |

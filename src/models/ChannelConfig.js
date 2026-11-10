@@ -73,6 +73,27 @@ const channelConfigSchema = new mongoose.Schema(
           default: true,
         },
       },
+      // Sent before the first AI reply of a number's first-ever conversation with this
+      // agent (see channelOrchestrator._prepareWelcomeMessage). At least one of image_url
+      // and text is required when enabled.
+      welcome_message: {
+        enabled: {
+          type: Boolean,
+          default: false,
+        },
+        image_url: String, // Public HTTPS URL (JPEG/PNG, under 5 MB)
+        text: String, // Caption when image_url is set (max 1024 chars), otherwise a text message
+      },
+      // Numbers the agent never answers: their messages are stored and the conversation
+      // goes to the team (human_controlled, ai_disabled_reason: 'ignored_contact').
+      // Matched against the sender's wa_id ignoring "+", spaces and leading zeros.
+      ignored_contacts: [
+        {
+          _id: false,
+          phone_e164: { type: String, required: true }, // Stored as "+<digits>"
+          note: String,
+        },
+      ],
     },
     // Telegram Configuration
     telegram: {

@@ -7,6 +7,11 @@ const channelOrchestrator = require('../services/channelOrchestrator');
 const ChannelConfig = require('../models/ChannelConfig');
 const Agent = require('../models/Agent');
 const encryption = require('../utils/encryption');
+const {
+  WhatsAppSettingsError,
+  mergeWelcomeMessage,
+  parseIgnoredContacts,
+} = require('../utils/whatsappContactSettings');
 
 // Channels whose shared Meta webhook is routed by an account ID stored in the config.
 // An account can only be connected to one agent at a time (see updateChannelConfig).
@@ -519,7 +524,7 @@ const getChannelConfig = async (req, res) => {
       // Return default empty config
       return res.json({
         agent: agentId,
-        whatsapp: { enabled: false },
+        whatsapp: { enabled: false, welcome_message: { enabled: false }, ignored_contacts: [] },
         telegram: { enabled: false },
         email: { enabled: false },
         instagram: { enabled: false },
@@ -567,6 +572,30 @@ const updateChannelConfig = async (req, res) => {
 
     // Update WhatsApp config
     if (updates.whatsapp) {
+      // Validate contact settings first, so an invalid value leaves the config untouched
+      let welcomeMessage;
+      let ignoredContacts;
+      try {
+        if (updates.whatsapp.welcome_message !== undefined) {
+          welcomeMessage = mergeWelcomeMessage(
+            channelConfig.whatsapp?.welcome_message,
+            updates.whatsapp.welcome_message
+          );
+        }
+        if (updates.whatsapp.ignored_contacts !== undefined) {
+          ignoredContacts = parseIgnoredContacts(updates.whatsapp.ignored_contacts);
+        }
+      } catch (error) {
+        if (error instanceof WhatsAppSettingsError) {
+          return res.status(400).json({
+            error: error.message,
+            code: 'INVALID_WHATSAPP_SETTINGS',
+            field: `whatsapp.${error.field}`,
+          });
+        }
+        throw error;
+      }
+
       // Initialize credentials object if it doesn't exist
       if (!channelConfig.whatsapp) {
         channelConfig.whatsapp = { credentials: {} };
@@ -650,6 +679,13 @@ const updateChannelConfig = async (req, res) => {
       }
       if (updates.whatsapp.webhook_url) {
         channelConfig.whatsapp.webhook_url = updates.whatsapp.webhook_url;
+      }
+      if (welcomeMessage) {
+        channelConfig.whatsapp.welcome_message = welcomeMessage;
+      }
+      // The client sends the full list each time; it replaces the stored one
+      if (ignoredContacts) {
+        channelConfig.whatsapp.ignored_contacts = ignoredContacts;
       }
     }
 

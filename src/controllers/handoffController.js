@@ -8,6 +8,8 @@ const {
   ExternalAttributeError,
 } = require('../utils/externalAttributes');
 const Agent = require('../models/Agent');
+const ChannelConfig = require('../models/ChannelConfig');
+const { isIgnoredContact } = require('../utils/whatsappContactSettings');
 const channelOrchestrator = require('../services/channelOrchestrator');
 const mediaStorageService = require('../services/mediaStorageService');
 
@@ -504,6 +506,21 @@ const handBackToAgent = async (req, res) => {
       }
     }
 
+    // The agent never answers ignored numbers, so it can't take the conversation back
+    // while the number is still listed. Remove it from the channel's ignored_contacts first.
+    if (conversation.channel === 'whatsapp') {
+      const channelConfig = await ChannelConfig.findOne({ agent: conversation.agent })
+        .select('whatsapp.ignored_contacts')
+        .lean();
+      if (isIgnoredContact(channelConfig?.whatsapp, conversation.user_identifier)) {
+        return res.status(409).json({
+          error:
+            'This number is on the agent\'s ignored contacts list. Remove it from whatsapp.ignored_contacts before handing the conversation back.',
+          code: 'CONTACT_IGNORED',
+        });
+      }
+    }
+
     await conversation.handBackToAgent();
 
     res.json({
@@ -963,6 +980,7 @@ const getLatestMessages = async (req, res) => {
           channel: 1,
           status: 1,
           current_handler: 1,
+          ai_disabled_reason: 1,
           handoff_info: 1,
           last_customer_message_at: 1,
           gdpr: 1,
@@ -1073,6 +1091,7 @@ const getLatestMessages = async (req, res) => {
       reactions,
       current_handler: currentHandler,
       conversation_status: conversationStatus,
+      ai_disabled_reason: conversation.ai_disabled_reason || null,
       messaging_window: messagingWindow,
       handoff_active:
         conversationStatus === 'human_controlled' ||

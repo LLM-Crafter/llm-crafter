@@ -139,6 +139,8 @@ class HookService {
       },
       conversation_status: conversation.status,
       current_handler: conversation.current_handler,
+      // e.g. 'ignored_contact' when the number is on the channel's ignored list
+      ai_disabled_reason: conversation.ai_disabled_reason || null,
     };
 
     // Email drafts carry extra context (recipient, subject, state) not
